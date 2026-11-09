@@ -14,6 +14,12 @@ Running `patch.py` downloads z5mod's decoder files, including its XOR mask, into
 
 - **z5mod** (https://github.com/youyli03/z5mod, MIT, z5mod contributors): the module loader, the SDK linked into `card/Z5APP.BIN`, and the firmware decoder used at build time. `src/card_module/z5mod-sdk.patch` holds this project's changes to its SDK.
 - **wonder-lantern-z30** (https://github.com/WonderLantern/wonder-lantern-z30): the approach for histogram on the level page, for the grid parameters, and for photo zebra was studied from this project. Its code is not copied here; the Z 5 hooks were written and located separately.
+- **WonderLantern-z6** (https://github.com/WonderLantern/WonderLantern-z6): feature design for custom shutter sounds and framing guides was studied. No code from it is used.
+- **z7-qemu** (https://github.com/WonderLantern/z7-qemu, by R3tr0ooo and contributors), **z6-qemu** (https://github.com/WonderLantern/z6-qemu) and **z7ii-qemu** (https://github.com/nightglasses/z7ii-qemu): the separate z5-qemu emulator used during development derives from the first two and consulted the third. None of their code is in this repository.
+
+## Test sounds
+
+`card/SHUTTER/1.WAV` to `3.WAV` are default test sounds provided by the maintainer, who states that they are open-source audio with no copyright restrictions. `2.WAV` had its leading silence trimmed.
 
 ## z5mod licence
 

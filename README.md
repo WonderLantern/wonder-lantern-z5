@@ -15,7 +15,7 @@
 | 照片高光显示（斑马纹） | 把原厂视频的高光显示用到照片取景，设定菜单单独开关 | 通过（照片模式、背屏） |
 | 待机唤醒修复 | 熄屏后立刻唤醒时功能不丢失 | 通过 |
 
-取景器、视频模式下的新功能，以及最新版本的拔卡恢复，尚未单独确认。详细进度见 [docs/PROGRESS.md](docs/PROGRESS.md)。
+取景器、视频模式下的新功能，以及最新版本的拔卡恢复，尚未单独确认。已完成和未来计划见 [PLAN.md](PLAN.md)，开发过程见 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
 功能代码放在存储卡上的模块里。固件只增加很小的入口和判断；卡上没有模块时，网格、高光显示和同框都走原厂路径。改动只在 MAIN 模块内，不动引导区。
 
@@ -41,6 +41,7 @@ python patch.py --source Z_5_0150.bin --output output
 output/EG165050.BIN              刷机文件
 output/card/Z5APP.BIN            卡上模块
 output/card/SHUTTER/MENU.DAT     设置文件，必须保留
+output/card/SHUTTER/1～3.WAV      默认测试音效
 ```
 
 `EG165050.BIN` 的 SHA-256 应为 `e7e4ec5477a301f6128d30352429f2e6d31eaaa22f13255ceebf531215e24d61`。请勿分发这个文件。
@@ -54,7 +55,7 @@ output/card/SHUTTER/MENU.DAT     设置文件，必须保留
 
 ### 4. 存储卡
 
-把 `output/card/` 里的内容复制到卡根目录，再放入你自己的音效：
+把 `output/card/` 里的内容复制到卡根目录，自带 3 个测试音效，也可以换成你自己的：
 
 ```text
 A:\Z5APP.BIN
@@ -66,7 +67,7 @@ A:\SHUTTER\1.WAV ~ 5.WAV
 
 ### 5. 音效格式
 
-文件名必须是 `1.WAV` 到 `5.WAV`，不需要 5 个都有。标准 44 字节文件头的 WAV，未压缩 PCM，48 kHz，16 位，立体声，至少 2000 字节，最多读取约 1.28 秒。声音要从文件开头就响，开头的静音会让快门声听起来变晚。
+仓库自带 3 个测试音效。自定义时文件名必须是 `1.WAV` 到 `5.WAV`，不需要 5 个都有。标准 44 字节文件头的 WAV，未压缩 PCM，48 kHz，16 位，立体声，至少 2000 字节，最多读取约 1.28 秒。声音要从文件开头就响，开头的静音会让快门声听起来变晚。
 
 转换工具（需要 Python 3）：
 
@@ -100,12 +101,26 @@ python tools/make_snd_wav.py 你的声音.wav --out 转换结果
 | --- | --- |
 | `patch.py`、`patch_data/` | 构建工具和补丁数据（地址、校验用的原字节片段、我们自己的代码） |
 | `card/Z5APP.BIN` | 预编译的卡上模块，只含本项目和 z5mod SDK 的代码 |
+| `card/SHUTTER/` | 默认测试音效 |
 | `src/` | 卡上模块和固件钩子的源码 |
 | `tools/` | 音频转换工具 |
-| `docs/` | 项目进度和规划 |
+| `PLAN.md` | 已完成的内容和未来计划 |
+| `docs/` | 开发进度记录 |
 
 `src/` 里的构建脚本依赖作者的开发环境，用于查阅和维护；普通用户只需要 `patch.py`。
 
 ## 致谢与许可
 
-本项目代码以 MIT 许可发布，见 [LICENSE](LICENSE) 和 [NOTICE.md](NOTICE.md)。基于 [z5mod](https://github.com/youyli03/z5mod) 的 SDK 和解码器；同框和高光显示的思路参考了 [wonder-lantern-z30](https://github.com/WonderLantern/wonder-lantern-z30)。
+本项目代码以 MIT 许可发布，见 [LICENSE](LICENSE) 和 [NOTICE.md](NOTICE.md)。
+
+本项目建立在以下项目的工作之上，感谢它们的作者和贡献者：
+
+| 项目 | 我们如何使用 |
+| --- | --- |
+| [z5mod](https://github.com/youyli03/z5mod) | 直接使用：卡上模块加载器、SDK、固件解码器 |
+| [wonder-lantern-z30](https://github.com/WonderLantern/wonder-lantern-z30) | 参考做法：直方图水平仪同框、网格参数、照片斑马纹，以及“用户自备固件、本地生成”的发布方式。未复制其代码，Z 5 上的地址和钩子是另行定位和编写的 |
+| [WonderLantern-z6](https://github.com/WonderLantern/WonderLantern-z6) | 参考功能设计：自定义快门声音、自定义参考线 |
+| [z7-qemu](https://github.com/WonderLantern/z7-qemu)（作者 [R3tr0ooo](https://github.com/R3tr0ooo)）、[z6-qemu](https://github.com/WonderLantern/z6-qemu) | 我们的模拟器 [z5-qemu](https://github.com/honokaoshi83-max/z5-qemu) 派生自这两个项目，用于验证菜单和按键 |
+| [z7ii-qemu](https://github.com/nightglasses/z7ii-qemu) | 模拟器取景和对焦路线的参考资料 |
+
+默认测试音效由维护者提供，说明见 [NOTICE.md](NOTICE.md)。

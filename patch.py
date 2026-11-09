@@ -138,10 +138,15 @@ def main():
     write_new(args.output / 'EG165050.BIN', output)
     write_new(args.output / 'card' / 'Z5APP.BIN', card)
     write_new(args.output / 'card' / 'SHUTTER' / 'MENU.DAT', MENU_DAT)
+    for name, digest in data['card_sounds'].items():
+        sound = (HERE / 'card' / 'SHUTTER' / name).read_bytes()
+        if sha256(sound) != digest:
+            raise SystemExit('card/SHUTTER/%s does not match the tested file.' % name)
+        write_new(args.output / 'card' / 'SHUTTER' / name, sound)
     print('Built %s' % (args.output / 'EG165050.BIN'))
     print('  SHA-256 %s' % data['output_sha256'])
     print('Card files are in %s' % (args.output / 'card'))
-    print('Add your own sounds as card/SHUTTER/1.WAV ... 5.WAV. See README.md before flashing.')
+    print('Three test sounds are included. See README.md before flashing.')
 
 
 if __name__ == '__main__':
