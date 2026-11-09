@@ -1,0 +1,12 @@
+# Nikon firmware and anything derived from it
+*.bin
+*.BIN
+*.bi
+!card/Z5APP.BIN
+output/
+third_party/
+__pycache__/
+*.pyc
+*.WAV
+*.wav
+MENU.DAT

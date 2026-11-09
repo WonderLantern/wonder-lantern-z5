@@ -1,0 +1,822 @@
+diff --git a/sdk/examples/shutter-sound/main.c b/sdk/examples/shutter-sound/main.c
+index bf549bc..c2954a6 100644
+--- a/sdk/examples/shutter-sound/main.c
++++ b/sdk/examples/shutter-sound/main.c
+@@ -50,13 +50,21 @@ int z5_main(z5_ctx *ctx)
+     Z5_LOG(Z5_LOG_UI, Z5_BGLOG_T_NODE, Z5_BGLOG_NODE_UI_BEGIN,
+            (u32)ctx->element, *(volatile u32 *)0xC1819F90u);
+ 
+-    /* Slots live in the persistent block: the module image is freed after this
+-     * returns, so a static cannot hold them. */
+-    u8 **pcm = (u8 **)z5_state_alloc(4);
+-    u32 *len = (u32 *)z5_state_alloc(4);
+-    u32 *seen = (u32 *)z5_state_alloc(4);
++    /* What must survive a redraw lives in one struct in the persistent block:
++     * the module image is freed after this returns, so a static cannot hold it,
++     * and z5_state_user() hands back the same struct on every redraw. Taking
++     * new z5_state_alloc() slots here on every redraw would reload the clip
++     * into a fresh 256 KiB buffer each time and leak the old one. */
++    struct sound {
++        u8 *pcm;
++        u32 len;
++        u32 seen;
++    } *s = (struct sound *)z5_state_user(sizeof(struct sound));
+     char *line = z5_ui_text(64);
+-    if (!pcm || !len || !seen || !line) return finish(ctx, 1, 0);
++    if (!s || !line) return finish(ctx, 1, 0);
++    u8 **pcm = &s->pcm;
++    u32 *len = &s->len;
++    u32 *seen = &s->seen;
+ 
+     if (!*pcm) {
+         *pcm = (u8 *)z5_alloc(WAV_CAP, 0);
+diff --git a/sdk/include/z5/bglog.h b/sdk/include/z5/bglog.h
+index b2f4638..1b046c0 100644
+--- a/sdk/include/z5/bglog.h
++++ b/sdk/include/z5/bglog.h
+@@ -13,16 +13,17 @@
+  * The batch trailer is the commit; there is no per-record CRC.  A torn last
+  * batch is discarded as a whole, the complete prefix is kept.
+  *
+- * Fixed words: 0xC18117C0/17C4 (magic + control pointer).  The copied put
++ * Fixed words: Z5_ANCHOR_BGLOG [0] magic, [1] control pointer (state.h).  The copied put
+  * image pointer lives in the control block at 0xF4, so hooks reach it through
+- * the control block.  The SDK already uses 0xC1811738 (state),
+- * 0xC1811788/178C/1790 (log ring) and 0xC18117C8 (audio state).
++ * the control block.  The other anchor words hold the state pointer, the
++ * log ring and the audio state.
+  */
+ #ifndef Z5_BGLOG_H
+ #define Z5_BGLOG_H
+ 
+ #include "z5/z5.h"
+ #include "z5/module.h"
++#include "z5/state.h"
+ 
+ /* Master switch: off by default.  Enable with -DZ5_LOG_ENABLE=1. */
+ #ifndef Z5_LOG_ENABLE
+@@ -67,7 +68,7 @@
+ 
+ #if Z5_LOG_ENABLE
+ 
+-#define Z5_BGLOG_FIXED    0xC18117C0u   /* [0] magic, [1] control block        */
++#define Z5_BGLOG_FIXED    Z5_ANCHOR_BGLOG /* [0] magic, [1] control block      */
+ #define Z5_BGLOG_CTRL_PUTIMG 0xF4u      /* control block: copied put image     */
+ #define Z5_BGLOG_MAGIC    0x474C355Au   /* "Z5LG"                              */
+ #define Z5_BGLOG_VERSION  2u
+diff --git a/sdk/include/z5/overlay.h b/sdk/include/z5/overlay.h
+deleted file mode 100644
+index e5a9082..0000000
+--- a/sdk/include/z5/overlay.h
++++ /dev/null
+@@ -1,78 +0,0 @@
+-/* z5mod - finished-frame overlay on the shooting page.
+- *
+- * Two phases, on purpose:
+- *
+- *   1. build  - z5_overlay_begin() .. z5_overlay_commit().  The caller appends
+- *               widgets.  Only RAM is touched: no display access, no blocking,
+- *               safe from the UI task, from a capture task and from a callback.
+- *   2. paint  - a small task repaints the published frame every `period_ms`
+- *               into the overlay layer.  Every row is written in one burst, so
+- *               a display refresh can never sample half a row.
+- *
+- * The overlay layer is refreshed by the firmware, so the paint has to repeat
+- * forever; `period_ms` trades CPU for freshness.  Budget the total widget area:
+- * about 25k px is comfortable at 5 ms, about 55k px at 11 ms.
+- *
+- * A widget always carries its own box and background, and the paint fills that
+- * box completely.  That is what keeps the panel free of gaps and stale pixels
+- * from an earlier layout.
+- *
+- * Measured on hardware: the overlay surface accepts about 2.8 million pixels
+- * per second (~11 MB/s).  Budget the widgets accordingly:
+- *
+- *     total widget area <= 2.8 * period_ms
+- *
+- * i.e. about 14k px at 5 ms, 31k px at 11 ms, 45k px at 16 ms.  Ask for a
+- * cadence the area cannot sustain and the achieved rate just drops; that is
+- * what z5_overlay_stats() reports.
+- */
+-#ifndef Z5_OVERLAY_H
+-#define Z5_OVERLAY_H
+-
+-#include "z5.h"
+-
+-#define Z5_OVL_MAX_WIDGETS 12u
+-#define Z5_OVL_ARENA      1024u
+-
+-/* Widget kinds. */
+-#define Z5_OVL_RECT   1u
+-#define Z5_OVL_TEXT   2u
+-
+-/* Colours are the layer's 32-bit format, RGBA8888 with alpha last. */
+-#define Z5_RGBA(r, g, b, a) \
+-    ((u32)(r) | ((u32)(g) << 8) | ((u32)(b) << 16) | ((u32)(a) << 24))
+-
+-typedef struct {
+-    u16 period_ms;      /* repaint cadence, 5..100; 0 = default 11 ms */
+-    u16 reserved;
+-} z5_overlay_cfg;
+-
+-/* Create the state, copy the font, install the paint task.  Call from z5_main;
+- * idempotent.  cfg may be NULL for the defaults.  Returns 0 on success. */
+-int  z5_overlay_init(const z5_overlay_cfg *cfg);
+-
+-/* Change the cadence at run time (5..100 ms). */
+-int  z5_overlay_set_period(u16 period_ms);
+-
+-/* Phase 1: start a new frame.  Discards any uncommitted widgets. */
+-int  z5_overlay_begin(void);
+-
+-/* Phase 1: append widgets.  Return 0 on success, <0 when the frame is full. */
+-int  z5_overlay_rect(u16 x, u16 y, u16 w, u16 h, u32 bg, u32 edge);
+-int  z5_overlay_text(u16 x, u16 y, u16 w, u16 h, u32 bg, u32 fg, const char *s);
+-
+-/* Phase 2: publish the frame.  The paint task picks it up on its next tick. */
+-int  z5_overlay_commit(void);
+-
+-typedef struct {
+-    u32 paints;       /* total repaints since init */
+-    u32 rate_per_s;   /* smoothed repaints per second */
+-    u32 rate_min;     /* worst one-second window since init */
+-    u32 paint_us;     /* average duration of one paint, microseconds */
+-} z5_overlay_stats_t;
+-
+-/* Statistics for a debug row.  rate_per_s drops below 1000/period_ms when the
+- * paint cannot keep up; paint_us says how much of the period it eats. */
+-void z5_overlay_stats(z5_overlay_stats_t *out);
+-
+-#endif /* Z5_OVERLAY_H */
+diff --git a/sdk/include/z5/state.h b/sdk/include/z5/state.h
+index 60dbe26..59632ca 100644
+--- a/sdk/include/z5/state.h
++++ b/sdk/include/z5/state.h
+@@ -7,20 +7,48 @@
+  *   - alloc() on every redraw is never freed               -> leak per frame
+  *
+  * Both are easy to write by accident, so the SDK offers one place for state
+- * that has to survive: a block taken from the heap once, remembered in a fixed
+- * word the firmware does not touch, and handed out by a bump allocator.
++ * that has to survive: a block taken from the heap once, remembered in the SDK
++ * anchor below, and handed out by a bump allocator.
+  */
+ #ifndef Z5_STATE_H
+ #define Z5_STATE_H
+ 
+ #include "z5.h"
+ 
+-/* Fixed word the block pointer is remembered in. It survives module reloads
+- * and is not used by the firmware (the working modules relied on it). */
+-#define Z5_STATE_SLOT  0xC1811738u
++/* The SDK anchor: eight words that survive module reloads until the camera
++ * powers down (standby wake is a power-up too).
++ *
++ * They lie in the 32-byte gap between the initialised data (copied to
++ * 0xC1800000..0xC18F8120 at boot) and the zero-initialised data (from
++ * 0xC18F8140), as given by the scatter-load table at 0x10034000. No firmware
++ * code references the gap, and it was seen unchanged on a camera through
++ * shooting, playback, Bluetooth and a SnapBridge transfer. It is neither
++ * copied nor zeroed at boot, so it starts with whatever the RAM held: every
++ * word is garbage until z5_state() validates or resets the anchor.
++ *
++ * The previous slot, 0xC1811738, is field +0x30 of a firmware notification
++ * object that Bluetooth code writes; it is no longer used. */
++#define Z5_ANCHOR        0xC18F8120u
++#define Z5_ANCHOR_WORDS  8u
++#define Z5_STATE_SLOT    (Z5_ANCHOR + 0x00u)   /* state block pointer P      */
++#define Z5_STATE_CHECK   (Z5_ANCHOR + 0x04u)   /* ~P: P is valid only if set */
++#define Z5_ANCHOR_AUDIO  (Z5_ANCHOR + 0x08u)   /* audio state (hook image)   */
++#define Z5_ANCHOR_BGLOG  (Z5_ANCHOR + 0x0Cu)   /* bglog magic, control block */
++#define Z5_ANCHOR_LOG    (Z5_ANCHOR + 0x14u)   /* log ring ptr, index, count */
+ 
+-/* The first 32 bytes are reserved for the SDK: the bump offset and the slots
+- * the hook image has to reach at a fixed address. User data starts after them. */
++/* True when the anchor holds a state pointer with its check word, i.e. a
++ * z5_state() of this power-up created it. Until then every other anchor
++ * word is garbage and must not be dereferenced. */
++static inline int z5_anchor_valid(void)
++{
++    u32 p = *(volatile u32 *)Z5_STATE_SLOT;
++    return p >= 0xC1800000u && p < 0xC8700000u && *(volatile u32 *)Z5_STATE_CHECK == ~p;
++}
++
++/* The first 32 bytes are reserved for the SDK: +0x00 the bump offset, +0x04 and
++ * +0x08 the z5_ui_text() buffer and its size, +0x0C and +0x10 the
++ * z5_state_user() block and its size; the rest is free for the SDK.
++ * User data starts after them. */
+ #define Z5_STATE_RESERVED 0x20u
+ 
+ /* Total size of the block. Nothing is ever freed, so keep it modest. */
+@@ -31,7 +59,15 @@
+ void *z5_state(void);
+ 
+ /* Bump-allocate inside that block. The result is zeroed, 8-byte aligned and
+- * stays valid for the rest of the camera session. Returns 0 when full. */
++ * stays valid for the rest of the camera session. Returns 0 when full.
++ * Every call takes new space: z5_main runs again on every redraw, so calling
++ * this from z5_main without remembering the result uses the block up. */
+ void *z5_state_alloc(u32 bytes);
+ 
++/* The module's own persistent structure: allocated and zeroed by the first
++ * call of a power-up, the same pointer on every later call. Put everything a
++ * module must remember across redraws in one struct and fetch it with this.
++ * A larger size than before gets a new, zeroed block. Returns 0 when full. */
++void *z5_state_user(u32 bytes);
++
+ #endif /* Z5_STATE_H */
+diff --git a/sdk/src/audio.c b/sdk/src/audio.c
+index ed39edd..701c1a9 100644
+--- a/sdk/src/audio.c
++++ b/sdk/src/audio.c
+@@ -12,7 +12,7 @@
+ #define AUDIO_MAGIC    0x5A3550BFu
+ #define AUDIO_TAG      0x0000010Fu
+ #define SNDSRV_HANDLER 0x101307F1u      /* the firmware's sound service task */
+-#define FW_STATE       0xC18117C8u      /* where the task finds the state     */
++#define FW_STATE       Z5_ANCHOR_AUDIO  /* where the task finds the state     */
+ 
+ /* State block offsets. The first group is what the firmware's engine reads. */
+ #define ST_MAGIC   0x08u
+diff --git a/sdk/src/audio_arm.c b/sdk/src/audio_arm.c
+index 4a01af5..58ed593 100644
+--- a/sdk/src/audio_arm.c
++++ b/sdk/src/audio_arm.c
+@@ -34,6 +34,7 @@
+  */
+ #include "z5/z5.h"
+ #include "z5/svc.h"
++#include "z5/state.h"
+ 
+ typedef int (*post_msg_fn)(void *task, void *msg);
+ 
+@@ -56,7 +57,7 @@ static inline s32 ctl_svc(u32 tfn, u32 a1, u32 a2)
+     return (s32)r0;
+ }
+ 
+-#define CTL_FW_STATE  0xC18117C8u   /* play state block        */
++#define CTL_FW_STATE  Z5_ANCHOR_AUDIO /* play state block      */
+ #define CTL_CP        0x50u         /* state + 0x50: control block      */
+ #define CTL_MS        0x54u         /* state + 0x54: clip length in ms  */
+ #define CTL_TICK      0xC18EB388u   /* firmware ms clock      */
+diff --git a/sdk/src/bglog.c b/sdk/src/bglog.c
+index 0c0b577..cf67141 100644
+--- a/sdk/src/bglog.c
++++ b/sdk/src/bglog.c
+@@ -77,7 +77,7 @@
+ /* ------------------------------------------------------------------ */
+ /* fixed RAM word and control block                                    */
+ /* ------------------------------------------------------------------ */
+-#define FIXED_WORD   0xC18117C0u     /* [0] magic, [1] control-block pointer   */
++#define FIXED_WORD   Z5_BGLOG_FIXED  /* [0] magic, [1] control-block pointer   */
+ #define CTL_MAGIC    0x474C355Au     /* bytes "Z5LG"                           */
+ #define CTL_VERSION  1u
+ 
+diff --git a/sdk/src/hook.c b/sdk/src/hook.c
+index e99eca8..dc1e58f 100644
+--- a/sdk/src/hook.c
++++ b/sdk/src/hook.c
+@@ -10,7 +10,7 @@
+ #define CB1_SLOT   0xC18E648Cu      /* first notification callback object     */
+ #define SLOT_AT    8u               /* the callback pointer lives at +8       */
+ 
+-#define AUDIO_SLOT   0xC18117C8u    /* audio state, read by the image         */
++#define AUDIO_SLOT   Z5_ANCHOR_AUDIO /* audio state, read by the image        */
+ #define AUDIO_MAGIC  0x5A3550BFu
+ #define ST_CB1_ORIG  0x38u          /* inside the audio state: replaced cb1   */
+ #define ST_REQ       0x48u          /* play request the task polls            */
+diff --git a/sdk/src/log.c b/sdk/src/log.c
+index 8b375a3..3ec85e7 100644
+--- a/sdk/src/log.c
++++ b/sdk/src/log.c
+@@ -1,14 +1,16 @@
+ /* z5mod - logging: a RAM ring, and files on the card. */
+ #include "z5/log.h"
++#include "z5/state.h"
+ 
+-/* Fixed words the firmware leaves free for a module to use; the ring pointer is
+- * stored there so it survives a reload. */
+-#define LOG_PTR  0xC1811788u
+-#define LOG_IDX  0xC181178Cu
+-#define LOG_N    0xC1811790u
++/* The ring pointer, index and count live in the SDK anchor so they survive a
++ * reload. They are garbage until z5_state() validates the anchor. */
++#define LOG_PTR  (Z5_ANCHOR_LOG + 0u)
++#define LOG_IDX  (Z5_ANCHOR_LOG + 4u)
++#define LOG_N    (Z5_ANCHOR_LOG + 8u)
+ 
+ int z5_log_init(void)
+ {
++    if (!z5_state()) return -1;          /* validates or resets the anchor */
+     u32 p = *(volatile u32 *)LOG_PTR;
+     if (p >= 0xC1800000u && p < 0xC8700000u) return 0;
+     u8 *ring = (u8 *)z5_alloc(Z5_LOG_MAX_RECORDS * 16u, 0);
+@@ -22,6 +24,7 @@ int z5_log_init(void)
+ 
+ void z5_log_put4(u32 a, u32 b, u32 c, u32 d)
+ {
++    if (!z5_anchor_valid()) return;
+     u32 base = *(volatile u32 *)LOG_PTR;
+     if (base < 0xC1800000u || base >= 0xC8700000u) return;
+     u32 idx = *(volatile u32 *)LOG_IDX;
+@@ -33,11 +36,13 @@ void z5_log_put4(u32 a, u32 b, u32 c, u32 d)
+ 
+ u32 z5_log_count(void)
+ {
++    if (!z5_anchor_valid()) return 0u;
+     return *(volatile u32 *)LOG_N;
+ }
+ 
+ int z5_log_dump(const char *path)
+ {
++    if (!z5_anchor_valid()) return -1;
+     u32 base = *(volatile u32 *)LOG_PTR;
+     u32 n = *(volatile u32 *)LOG_N;
+     if (base < 0xC1800000u || base >= 0xC8700000u || n == 0u) return -1;
+diff --git a/sdk/src/overlay.c b/sdk/src/overlay.c
+deleted file mode 100644
+index 9a9c15f..0000000
+--- a/sdk/src/overlay.c
++++ /dev/null
+@@ -1,351 +0,0 @@
+-/* z5mod - finished-frame overlay on the shooting page.  See overlay.h. */
+-#include "z5/overlay.h"
+-#include "z5/state.h"
+-#include "z5/task.h"
+-#include "z5/image.h"
+-#include "z5/time.h"
+-
+-#include "overlay_font.h"
+-
+-#define ST_OFF      0xF00u
+-#define STATE_SLOT  0xC1811738u
+-#define CUR_PAGE    0xC1819F90u
+-#define APPLV_PAGE  0xC18216A0u
+-#define DEFAULT_SURF 0xD045F200u   /* comp1 / page 1, measured on hardware */
+-#define STRIDE      2880u
+-#define OVL_MAGIC   0x4F564C59u    /* 'OVLY' */
+-#define OVL_VER     1u
+-#define FONT_BYTES  (FONT_N * FONT_COLS * 4u)
+-#define MAX_W      720u
+-#define MAX_H      480u
+-#define SPIN_IDLE   40u
+-/* Hardware free-running counter, 48 MHz (low word at 0x04266008, it wraps every
+- * ~89 s which is fine for wrap-safe 32-bit subtraction).  This is the register
+- * the firmware's own millisecond counter is derived from; reading it directly
+- * gives 20.8 ns resolution instead of guessing a unit. */
+-#define FW_DELAY   0x10232937u          /* firmware delay(ms), used by the audio/log paths */
+-#define CLOCK      0xC18EB388u          /* firmware millisecond counter */
+-#define FIXED_OVERHEAD 0u
+-/* Kernel sleep.  0x100364B8 is the T-Kernel entry whose service code is
+- * 0x80060100 (one argument, task-wait group).  Passing a timeout makes the
+- * task block in the kernel instead of spinning, so the cadence comes from the
+- * scheduler rather than from how fast the loop happens to run. */
+-
+-
+-struct widget {
+-    u32 kind;
+-    u32 x, y, w, h;
+-    u32 bg, edge;
+-    u32 fg;
+-    u32 toff, tlen;      /* text: arena offset and length */
+-};
+-
+-struct ovl_state {
+-    u32 magic;
+-    u32 ver;
+-    u32 started;
+-    u32 surf;
+-    u32 font;
+-    u32 arena;
+-    u32 arena_used;
+-    u32 period_ms;
+-    u32 seq;             /* seqlock: odd while a frame is being built */
+-    u32 n;
+-    u32 paints;
+-    u32 last_paint;
+-    u32 rate_t0;
+-    u32 rate_n;
+-    u32 rate;            /* EMA of repaints per second */
+-    u32 rate_min;        /* worst one-second window since boot */
+-    u32 paint_sum_ms;    /* sum of paint durations inside the window */
+-    u32 paint_us;        /* average paint duration, microseconds */
+-    u32 cycle_t0;        /* start of the current cycle (ms) */
+-    struct widget w[Z5_OVL_MAX_WIDGETS];
+-};
+-
+-/* ---- paint task: copied image, so every helper must be inlined ---------- */
+-#define INLINE __attribute__((always_inline)) static inline
+-
+-/* freestanding divide: the module links no libgcc, so a division by a variable
+- * would otherwise pull in __aeabi_uidiv */
+-INLINE u32 udiv32(u32 n, u32 d)
+-{
+-    unsigned long long r = 0u;
+-    u32 q = 0u;
+-    if (d == 0u) return 0u;
+-    for (int i = 31; i >= 0; i--) {
+-        r = (r << 1) | ((n >> i) & 1u);
+-        if (r >= d) { r -= d; q |= (1u << i); }
+-    }
+-    return q;
+-}
+-
+-INLINE int ovl_glyph(char c)
+-{
+-    if (c >= '0' && c <= '9') return c - '0';
+-    if (c >= 'A' && c <= 'Z') return 10 + (c - 'A');
+-    if (c == ':') return 37;
+-    if (c == '.') return 38;
+-    if (c == '-') return 39;
+-    if (c == '/') return 40;
+-    if (c == '%') return 41;
+-    if (c == '+') return 42;
+-    return 36;                       /* space */
+-}
+-
+-Z5_IMAGE(ovl) static void ovl_entry(void *arg)
+-{
+-    (void)arg;
+-    struct widget w[Z5_OVL_MAX_WIDGETS];
+-    union {
+-        u64 w64[MAX_W / 2u];
+-        u32 w32[MAX_W];
+-    } rb;
+-#define row rb.w32
+-
+-    for (;;) {
+-        u32 blk = *(volatile u32 *)STATE_SLOT;
+-        if (blk >= 0xC1800000u && blk < 0xC8700000u) {
+-            struct ovl_state *st = (struct ovl_state *)(blk + ST_OFF);
+-            u32 nowms = *(volatile u32 *)CLOCK;
+-            u32 period = st->period_ms ? st->period_ms : 11u;
+-            u32 units = period;
+-            u32 surf = st->surf;
+-            const unsigned int *font = (const unsigned int *)st->font;
+-            const char *arena = (const char *)st->arena;
+-            if (st->magic == OVL_MAGIC && st->ver == OVL_VER && st->started &&
+-                surf >= 0x80000000u && surf < 0xF0000000u && font &&
+-                (st->last_paint == 0u || (u32)(nowms - st->last_paint) >= units)) {
+-                /* seqlock read: snapshot the widget list */
+-                u32 n = 0u;
+-                int ok = 0;
+-                for (u32 tries = 0u; tries < 4u && !ok; tries++) {
+-                    u32 s1 = st->seq;
+-                    if (s1 & 1u) continue;
+-                    n = st->n;
+-                    if (n > Z5_OVL_MAX_WIDGETS) n = 0u;
+-                    for (u32 i = 0u; i < n; i++) w[i] = st->w[i];
+-                    if (st->seq == s1) ok = 1;
+-                }
+-                if (ok) {
+-                    u32 paint_t0 = nowms;
+-                    st->last_paint = nowms;
+-                    if (*(volatile u32 *)CUR_PAGE == APPLV_PAGE) {
+-                        for (u32 i = 0u; i < n; i++) {
+-                            u32 x0 = w[i].x, y0 = w[i].y;
+-                            u32 ww = w[i].w, hh = w[i].h;
+-                            if (x0 >= MAX_W || y0 >= MAX_H) continue;
+-                            if (x0 + ww > MAX_W) ww = MAX_W - x0;
+-                            if (y0 + hh > MAX_H) hh = MAX_H - y0;
+-                            for (u32 y = 0u; y < hh; y++) {
+-                                u32 edge = (w[i].edge &&
+-                                            (y == 0u || y == hh - 1u));
+-                                for (u32 x = 0u; x < ww; x++) {
+-                                    u32 e = edge || (w[i].edge &&
+-                                                     (x == 0u || x == ww - 1u));
+-                                    row[x] = e ? w[i].edge : w[i].bg;
+-                                }
+-                                if (w[i].kind == Z5_OVL_TEXT && y >= 2u && y < 2u + FONT_ROWS) {
+-                                    u32 r = y - 2u;
+-                                    const char *s = arena + w[i].toff;
+-                                    u32 len = w[i].tlen;
+-                                    u32 cols = (ww > 4u) ? (ww - 4u) / FONT_COLS : 0u;
+-                                    if (len > cols) len = cols;
+-                                    for (u32 ci = 0u; ci < len; ci++) {
+-                                        int gi = ovl_glyph(s[ci]);
+-                                        const unsigned int *g = font + gi * FONT_COLS;
+-                                        for (u32 c = 0u; c < FONT_COLS; c++)
+-                                            if ((g[c] >> r) & 1u)
+-                                                row[2u + ci * FONT_COLS + c] = w[i].fg;
+-                                    }
+-                                }
+-                                {
+-                                    volatile u32 *dst = (volatile u32 *)
+-                                        (surf + (y0 + y) * STRIDE + x0 * 4u);
+-                                    if (((x0 & 1u) == 0u) && (ww & 1u) == 0u) {
+-                                        /* two pixels per store: fewer, wider
+-                                         * transactions into display memory */
+-                                        volatile u64 *d64 = (volatile u64 *)dst;
+-                                        u32 half = ww / 2u;
+-                                        for (u32 i = 0u; i < half; i++)
+-                                            d64[i] = rb.w64[i];
+-                                    } else {
+-                                        for (u32 x = 0u; x < ww; x++) dst[x] = row[x];
+-                                    }
+-                                }
+-                            }
+-                        }
+-                        st->paints = st->paints + 1u;
+-                        st->paint_sum_ms = st->paint_sum_ms +
+-                                           (u32)(*(volatile u32 *)CLOCK - paint_t0);
+-                        /* achieved repaint rate: if the paint costs more than the
+-                         * period this number drops below 1000/period, which is
+-                         * the only honest way to see the real cost. */
+-                        st->rate_n = st->rate_n + 1u;
+-                        if (st->rate_t0 == 0u) st->rate_t0 = nowms;
+-                        else if ((u32)(nowms - st->rate_t0) >= 1000u) {
+-                            /* EMA (weight 1/8) so the readout does not jitter
+-                             * with every one-second window. */
+-                            u32 n = st->rate_n;
+-                            if (n != 0u) st->paint_us = udiv32(st->paint_sum_ms * 1000u, n);
+-                            if (st->rate == 0u) st->rate = n;
+-                            else st->rate = st->rate - (st->rate >> 3) + (n >> 3);
+-                            if (st->rate_min == 0u || n < st->rate_min) st->rate_min = n;
+-                            st->rate_n = 0u;
+-                            st->paint_sum_ms = 0u;
+-                            st->rate_t0 = nowms;
+-                        }
+-                    }
+-                }
+-            }
+-        }
+-        /* Poll the clock until the period is up.  The firmware delay entry
+-         * (svc 0x80520100) turned out to be unstable here (66..80 fps for an
+-         * 11 ms request), while a deadline poll is what kept M == R before, so
+-         * the cadence is enforced by the loop itself.  Spin tight: the wait is
+-         * only the part of the period the paint did not use. */
+-        {
+-            u32 blk2 = *(volatile u32 *)STATE_SLOT;
+-            if (blk2 >= 0xC1800000u && blk2 < 0xC8700000u) {
+-                struct ovl_state *s2 = (struct ovl_state *)(blk2 + ST_OFF);
+-                u32 per = s2->period_ms ? s2->period_ms : 11u;
+-                if (s2->cycle_t0 != 0u) {
+-                    while ((u32)(*(volatile u32 *)CLOCK - s2->cycle_t0) < per) { }
+-                }
+-            }
+-        }
+-    }
+-}
+-Z5_IMAGE_END(ovl) static void ovl_end(void) { }
+-
+-/* ---- module side ------------------------------------------------------- */
+-
+-static struct ovl_state *ovl_state(void)
+-{
+-    u8 *blk = (u8 *)z5_state();
+-    if (!blk) return 0;
+-    return (struct ovl_state *)(blk + ST_OFF);
+-}
+-
+-int z5_overlay_init(const z5_overlay_cfg *cfg)
+-{
+-    struct ovl_state *st = ovl_state();
+-    if (!st) return -1;
+-
+-    if (st->magic != OVL_MAGIC || st->ver != OVL_VER) {
+-        u8 *font = (u8 *)z5_alloc(FONT_BYTES, 0);
+-        u8 *arena = (u8 *)z5_alloc(Z5_OVL_ARENA, 0);
+-        st->magic = OVL_MAGIC;
+-        st->ver = OVL_VER;
+-        st->started = 0u;
+-        st->surf = DEFAULT_SURF;
+-        st->seq = 0u;
+-        st->n = 0u;
+-        st->paints = 0u;
+-        st->last_paint = 0u;
+-        st->rate_n = 0u;
+-        st->rate = 0u;
+-        st->rate_min = 0u;
+-        st->rate_t0 = 0u;
+-        st->paint_sum_ms = 0u;
+-        st->paint_us = 0u;
+-        st->cycle_t0 = 0u;
+-        st->arena_used = 0u;
+-        st->period_ms = cfg && cfg->period_ms ? cfg->period_ms : 11u;
+-        st->font = (u32)font;
+-        st->arena = (u32)arena;
+-        if (font) {
+-            const u8 *src = (const u8 *)FONT5X7;
+-            for (u32 i = 0u; i < FONT_BYTES; i++) font[i] = src[i];
+-        }
+-        if (font && arena) {
+-            z5_task *tsk = (z5_task *)z5_alloc(sizeof(z5_task), 0);
+-            void *entry = z5_img_copy(ovl_entry, ovl_end);
+-            if (tsk && entry) {
+-                if (z5_task_create_raw(tsk, "Z5OVL", 0x30, entry) == 0)
+-                    st->started = 1u;
+-            }
+-        }
+-    } else if (cfg && cfg->period_ms) {
+-        st->period_ms = cfg->period_ms;
+-    }
+-    return st->started ? 0 : -1;
+-}
+-
+-int z5_overlay_set_period(u16 period_ms)
+-{
+-    struct ovl_state *st = ovl_state();
+-    if (!st || st->magic != OVL_MAGIC) return -1;
+-    if (period_ms < 5u) period_ms = 5u;
+-    if (period_ms > 100u) period_ms = 100u;
+-    st->period_ms = period_ms;
+-    return 0;
+-}
+-
+-int z5_overlay_begin(void)
+-{
+-    struct ovl_state *st = ovl_state();
+-    if (!st || st->magic != OVL_MAGIC) return -1;
+-    st->seq = st->seq + 1u;          /* odd: a frame is being built */
+-    st->n = 0u;
+-    st->arena_used = 0u;
+-    return 0;
+-}
+-
+-static int ovl_add(u32 kind, u16 x, u16 y, u16 w, u16 h, u32 bg, u32 edge,
+-                   u32 fg, u32 toff, u32 tlen)
+-{
+-    struct ovl_state *st = ovl_state();
+-    if (!st || st->magic != OVL_MAGIC) return -1;
+-    if (st->n >= Z5_OVL_MAX_WIDGETS) return -1;
+-    struct widget *wd = &st->w[st->n];
+-    wd->kind = kind;
+-    wd->x = x; wd->y = y; wd->w = w; wd->h = h;
+-    wd->bg = bg; wd->edge = edge; wd->fg = fg;
+-    wd->toff = toff; wd->tlen = tlen;
+-    st->n = st->n + 1u;
+-    return 0;
+-}
+-
+-int z5_overlay_rect(u16 x, u16 y, u16 w, u16 h, u32 bg, u32 edge)
+-{
+-    return ovl_add(Z5_OVL_RECT, x, y, w, h, bg, edge, bg, 0u, 0u);
+-}
+-
+-int z5_overlay_text(u16 x, u16 y, u16 w, u16 h, u32 bg, u32 fg, const char *s)
+-{
+-    struct ovl_state *st = ovl_state();
+-    if (!st || st->magic != OVL_MAGIC) return -1;
+-    char *arena = (char *)st->arena;
+-    if (!arena || !s) return -1;
+-    u32 len = 0u;
+-    while (s[len] && len < 200u) len++;
+-    if (st->arena_used + len + 1u > Z5_OVL_ARENA) st->arena_used = 0u;   /* wrap */
+-    u32 off = st->arena_used;
+-    for (u32 i = 0u; i < len; i++) arena[off + i] = s[i];
+-    st->arena_used = off + len + 1u;
+-    return ovl_add(Z5_OVL_TEXT, x, y, w, h, bg, 0u, fg, off, len);
+-}
+-
+-int z5_overlay_commit(void)
+-{
+-    struct ovl_state *st = ovl_state();
+-    if (!st || st->magic != OVL_MAGIC) return -1;
+-    st->seq = st->seq + 1u;          /* even again: the frame is published */
+-    return 0;
+-}
+-
+-void z5_overlay_stats(z5_overlay_stats_t *out)
+-{
+-    struct ovl_state *st = ovl_state();
+-    if (!out) return;
+-    if (!st || st->magic != OVL_MAGIC) {
+-        out->paints = 0u; out->rate_per_s = 0u;
+-        out->rate_min = 0u; out->paint_us = 0u;
+-        return;
+-    }
+-    out->paints = st->paints;
+-    out->rate_per_s = st->rate;
+-    out->rate_min = st->rate_min;
+-    out->paint_us = st->paint_us;
+-}
+diff --git a/sdk/src/overlay_font.h b/sdk/src/overlay_font.h
+deleted file mode 100644
+index a8c93ec..0000000
+--- a/sdk/src/overlay_font.h
++++ /dev/null
+@@ -1,43 +0,0 @@
+-/* 5x7 font, 43 glyphs, one byte per column, bit0 = top row */
+-#define FONT_N 43u
+-#define FONT_COLS 12u
+-#define FONT_ROWS 20u
+-static const unsigned int FONT5X7[516] = {
+-    0,4080,8184,6936,6540,6540,6360,8184,2032,0,0,0,0,4112,4152,
+-    4120,8184,8188,6144,4096,4096,0,0,0,0,6144,6168,7176,7692,4876,
+-    4600,4344,4096,0,0,0,0,4096,4120,4236,4236,6604,6648,3960,1536,
+-    0,0,0,1536,1920,1984,1632,1592,1564,8188,8184,1536,0,0,0,
+-    0,4096,4348,4316,6284,6540,6540,3976,1536,0,0,0,0,1984,8176,
+-    6552,6552,6540,6540,8076,3840,0,0,0,0,12,12,6156,7692,1932,
+-    492,124,24,0,0,0,0,3632,8056,6616,6604,4556,7128,8056,3632,
+-    0,0,0,0,4336,4600,4504,6540,6540,7576,4088,992,0,0,0,
+-    4096,7680,1984,1784,1564,1564,1784,4032,7680,4096,0,0,0,8184,8188,
+-    6604,4236,6604,6616,8184,3888,0,0,0,0,2016,4080,6168,6168,6156,
+-    6156,6168,6168,0,0,0,0,8188,8188,4108,6156,6172,6168,4088,2032,
+-    0,0,0,0,0,8188,6620,4236,4236,4236,4236,0,0,0,0,
+-    0,0,8188,8188,140,140,140,140,0,0,0,0,384,4064,7792,
+-    6168,6168,4236,6540,8088,8088,0,0,0,0,8188,8184,128,128,128,
+-    448,8184,8184,0,0,0,0,4104,4108,6156,8188,8188,4108,4108,4104,
+-    0,0,0,0,0,6156,6156,6156,6156,8188,2040,0,0,0,0,
+-    0,8184,8184,384,960,1648,7224,6156,4096,0,0,0,0,0,8184,
+-    8184,6144,4096,4096,4096,4096,0,0,0,7680,8188,120,240,896,960,
+-    112,60,8184,6144,0,0,0,8188,8188,120,480,1920,7680,8184,8184,
+-    0,0,0,896,4080,7800,6168,6156,6156,6168,7800,4080,384,0,0,
+-    0,8184,8188,396,396,396,408,248,112,0,0,0,384,4080,7800,
+-    6168,30732,63500,104472,106104,36848,33152,0,0,0,8184,8188,924,396,908,
+-    4056,7416,4096,0,0,0,0,6256,6392,6360,4492,6540,6936,7960,3584,
+-    0,0,0,0,12,12,12,8188,8188,12,12,12,0,0,0,
+-    0,4092,8184,6144,6144,6144,6144,8184,4088,0,0,0,12,120,1008,
+-    8064,7168,7168,3968,496,120,8,0,0,56,8184,7680,7936,448,960,
+-    7680,7168,8184,24,0,0,0,6156,7224,2032,992,992,3952,7224,6156,
+-    0,0,0,8,28,120,224,8064,8064,224,120,28,0,0,0,
+-    0,6152,7180,7692,5004,4300,4220,4156,4104,0,0,0,0,0,0,
+-    0,0,0,0,0,0,0,0,0,0,0,0,0,6240,6240,
+-    0,0,0,0,0,0,0,0,0,4096,6144,6144,0,0,0,
+-    0,0,0,0,0,256,384,384,384,384,256,0,0,0,0,
+-    0,16384,30720,7680,1920,480,56,12,0,0,0,0,24,6268,3180,
+-    1916,956,7904,7984,6940,7692,3072,0,0,0,384,384,384,4080,4080,
+-    384,384,384,0,0,0,
+-};
+-/* char -> glyph index map, written as data so the module can scan it */
+-static const char FONT_CHARS[44] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ :.-/%+";
+diff --git a/sdk/src/state.c b/sdk/src/state.c
+index f20efc5..986c16d 100644
+--- a/sdk/src/state.c
++++ b/sdk/src/state.c
+@@ -8,13 +8,18 @@
+ 
+ void *z5_state(void)
+ {
+-    u32 p = *(volatile u32 *)Z5_STATE_SLOT;
+-    if (p >= 0xC1800000u && p < 0xC8700000u) return (void *)p;
++    volatile u32 *anchor = (volatile u32 *)Z5_ANCHOR;
++    u32 p = anchor[0];
++    /* The anchor starts as RAM garbage: trust it only with its check word. */
++    if (p >= 0xC1800000u && p < 0xC8700000u && anchor[1] == ~p) return (void *)p;
+ 
+     u8 *block = (u8 *)z5_alloc(Z5_STATE_SIZE, 0);
+     if (!block) return 0;
+     for (u32 i = 0; i < Z5_STATE_SIZE; i++) block[i] = 0;
+-    *(volatile u32 *)Z5_STATE_SLOT = (u32)block;
++    /* A new block means a new session: the other anchor words are garbage. */
++    for (u32 i = 2; i < Z5_ANCHOR_WORDS; i++) anchor[i] = 0u;
++    anchor[1] = ~(u32)block;
++    anchor[0] = (u32)block;
+     return block;
+ }
+ 
+@@ -29,3 +34,21 @@ void *z5_state_alloc(u32 bytes)
+     *(u32 *)(block + USED_OFFSET) = used + need;
+     return block + DATA_START + used;
+ }
++
++/* Reserved words remembering the z5_state_user() block (see state.h). */
++#define USER_PTR   0x0Cu
++#define USER_SIZE  0x10u
++
++void *z5_state_user(u32 bytes)
++{
++    u8 *block = (u8 *)z5_state();
++    if (!block) return 0;
++    u32 *ptr = (u32 *)(block + USER_PTR);
++    u32 *size = (u32 *)(block + USER_SIZE);
++    if (*ptr && *size >= bytes) return (void *)*ptr;
++    void *user = z5_state_alloc(bytes);
++    if (!user) return 0;
++    *ptr = (u32)user;
++    *size = bytes;
++    return user;
++}
+diff --git a/sdk/src/ui.c b/sdk/src/ui.c
+index b240e5d..4e40faa 100644
+--- a/sdk/src/ui.c
++++ b/sdk/src/ui.c
+@@ -15,9 +15,26 @@ void z5_row_set_text(void *row, void *text, u32 bytes)
+     *(u32 *)(e + Z5_ROW_TEXT_LEN2) = bytes;
+ }
+ 
++/* Reserved words of the state block (see Z5_STATE_RESERVED) that remember the
++ * text buffer across module loads. */
++#define UI_TEXT_PTR   0x04u
++#define UI_TEXT_SIZE  0x08u
++
+ /* One buffer for the module's lifetime. The row keeps the pointer after the
+- * callback returns, so it cannot live in the module image. */
++ * callback returns, so it cannot live in the module image. The module image is
++ * loaded afresh on every redraw, so the buffer is remembered in the state block
++ * and reused: allocating on every call would use up the block after a few
++ * dozen redraws. A larger request than before gets a new buffer. */
+ char *z5_ui_text(u32 bytes)
+ {
+-    return (char *)z5_state_alloc(bytes);
++    u8 *block = (u8 *)z5_state();
++    if (!block) return 0;
++    u32 *ptr = (u32 *)(block + UI_TEXT_PTR);
++    u32 *size = (u32 *)(block + UI_TEXT_SIZE);
++    if (*ptr && *size >= bytes) return (char *)*ptr;
++    char *text = (char *)z5_state_alloc(bytes);
++    if (!text) return 0;
++    *ptr = (u32)text;
++    *size = bytes;
++    return text;
+ }
