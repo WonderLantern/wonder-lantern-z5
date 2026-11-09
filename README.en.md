@@ -84,7 +84,7 @@ The result is `SND.WAV` in that folder. Rename it and put it in `SHUTTER`.
 ### 6. Menus
 
 - **Shutter sound:** with silent photography on, open the second-to-last row of the Setup menu for on/off, sound type, volume and reload.
-- **Photo highlight display:** the last row of the Setup menu. You also need to turn on the stock highlight display pattern in Custom Settings group g.
+- **Photo highlight display:** the last row of the Setup menu, labelled "Photo zebra" in English. You also need to turn on the stock highlight display pattern in Custom Settings group g.
 - **Framing grid:** Custom Setting d8, with On (4×4), Off, 3×3, or 2×2 (centre cross).
 - **Histogram with level:** press DISP to reach the virtual horizon page. It appears about 1 second after power-on or wake, and "Apply settings to live view" must be on.
 - **Status:** the last row of MY MENU shows the module status. `OK ...` means it is working (`正常 ...` in Chinese).
