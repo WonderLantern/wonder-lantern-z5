@@ -1,4 +1,5 @@
 # Z5 Extensions
+n[English](README.en.md)
 
 尼康 Z 5（固件 C 1.50）的功能扩展。**本仓库不含任何尼康固件**：你需要自备官方更新文件，由 `patch.py` 在本机校验并生成刷机文件。
 
