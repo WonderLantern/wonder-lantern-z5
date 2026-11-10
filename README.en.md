@@ -16,10 +16,11 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Framing grid styles | Adds 3×3 and 2×2 to Custom Setting d8. The stock "On" remains 4×4 | Yes (photo mode, rear monitor) |
 | Photo highlight display (zebra) | Brings the stock movie highlight display to photo live view, with its own switch in the Setup menu | Yes (photo mode, rear monitor) |
 | Standby wake fix | Keeps the features when the camera wakes immediately after the display turns off | Yes |
+| Portrait UI | Held upright, the shooting information, the i menu (as 4×3), its setting pages and the histogram turn with the camera, and the direction keys follow the screen. Rear monitor only | Yes (photo mode, rear monitor) |
 
-The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
+The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes, and [docs/PORTRAIT_UI.md](docs/PORTRAIT_UI.md) for how the portrait UI works and how to port it (all in Chinese).
 
-The features live in a module on the memory card. The firmware gains only small entry points and checks. Without the module, the grid, highlight display and histogram-with-level paths behave as stock. Changes are limited to the MAIN module and do not touch the boot area.
+The features live in a module on the memory card. The firmware gains only small entry points and checks. Without the module, the grid, highlight display, histogram-with-level and portrait UI paths behave as stock. Changes are limited to the MAIN module and do not touch the boot area.
 
 **Language:** the menus were tested on camera in Simplified Chinese. English labels are built in and appear when the camera language is English, but they have not been tested on a camera.
 
@@ -48,7 +49,7 @@ output/card/SHUTTER/MENU.DAT     settings file, must stay on the card
 output/card/SHUTTER/1-3.WAV      default test sounds
 ```
 
-The SHA-256 of `EG165050.BIN` should be `e7e4ec5477a301f6128d30352429f2e6d31eaaa22f13255ceebf531215e24d61`. Do not redistribute this file.
+The SHA-256 of `EG165050.BIN` should be `f8ffd4ad51bf045c523cc22f3bdc17d845fe46e8ae06659f2480dd70a72a7643`. Do not redistribute this file.
 
 ### 3. Flash (once)
 
@@ -87,6 +88,7 @@ The result is `SND.WAV` in that folder. Rename it and put it in `SHUTTER`.
 - **Photo highlight display:** the last row of the Setup menu, labelled "Photo zebra" in English. You also need to turn on the stock highlight display pattern in Custom Settings group g.
 - **Framing grid:** Custom Setting d8, with On (4×4), Off, 3×3, or 2×2 (centre cross).
 - **Histogram with level:** press DISP to reach the virtual horizon page. It appears about 1 second after power-on or wake, and "Apply settings to live view" must be on.
+- **Portrait UI:** "Portrait UI" in the Setup menu, off by default. For the rear monitor in photo mode; the viewfinder and HDMI keep the stock landscape layout. Turn it off before recording movies. Touch input is not rotated, so use the buttons when holding the camera upright.
 - **Status:** the last row of MY MENU shows the module status. `OK ...` means it is working (`正常 ...` in Chinese).
 
 ## Recovery
@@ -109,7 +111,7 @@ To restore the camera completely, download the Z 5 C 1.50 firmware from Nikon an
 | `src/` | Source for the card module and firmware hooks |
 | `tools/` | Audio converter |
 | `PLAN.md` | Completed and future work (Chinese) |
-| `docs/` | Development notes (Chinese) |
+| `docs/` | Development notes and the portrait UI write-up (Chinese) |
 
 The build scripts in `src/` depend on the author's development setup and are provided for reference and maintenance. Most users only need `patch.py`.
 

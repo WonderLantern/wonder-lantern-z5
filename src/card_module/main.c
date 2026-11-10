@@ -131,6 +131,12 @@
 #define ID_Z_ENTRY    0x2FF7u
 #define ID_3X3        0x2FF8u
 #define ID_CROSS      0x2FF9u
+#define SLOT_TITLE_V  238u
+#define SLOT_V_ENTRY  245u
+#define ID_V_ON       0x2FF2u
+#define ID_V_OFF      0x2FF3u
+#define ID_V_ENTRY    0x2FF4u
+#define VUI_SITE      0x104A673Cu      /* B.W on the firmware with portrait hooks */
 #define PLAIN_ROW     0x1000u          /* no value column, as the stock On/Off rows */
 #define OWN_INDEX     0u
 
@@ -194,6 +200,7 @@
 
 typedef struct {
     u32 magic;
+    u32 vui_fn;             /* portrait UI entry, +4: read by firmware stubs */
     u32 orig;               /* firmware release callback                     */
     u32 image;              /* heap image base (Thumb bit clear)             */
     u32 reqs;               /* play requests raised                          */
@@ -221,6 +228,27 @@ typedef struct {
     u32 title_slot;         /* text slot of the owned page's current title   */
     u32 own_hdr;            /* owned page: shutter-sound view                */
     u32 zebra_hdr;          /* owned page: photo-zebra view                  */
+    u32 vui;                /* portrait UI switch                            */
+    u32 vui_state, vui_pending;   /* last layout and a pending full clear    */
+    u32 vui_sub;            /* an i-menu setting page is showing             */
+    u32 vui_half, vui_half_ms;    /* synthetic half-press in progress        */
+    u32 vui_sw[13];         /* switch snapshot passed to the firmware        */
+    u32 vui_ok_open;        /* a page was opened from the i menu with OK     */
+    u32 vui_bd_top, vui_min, vui_max;   /* setting page: top edge, option rows */
+    int vui_hl_c, vui_hl_w, vui_idx;    /* setting page: highlight, cursor     */
+    u32 vui_test;           /* only used by -DVUI_TEST_IMG3                  */
+    u32 vui_bd_h;           /* setting page: backdrop height                 */
+    u32 vui_bar_min, vui_bar_max, vui_bar_dirty, vui_band_dirty;   /* setting page: bottom bar, row moved */
+    u32 vui_evf, vui_evf_ms;   /* the viewfinder is in use                   */
+    u32 vui_zoom, vui_fit;     /* magnified view; row scaled to the screen   */
+    u32 vui_drawing, vui_hist_on, vui_hist_ms, vui_hist_ori;   /* own portrait histogram */
+    int vui_hist_x, vui_hist_y;    /* where it was last drawn                   */
+    u32 vui_hm_saved, vui_hm[9];   /* stock histogram masks while hidden       */
+    u32 vui_d_tup[4], vui_d_n, vui_d_k, vui_d_i2, vui_d_i3, vui_d_t, vui_d_h, vui_d_hs[4];   /* -DVUI_DIAG only */
+    u32 vui_install;        /* 1 installed, >= 50 refused (why)              */
+    u32 vui_hdr;            /* owned page: portrait-UI view                  */
+    u16 hz_vui[L_HZ];
+    char en_vui[L_EN];
     u16 hz_zebra[L_HZ];
     char en_zebra[L_EN];
     u32 phase;              /* first-run progress, PH_DONE when finished     */
@@ -383,7 +411,7 @@ IMG_FN static void save_cfg(cm_t *c)
     FW(close_fn, FW_CLOSE)(f);
     zero_words(f, 16);
     data[0] = CFG_MAGIC;
-    data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26);
+    data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26) | (c->vui << 27);
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     c->stage = 10u;
     if ((u32)FW(open_fn, FW_OPEN)(f, FS_CREATE, 0) != FS_OPEN_OK) {
@@ -495,7 +523,7 @@ IMG_FN static u32 cfg_load(cm_t *c)
     u32 state = 1u;
     zero_words(f, 16);
     data[0] = 0; data[1] = 0;
-    c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u;
+    c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u; c->vui = 0u;
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) == FS_OPEN_OK) {
         FW(readat_fn, FW_READAT)(f, data, 0, 8u);
@@ -510,6 +538,7 @@ IMG_FN static u32 cfg_load(cm_t *c)
         if (vol >= 1u && vol <= 5u) c->vol = vol;
         if (((data[1] >> 24) & 3u) <= STYLE_CROSS) c->grid = (data[1] >> 24) & 3u;
         c->zebra = (data[1] >> 26) & 1u;
+        c->vui = (data[1] >> 27) & 1u;
     }
     return state;
 }
@@ -713,6 +742,64 @@ IMG_FN static u32 zebra_off_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     return zebra_set(0u);
 }
 
+/* SETUP row text: "portrait display: on/off". */
+IMG_FN static void vui_label(cm_t *c)
+{
+    u32 n = 0, i;
+    if (c->hans) {
+        u16 b[12];
+        const u16 *v = c->vui ? c->hz_on : c->hz_off;
+        for (i = 0; i < L_HZ && c->hz_vui[i]; i++) b[n++] = c->hz_vui[i];
+        for (i = 0; i < 2 && v[i]; i++) b[n++] = v[i];
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_V_ENTRY, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[28];
+        const char *v = c->vui ? c->en_on : c->en_off;
+        for (i = 0; i < L_EN && c->en_vui[i]; i++) b[n++] = c->en_vui[i];
+        for (i = 0; i < 4 && v[i]; i++) b[n++] = v[i];
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_V_ENTRY, 0u);
+    }
+}
+
+IMG_FN static u32 vui_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !c->vui_hdr) return 0;
+    c->title_slot = SLOT_TITLE_V;
+    ((volatile u32 *)PAGE0)[10] = c->vui_hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+    return 0;
+}
+
+IMG_FN static u32 vui_set(u32 on)
+{
+    cm_t *c = cm_get();
+    if (c) {
+        c->vui = on;
+        vui_label(c);
+        save_cfg(c);
+    }
+    return 0;
+}
+
+IMG_FN static u32 vui_on_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    return vui_set(1u);
+}
+
+IMG_FN static u32 vui_off_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    return vui_set(0u);
+}
+
+#include "vui_card.inc"
+
 /* Grid rows: choose the style, then let the stock "On" handler turn the grid on. */
 IMG_FN static u32 grid_pick(u32 style, u32 a0, u32 a1, u32 a2, u32 a3)
 {
@@ -773,6 +860,8 @@ static void init_strings(cm_t *c)
     copy_u16(c->hz[R_RELOAD], L_HZ, (const u16 *)u"重新载入");
     copy_u16(c->hz[R_ENTRY], L_HZ, (const u16 *)u"快门声音");
     copy_u16(c->hz_zebra, L_HZ, (const u16 *)u"照片高光显示：");
+    copy_u16(c->hz_vui, L_HZ, (const u16 *)u"竖拍显示：");
+    copy_str(c->en_vui, L_EN, "Portrait UI: ");
     copy_u16(c->hz_on, 2, (const u16 *)u"开");
     copy_u16(c->hz_off, 2, (const u16 *)u"关");
     copy_u16(c->hz_bad, 4, (const u16 *)u" !");
@@ -863,6 +952,35 @@ static u32 install_zebra_page(cm_t *c, u32 *title, u32 first_map)
     return 1u;
 }
 
+/* Portrait UI view of the owned page: two rows like the stock On/Off pages. */
+static u32 install_vui_page(cm_t *c, u32 *title, u32 first_map)
+{
+    const u32 *th = (const u32 *)TEMPLATE_HDR;
+    if (((const u32 *)LAYOUTS_2ROW)[0] != 2u) return 50u;
+    u32 *rows = (u32 *)z5_alloc(2u * ROW_SIZE, 0);
+    u32 *disp = (u32 *)z5_alloc(2u * 4u, 0);
+    u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
+    if (!rows || !disp || !hdr) return 51u;
+    u32 kind = c->hans ? F_UTF16 : F_ASCII;
+    copy_words(rows, (const u32 *)GRID_ROWS, ROW_WORDS);
+    copy_words(rows + ROW_WORDS, rows, ROW_WORDS);
+    rows[0] = SLOT_Z_ON;  rows[4] = PLAIN_ROW | kind; rows[6] = ID_V_ON;
+    rows[ROW_WORDS] = SLOT_Z_OFF;  rows[ROW_WORDS + 4u] = PLAIN_ROW | kind; rows[ROW_WORDS + 6u] = ID_V_OFF;
+    disp[0] = build_map(first_map, img_addr(c, vui_on_ok), BACK);
+    disp[1] = build_map(first_map, img_addr(c, vui_off_ok), BACK);
+    if (!disp[0] || !disp[1]) return 52u;
+    if (c->hans) {
+        FW(set_fn, UTF16_SET)((const u16 *)u"竖拍显示", SLOT_TITLE_V, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        FW(set_fn, ASCII_SET)("Portrait UI", SLOT_TITLE_V, 0u);
+    }
+    hdr[0] = th[0]; hdr[1] = LAYOUTS_2ROW; hdr[2] = (u32)title;
+    hdr[3] = (u32)rows; hdr[4] = (u32)disp; hdr[5] = (2u << 16) | 2u; hdr[6] = th[6];
+    c->vui_hdr = (u32)hdr;
+    return 1u;
+}
+
 /* Build the SETUP entry row and the owned page. Returns 1 or a refusal >= 10. */
 static u32 install_menu(cm_t *c)
 {
@@ -879,7 +997,8 @@ static u32 install_menu(cm_t *c)
     if (((const u32 *)th[1])[0] != 3u || layout4[0] != NROWS) return 18u;
 
     /* SETUP: 41 stock rows + row 42 (copy of row 41 with our slot, flags, id). */
-    u32 extra = c->fx ? 2u : 1u;               /* shutter sound, then photo zebra */
+    u32 vui_ok = c->fx && *(volatile u16 *)VUI_SITE != 0xE92Du;
+    u32 extra = c->fx ? (vui_ok ? 3u : 2u) : 1u;   /* shutter sound, photo zebra, portrait UI */
     u32 *rows = (u32 *)z5_alloc((STOCK_ROWS + extra) * ROW_SIZE, 0);
     u32 *disp = (u32 *)z5_alloc((STOCK_ROWS + extra) * 4u, 0);
     if (!rows || !disp) return 13u;
@@ -900,6 +1019,14 @@ static u32 install_menu(cm_t *c)
         z[6] = ID_Z_ENTRY;
         disp[STOCK_ROWS + 1u] = build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, zebra_entry_ok), STAY);
         if (!disp[STOCK_ROWS + 1u]) return 24u;
+        if (vui_ok) {
+            u32 *v = entry + 2u * ROW_WORDS;
+            copy_words(v, entry, ROW_WORDS);
+            v[0] = SLOT_V_ENTRY;
+            v[6] = ID_V_ENTRY;
+            disp[STOCK_ROWS + 2u] = build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, vui_entry_ok), STAY);
+            if (!disp[STOCK_ROWS + 2u]) return 25u;
+        }
     }
 
     /* Owned page: 4 rows shaped like SETUP row 41 (plain list row, value column
@@ -945,6 +1072,7 @@ static u32 install_menu(cm_t *c)
     c->own_hdr = (u32)ohdr;
     c->title_slot = TITLE_SLOT;
     if (c->fx) c->zebra_install = install_zebra_page(c, title, first_map);
+    if (vui_ok) c->vui_install = install_vui_page(c, title, first_map);
 
     /* Labels before anything can show them. */
     for (u32 k = 0; k <= R_TITLE; k++) set_label(c, k);
@@ -1072,6 +1200,7 @@ static void first_run(cm_t *c)
     c->phase = PH_MENU;
     c->fx = fx_hooks_present();
     c->install = install_menu(c);
+    if (c->vui_install == 1u) { vui_label(c); c->vui_fn = img_addr(c, vui_hook); }
     if (c->fx) {
         c->grid_tab = (u32)z5_alloc(GRID_MODES * GRID_REC, 0);
         if (c->grid_tab) {
@@ -1231,6 +1360,61 @@ int z5_main(z5_ctx *ctx)
     u32 pos = 0;
     u32 hans = FW(read_fn, SETTING_READ)(LANG_KEY) != LANG_ENGLISH;
     if (c->dual && !c->err && c->install == 1u && !c->cfg_state) {
+#ifdef VUI_DIAG         /* oldest first: application.ui.target, then the entries seen in the quality-label area */
+        {
+            /* Read-only search for the stock histogram: 256 words, all below 2^20, most of them non-zero, going up
+               and down (a lookup table only rises). Only around the histogram state block at 0xC2028094 (the Z6II
+               counterpart keeps its 256 counts inside that block). Shows the two best windows as
+               (address - 0xC2026000) / 4 and their sums. */
+            const volatile u32 *m = (const volatile u32 *)0xC2026000u;
+            u32 i, nz = 0u, big = 0u, dec = 0u, sum = 0u, prev = 0u;
+            u32 a1 = 0u, n1 = 0u, s1 = 0u, a2 = 0u, n2 = 0u, s2 = 0u;
+            for (i = 0u; i < 0x1800u; i++) {
+                u32 v = m[i];
+                if (v) nz++;
+                if (v >= 0x100000u) big++; else sum += v;
+                if (i && v < prev) dec++;
+                if (i >= 256u) {
+                    u32 o = m[i - 256u], op = m[i - 257u];
+                    if (o) nz--;
+                    if (o >= 0x100000u) big--; else sum -= o;
+                    if (o < op) dec--;
+                }
+                prev = v;
+                if (i >= 256u && !big && dec >= 16u && sum >= 4096u && nz >= 64u) {
+                    u32 at = i - 255u;
+                    if (nz > n1) {
+                        if (at - a1 >= 256u && a1 - at >= 256u) { a2 = a1; n2 = n1; s2 = s1; }
+                        a1 = at; n1 = nz; s1 = sum;
+                    } else if (nz > n2 && at - a1 >= 256u && a1 - at >= 256u) {
+                        a2 = at; n2 = nz; s2 = sum;
+                    }
+                }
+            }
+            pos = z5_puts(line, TEXT_CHARS, pos, "A");
+            pos = z5_putdec(line, TEXT_CHARS, pos, a1);
+            pos = z5_puts(line, TEXT_CHARS, pos, " S");
+            pos = z5_putdec(line, TEXT_CHARS, pos, s1);
+            pos = z5_puts(line, TEXT_CHARS, pos, " B");
+            pos = z5_putdec(line, TEXT_CHARS, pos, a2);
+            pos = z5_puts(line, TEXT_CHARS, pos, " S");
+            pos = z5_putdec(line, TEXT_CHARS, pos, s2);
+            z5_row_set_text(ctx->element, line, pos * 2);
+            z5_row_draw(ctx->element, ctx->r1, ctx->r2, ctx->r3);
+            return 0;
+        }
+#endif
+#ifdef CM_ORIENT_TEST   /* read-only: stock orientation getter and the two words it reads */
+        pos = z5_puts(line, TEXT_CHARS, pos, "ORI ");
+        pos = z5_putdec(line, TEXT_CHARS, pos, FW(read_fn, 0x101EA71Eu)(0));
+        pos = z5_puts(line, TEXT_CHARS, pos, " S");
+        pos = z5_putdec(line, TEXT_CHARS, pos, *(volatile u32 *)(0xC1D4126Cu + 0x1A4u));
+        pos = z5_puts(line, TEXT_CHARS, pos, " M");
+        pos = z5_putdec(line, TEXT_CHARS, pos, *(volatile u32 *)(0xC1807DDCu + 0xCu));
+        z5_row_set_text(ctx->element, line, pos * 2);
+        z5_row_draw(ctx->element, ctx->r1, ctx->r2, ctx->r3);
+        return 0;
+#endif
         if (hans) {
             pos = puts16(line, TEXT_CHARS, pos, (const u16 *)u"正常 类型");
         } else {

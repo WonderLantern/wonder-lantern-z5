@@ -3,8 +3,8 @@
  "firmware": "C 1.50",
  "stock_package_sha256": "efc0ce70dcafdd96c64e95d8d50f6b7f0509fc0c2840b28d12b6f9e4877ee776",
  "stock_main_sha256": "1d9742a951ea8a8ebe695fa9bb1f29a3be73e16dfe4a8372d997e903bbc58e98",
- "output_sha256": "e7e4ec5477a301f6128d30352429f2e6d31eaaa22f13255ceebf531215e24d61",
- "card_module_sha256": "7a84034fe8812bbca11950ec6f4b45fe80068e3469bfb1f61d88d0dbc109693a",
+ "output_sha256": "f8ffd4ad51bf045c523cc22f3bdc17d845fe46e8ae06659f2480dd70a72a7643",
+ "card_module_sha256": "449534c49d441305fb4ceae91db5e1332177cb304a9f8a3b22d96eb74b22a270",
  "z5mod": {
   "commit": "7321c663d4f8abf69c0f88b6b1cb6706c3e101f2",
   "files": {
@@ -32,19 +32,25 @@
    "name": "zebra_a_hook",
    "offset": "0x1582b2",
    "expected": "b9f1000f13d0032c11d106e0",
-   "replacement": "dff804f000bfe106121200bf"
+   "replacement": "dff804f000bfe906121200bf"
   },
   {
    "name": "zebra_b_hook",
    "offset": "0x1583ea",
    "expected": "b9f1000f13d0032e11d106e0",
-   "replacement": "dff804f000bf2107121200bf"
+   "replacement": "dff804f000bf2907121200bf"
+  },
+  {
+   "name": "vui_key",
+   "offset": "0x2f239e",
+   "expected": "01467748",
+   "replacement": "a7f2adbf"
   },
   {
    "name": "dual_widget_gate",
    "offset": "0x3282a4",
    "expected": "fc4c90f88e01022803d1",
-   "replacement": "dff800f0a106121200bf"
+   "replacement": "dff800f0a506121200bf"
   },
   {
    "name": "draw_literal_4",
@@ -56,7 +62,13 @@
    "name": "grid_hook",
    "offset": "0x368dca",
    "expected": "fe4800eb461778898146",
-   "replacement": "dff804f000bf61071212"
+   "replacement": "dff804f000bf69071212"
+  },
+  {
+   "name": "vui_setter",
+   "offset": "0x3f1418",
+   "expected": "2de9fc41",
+   "replacement": "a8f164bf"
   },
   {
    "name": "dual_sampling_gate",
@@ -65,10 +77,142 @@
    "replacement": "dff800f06906121200bf00bf"
   },
   {
+   "name": "vui_rect",
+   "offset": "0x485edc",
+   "expected": "2de9f041",
+   "replacement": "14f1f6b9"
+  },
+  {
+   "name": "vui_path_grad",
+   "offset": "0x486064",
+   "expected": "2de9ff4f",
+   "replacement": "14f14eb9"
+  },
+  {
+   "name": "vui_frame",
+   "offset": "0x48629c",
+   "expected": "2de9f04f",
+   "replacement": "14f11eb8"
+  },
+  {
+   "name": "vui_clear",
+   "offset": "0x48641e",
+   "expected": "f0b589b0",
+   "replacement": "13f159bf"
+  },
+  {
+   "name": "vui_path_ellipse",
+   "offset": "0x4865be",
+   "expected": "2de9f04f",
+   "replacement": "13f1a5be"
+  },
+  {
+   "name": "vui_image",
+   "offset": "0x48673c",
+   "expected": "2de9f04f",
+   "replacement": "13f1c2bd"
+  },
+  {
+   "name": "vui_image2",
+   "offset": "0x487292",
+   "expected": "2de9f04f",
+   "replacement": "13f12bb8"
+  },
+  {
+   "name": "vui_image3",
+   "offset": "0x487ac2",
+   "expected": "2de9f04f",
+   "replacement": "12f117bc"
+  },
+  {
+   "name": "vui_path_line",
+   "offset": "0x487f8e",
+   "expected": "2de9f04f",
+   "replacement": "12f1c1b9"
+  },
+  {
    "name": "draw_literal_0",
    "offset": "0x492224",
    "expected": "591f4b10",
    "replacement": "49021212"
+  },
+  {
+   "name": "vui_text",
+   "offset": "0x54a5ee",
+   "expected": "d0f7a4fb",
+   "replacement": "4ff095fe"
+  },
+  {
+   "name": "vui_veneer_image",
+   "offset": "0x59a2c4",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0f9071212"
+  },
+  {
+   "name": "vui_veneer_rect",
+   "offset": "0x59a2cc",
+   "expected": "0000000000000000",
+   "replacement": "dff800f01d081212"
+  },
+  {
+   "name": "vui_veneer_clear",
+   "offset": "0x59a2d4",
+   "expected": "0000000000000000",
+   "replacement": "dff800f039081212"
+  },
+  {
+   "name": "vui_veneer_frame",
+   "offset": "0x59a2dc",
+   "expected": "0000000000000000",
+   "replacement": "dff800f055081212"
+  },
+  {
+   "name": "vui_veneer_setter",
+   "offset": "0x59a2e4",
+   "expected": "0000000000000000",
+   "replacement": "dff800f071081212"
+  },
+  {
+   "name": "vui_veneer_image2",
+   "offset": "0x59a2ec",
+   "expected": "0000000000000000",
+   "replacement": "dff800f08d081212"
+  },
+  {
+   "name": "vui_veneer_image3",
+   "offset": "0x59a2f4",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0b1081212"
+  },
+  {
+   "name": "vui_veneer_key",
+   "offset": "0x59a2fc",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0d5081212"
+  },
+  {
+   "name": "vui_veneer_path_grad",
+   "offset": "0x59a304",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0f5081212"
+  },
+  {
+   "name": "vui_veneer_path_ellipse",
+   "offset": "0x59a30c",
+   "expected": "0000000000000000",
+   "replacement": "dff800f011091212"
+  },
+  {
+   "name": "vui_veneer_path_line",
+   "offset": "0x59a314",
+   "expected": "0000000000000000",
+   "replacement": "dff800f02d091212"
+  },
+  {
+   "name": "vui_veneer_text",
+   "offset": "0x59a31c",
+   "expected": "0000000000000000",
+   "replacement": "dff800f049091212"
   }
  ],
  "appends": [
@@ -80,12 +224,17 @@
   {
    "name": "dual_gates",
    "align": 8,
-   "data": "10b5002490f88e01022809d003280ad102b40649096811f0080f02bc03d002200228dff80cf00228dff808f0186182c1c9e14210efe142100a4c90f88e01022809d003280ad102b40749096811f0080f02bc03d002200228dff810f00228dff810f0000004857410186182c1af823410b7823410"
+   "data": "10b5002490f88e0102280bd003280cd102b40749096841ea116111f0080f02bc03d002200228dff80cf00228dff808f0186182c1c9e14210efe142100b4c90f88e0102280bd003280cd102b40849096841ea116111f0080f02bc03d002200228dff810f00228dff810f0000004857410186182c1af823410b7823410"
   },
   {
    "name": "grid_zebra",
    "align": 8,
    "data": "b9f1000f0dd106b409490968094a914205d140f2a1210d4206bc06d101e006bc03e0032c01d1dff810f0dff810f0000034818fc15242455acd821710e1821710b9f1000f0dd106b409490968094a914205d140f2a1210d4206bc06d101e006bc03e0032e01d1dff810f0dff810f0000034818fc15242455a058417101984171006b40a4908684a68d243904205d1084a904202d3074a904200d3074806bc00eb461778898146dff814f0000038818fc1000080c1000070c810ad7410d58d3810"
+  },
+  {
+   "name": "vertical_ui",
+   "align": 8,
+   "data": "0f4bd3f800c05a68d243944516d10d4a944513d30c4b9c4510d2dcf80cc094450cd39c450ad2dcf80030084a934205d1dcf804c0bcf1000f00d060477047000020818fc1000080c1000070c8434d4e552de90f5000206946fff7d2ffbde80f50002808bf70472de9f04fdff804f0000041674a102de90f5001206946fff7c0ffbde80f502de9f041dff800f0e15e4a102de90f5002206946fff7b2ffbde80f50f0b589b0dff800f023644a102de90f5003206946fff7a4ffbde80f502de9f04fdff800f0a1624a102de90f5004206946fff796ffbde80f502de9fc41dff800f01d1441102de90f5006206946fff788ffbde80f50002808bf70472de9f04fdff804f0000097724a102de90f5007206946fff776ffbde80f50002808bf70472de9f04fdff804f00000c77a4a102de90f5008206946fff764ffbde80f5001460148dff804f0dc8982c1a32331102de90f5009206946fff754ffbde80f502de9ff4fdff800f069604a102de90f500a206946fff746ffbde80f502de9f04fdff800f0c3654a102de90f500b206946fff738ffbde80f502de9f04fdff800f0937f4a102de90f5005206946fff72affbde80f50dff800f03bad5310"
   }
  ],
  "card_sounds": {
