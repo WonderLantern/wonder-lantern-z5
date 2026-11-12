@@ -49,4 +49,4 @@ MENU.DAT 必须事先放在卡上并保留。相机自己新建的文件无法�
 
 如出现死机，电源开关和拔卡可能没有反应：先取下电池，再拔卡或在电脑上删除卡内 Z5APP.BIN，然后重新装电池开机。彻底恢复时，请从尼康官网下载 Z 5 C 1.50 固件并按官方步骤重新更新。
 
-测试范围和限制以项目 README 为准。项目地址：https://github.com/honokaoshi83-max/z5-extensions
+测试范围和限制以项目 README 为准。项目地址：https://github.com/WonderLantern/wonder-lantern-z5

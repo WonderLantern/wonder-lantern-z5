@@ -25,7 +25,7 @@
 
 ## Windows 免安装工具
 
-从 [Releases](https://github.com/honokaoshi83-max/z5-extensions/releases) 下载 Windows 程序，选择自备的原厂固件即可生成文件。结果目录内含中文使用说明和快门声音转换工具。首次生成需联网下载并校验解码器。使用与恢复步骤仍以本文为准；生成的固件请勿分发。
+从 [Releases](https://github.com/WonderLantern/wonder-lantern-z5/releases) 下载 Windows 程序，选择自备的原厂固件即可生成文件。结果目录内含中文使用说明和快门声音转换工具。首次生成需联网下载并校验解码器。使用与恢复步骤仍以本文为准；生成的固件请勿分发。
 
 ## 使用
 
@@ -128,7 +128,7 @@ python tools/make_snd_wav.py 你的声音.wav --out 转换结果
 | [z5mod](https://github.com/youyli03/z5mod) | 直接使用：卡上模块加载器、SDK、固件解码器 |
 | [wonder-lantern-z30](https://github.com/WonderLantern/wonder-lantern-z30) | 参考做法：直方图水平仪同框、网格参数、照片斑马纹，以及“用户自备固件、本地生成”的发布方式。未复制其代码，Z 5 上的地址和钩子是另行定位和编写的 |
 | [WonderLantern-z6](https://github.com/WonderLantern/WonderLantern-z6) | 参考功能设计：自定义快门声音、自定义参考线 |
-| [z7-qemu](https://github.com/WonderLantern/z7-qemu)（作者 [R3tr0ooo](https://github.com/R3tr0ooo)）、[z6-qemu](https://github.com/WonderLantern/z6-qemu) | 我们的模拟器 [z5-qemu](https://github.com/honokaoshi83-max/z5-qemu) 派生自这两个项目，用于验证菜单和按键 |
+| [z7-qemu](https://github.com/WonderLantern/z7-qemu)（作者 [R3tr0ooo](https://github.com/R3tr0ooo)）、[z6-qemu](https://github.com/WonderLantern/z6-qemu) | 我们的模拟器 [z5-qemu](https://github.com/WonderLantern/z5-qemu) 派生自这两个项目，用于验证菜单和按键 |
 | [z7ii-qemu](https://github.com/nightglasses/z7ii-qemu) | 模拟器取景和对焦路线的参考资料 |
 
 默认测试音效由维护者提供，说明见 [NOTICE.md](NOTICE.md)。

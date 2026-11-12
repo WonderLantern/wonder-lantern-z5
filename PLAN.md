@@ -63,7 +63,7 @@
 
 ## 长期或依赖模拟器
 
-这些功能需要原生取景和对焦的模拟，见 [z5-qemu](https://github.com/honokaoshi83-max/z5-qemu)。
+这些功能需要原生取景和对焦的模拟，见 [z5-qemu](https://github.com/WonderLantern/z5-qemu)。
 
 | 功能 | 判断 |
 | --- | --- |

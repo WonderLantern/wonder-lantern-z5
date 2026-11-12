@@ -50,4 +50,4 @@
 
 ## 模拟器
 
-开发中使用了独立的模拟器项目 [z5-qemu](https://github.com/honokaoshi83-max/z5-qemu)，用来验证菜单和按键。它的取景不是原生运行，所以网格线条和高光条纹只能实机确认。
+开发中使用了独立的模拟器项目 [z5-qemu](https://github.com/WonderLantern/z5-qemu)，用来验证菜单和按键。它的取景不是原生运行，所以网格线条和高光条纹只能实机确认。
