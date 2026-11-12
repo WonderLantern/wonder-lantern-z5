@@ -19,7 +19,7 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 
 The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
 
-Portrait UI is temporarily excluded from the current release. Its [implementation and porting notes](docs/PORTRAIT_UI.md) remain available (in Chinese).
+Portrait UI is still in development and camera testing, and is not part of the current release. What it does, how it works, how to reproduce the early version and what is left are in the [portrait UI notes](docs/PORTRAIT_UI.md) (in Chinese, updated 2026-11-12).
 
 The features live in a module on the memory card. The firmware gains only small entry points and checks. Without the module, the grid, highlight display and histogram-with-level paths behave as stock. Changes are limited to the MAIN module and do not touch the boot area.
 
