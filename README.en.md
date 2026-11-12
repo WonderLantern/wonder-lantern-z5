@@ -25,6 +25,10 @@ The features live in a module on the memory card. The firmware gains only small 
 
 **Language:** the menus were tested on camera in Simplified Chinese. English labels are built in and appear when the camera language is English, but they have not been tested on a camera.
 
+## Windows tool (no installation)
+
+Download `Z5Extensions.exe` from [Releases](https://github.com/WonderLantern/wonder-lantern-z5/releases), run it, and choose the official firmware you downloaded yourself. It builds the files on your computer, and the output folder includes usage notes (in Chinese) and the shutter sound converter. The first run needs an internet connection to download and verify the decoder. The program is unsigned, so Windows may show a security warning. The usage and recovery steps below still apply. Do not redistribute the generated firmware.
+
 ## Usage
 
 ### 1. Prepare
