@@ -19,7 +19,7 @@ Running `patch.py` downloads z5mod's decoder files, including its XOR mask, into
 
 ## Test sounds
 
-`card/SHUTTER/1.WAV` to `3.WAV` are default test sounds provided by the maintainer, who states that they are open-source audio with no copyright restrictions. `2.WAV` had its leading silence trimmed.
+`card/SHUTTER/1.WAV` to `5.WAV` are default test sounds provided by the maintainer, who states that they are open-source audio with no copyright restrictions. `2.WAV` had its leading silence trimmed.
 
 ## z5mod licence
 

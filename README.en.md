@@ -57,7 +57,7 @@ The first run needs an internet connection: the tool downloads a fixed version o
 output/EG165050.BIN              firmware update
 output/card/Z5APP.BIN            card module
 output/card/SHUTTER/MENU.DAT     settings file, must stay on the card
-output/card/SHUTTER/1-3.WAV      default test sounds
+output/card/SHUTTER/1-5.WAV      default test sounds (five)
 output/card/Z5LOG/DIAG01-20.BIN  20 empty test-record files
 ```
 
@@ -72,7 +72,7 @@ The SHA-256 of `EG165050.BIN` should be `6389847f5ae1e65fb8b06569bde48252486ec18
 
 ### 4. Memory card
 
-Copy the contents of `output/card/` to the root of the card. Three test sounds are included, and you can replace them with your own:
+Copy the contents of `output/card/` to the root of the card. Five test sounds are included, and you can replace them with your own:
 
 ```text
 A:\Z5APP.BIN

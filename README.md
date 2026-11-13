@@ -55,7 +55,7 @@ python patch.py --source Z_5_0150.bin --output output
 output/EG165050.BIN              刷机文件
 output/card/Z5APP.BIN            卡上模块
 output/card/SHUTTER/MENU.DAT     设置文件，必须保留
-output/card/SHUTTER/1～3.WAV      默认测试音效
+output/card/SHUTTER/1～5.WAV      默认测试音效（5 个）
 output/card/Z5LOG/DIAG01～20.BIN  20 个空的测试记录文件
 ```
 
@@ -70,7 +70,7 @@ output/card/Z5LOG/DIAG01～20.BIN  20 个空的测试记录文件
 
 ### 4. 存储卡
 
-把 `output/card/` 里的内容复制到卡根目录，自带 3 个测试音效，也可以换成你自己的：
+把 `output/card/` 里的内容复制到卡根目录，自带 5 个测试音效，也可以换成你自己的：
 
 ```text
 A:\Z5APP.BIN
@@ -83,7 +83,7 @@ A:\Z5LOG\DIAG01.BIN ~ DIAG20.BIN
 
 ### 5. 音效格式
 
-仓库自带 3 个测试音效。自定义时文件名必须是 `1.WAV` 到 `5.WAV`，不需要 5 个都有。标准 44 字节文件头的 WAV，未压缩 PCM，48 kHz，16 位，立体声，至少 2000 字节，最多读取约 1.28 秒。声音要从文件开头就响，开头的静音会让快门声听起来变晚。
+仓库自带 5 个测试音效。自定义时文件名必须是 `1.WAV` 到 `5.WAV`，不需要 5 个都有。标准 44 字节文件头的 WAV，未压缩 PCM，48 kHz，16 位，立体声，至少 2000 字节，最多读取约 1.28 秒。声音要从文件开头就响，开头的静音会让快门声听起来变晚。
 
 转换工具（需要 Python 3）：
 

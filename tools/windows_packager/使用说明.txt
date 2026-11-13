@@ -12,7 +12,7 @@ Z5 Extensions 使用说明
 EG165050.BIN                 相机固件更新文件（请勿分发）
 card\Z5APP.BIN               功能模块
 card\SHUTTER\MENU.DAT        设置文件，请保留
-card\SHUTTER\1.WAV 至 3.WAV  随附的测试快门声音
+card\SHUTTER\1.WAV 至 5.WAV  随附的 5 个测试快门声音
 card\Z5LOG\DIAG01～20.BIN     20 个空的测试记录文件，请保留
 
 二、更新固件（只需更新一次，由您自己在相机上操作）
@@ -31,6 +31,8 @@ A:\SHUTTER\MENU.DAT
 A:\SHUTTER\1.WAV
 A:\SHUTTER\2.WAV
 A:\SHUTTER\3.WAV
+A:\SHUTTER\4.WAV
+A:\SHUTTER\5.WAV
 A:\Z5LOG\DIAG01.BIN 至 DIAG20.BIN
 
 MENU.DAT 和 Z5LOG 里的 20 个文件必须事先放在卡上并保留。相机自己新建的文件无法可靠保存。

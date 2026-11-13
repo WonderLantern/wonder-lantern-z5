@@ -8,7 +8,9 @@ import zipfile
 from pathlib import Path
 
 REQUIRED = {'patch_data/patches.json', 'card/Z5APP.BIN',
-            'card/SHUTTER/1.WAV', 'card/SHUTTER/2.WAV', 'card/SHUTTER/3.WAV'}
+            'card/SHUTTER/1.WAV', 'card/SHUTTER/2.WAV', 'card/SHUTTER/3.WAV',
+            'card/SHUTTER/4.WAV', 'card/SHUTTER/5.WAV'}
+SOUNDS = {'1.WAV', '2.WAV', '3.WAV', '4.WAV', '5.WAV'}
 STOCK_SHA256 = 'efc0ce70dcafdd96c64e95d8d50f6b7f0509fc0c2840b28d12b6f9e4877ee776'
 
 
@@ -42,9 +44,9 @@ def import_update(archive, versions):
         if hashlib.sha256(content['card/Z5APP.BIN']).hexdigest() != data.get('card_module_sha256'):
             raise ValueError('模块与补丁清单不一致')
         for name, digest in data.get('card_sounds', {}).items():
-            if name not in {'1.WAV', '2.WAV', '3.WAV'} or hashlib.sha256(content['card/SHUTTER/' + name]).hexdigest() != digest:
+            if name not in SOUNDS or hashlib.sha256(content['card/SHUTTER/' + name]).hexdigest() != digest:
                 raise ValueError('音效与补丁清单不一致')
-        if set(data.get('card_sounds', {})) != {'1.WAV', '2.WAV', '3.WAV'}:
+        if set(data.get('card_sounds', {})) != SOUNDS:
             raise ValueError('音效清单不完整')
     versions.mkdir(parents=True, exist_ok=True)
     target = versions / version

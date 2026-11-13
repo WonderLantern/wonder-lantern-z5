@@ -45,7 +45,7 @@ class UpdateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             card = b'card module'
-            sounds = {f'{i}.WAV': bytes([i]) for i in range(1, 4)}
+            sounds = {f'{i}.WAV': bytes([i]) for i in range(1, 6)}
             data = {'camera': 'Nikon Z 5', 'firmware': 'C 1.50',
                     'stock_package_sha256': STOCK_SHA256,
                     'card_module_sha256': hashlib.sha256(card).hexdigest(),

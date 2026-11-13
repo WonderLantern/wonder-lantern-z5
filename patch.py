@@ -152,7 +152,7 @@ def main():
     print('Built %s' % (args.output / 'EG165050.BIN'))
     print('  SHA-256 %s' % data['output_sha256'])
     print('Card files are in %s' % (args.output / 'card'))
-    print('Three test sounds and 20 empty test-record files (Z5LOG) are included. See README.md before flashing.')
+    print('Five test sounds and 20 empty test-record files (Z5LOG) are included. See README.md before flashing.')
 
 
 if __name__ == '__main__':
