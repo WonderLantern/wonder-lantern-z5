@@ -21,11 +21,12 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Focal length | Shown for every CPU lens (stock: power-zoom lenses only); can be turned off | Yes |
 | Battery percent | Remaining charge shown in the battery icon; can be turned off | Yes |
 | Extensions menu | All switches in one row, "Extensions", at the end of the Setup menu | Yes |
+| DISP2 Custom (L18) | Independent level, histogram and detailed-info switches on the existing detailed shooting page; keeps simple-page basics and battery when details are off | Build/host checks passed; full combination awaits camera verification |
 | Test records | One-press record of a problem (`Z5LOG` folder) for feedback | Yes |
 
 The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
 
-**This release is the portrait UI test version** (firmware group 108 + card module group 119). Known issue: after waking from standby the battery and focal length only appear after one more half-press. In portrait, the i-menu sub pages, third-level pages and touch were **tuned only for the author's own 12 custom i-menu items** (Picture Control, ISO, flash mode, silent photography, HDR, AF-area mode, white balance, Active D-Lighting, metering, image area, vibration reduction, focus mode); other items may or may not work. The item list and the full development log are in the [portrait UI notes](docs/PORTRAIT_UI.md) (in Chinese, updated 2026-11-13). Please save a test record when something goes wrong.
+**This fork ships the L18 custom DISP test module**, ported onto the group-119 portrait module and the unchanged group-108 firmware. The exact combined build has not been verified on a camera. See the [rendering and handoff notes](docs/CUSTOM_DISP_HANDOFF.md) and [module build instructions](docs/CARD_MODULE_BUILD.md) (Chinese). Known issue: after waking from standby the battery and focal length only appear after one more half-press. In portrait, the i-menu sub pages, third-level pages and touch were **tuned only for the author's own 12 custom i-menu items** (Picture Control, ISO, flash mode, silent photography, HDR, AF-area mode, white balance, Active D-Lighting, metering, image area, vibration reduction, focus mode); other items may or may not work. The item list and the full development log are in the [portrait UI notes](docs/PORTRAIT_UI.md) (in Chinese, updated 2026-11-13). Please save a test record when something goes wrong.
 
 The features live in a module on the memory card. The firmware gains only small entry points and checks. Without the module, the grid, highlight display and histogram-with-level paths behave as stock. Changes are limited to the MAIN module and do not touch the boot area.
 
@@ -33,7 +34,7 @@ The features live in a module on the memory card. The firmware gains only small 
 
 ## Windows tool (no installation)
 
-Download `Z5Extensions.exe` from [Releases](https://github.com/WonderLantern/wonder-lantern-z5/releases), run it, and choose the official firmware you downloaded yourself. It builds the files on your computer, and the output folder includes usage notes (in Chinese) and the shutter sound converter. The first run needs an internet connection to download and verify the decoder. The program is unsigned, so Windows may show a security warning. The usage and recovery steps below still apply. Do not redistribute the generated firmware.
+Upstream Windows executables do not automatically include this fork's L18 module. Use this checkout's `patch.py`, import a data package made from this fork, or rebuild the executable; see the [build notes](docs/CARD_MODULE_BUILD.md). The original tool is available from [Releases](https://github.com/WonderLantern/wonder-lantern-z5/releases). Run it and choose the official firmware you downloaded yourself. It builds the files on your computer, and the output folder includes usage notes (in Chinese) and the shutter sound converter. The first run needs an internet connection to download and verify the decoder. The program is unsigned, so Windows may show a security warning. The usage and recovery steps below still apply. Do not redistribute the generated firmware.
 
 ## Usage
 
@@ -51,7 +52,7 @@ Download this repository and run this in its folder:
 python patch.py --source Z_5_0150.bin --output output
 ```
 
-The first run needs an internet connection: the tool downloads a fixed version of the decoder files from [z5mod](https://github.com/youyli03/z5mod) and checks their hashes. Nothing is written unless the result matches the tested build byte for byte. Output:
+The first run needs an internet connection: the tool downloads a fixed version of the decoder files from [z5mod](https://github.com/youyli03/z5mod) and checks their hashes. Nothing is written unless the result matches the release manifest byte for byte. Output:
 
 ```text
 output/EG165050.BIN              firmware update
@@ -107,6 +108,7 @@ The last row of the Setup menu, "Extensions" (扩展功能 in Chinese), holds:
 | Portrait touch | Touch in portrait; when off, touches in portrait are ignored, landscape is unaffected |
 | Focal length | Focal length for every CPU lens |
 | Battery % | Charge in percent inside the battery icon, red at 20 % and below |
+| DISP2 Custom | Existing detailed page: master, level, histogram and detailed-info switches; all default on |
 | Save log | Saves a test record; the row shows the file number ("01"), or "full" after 20 |
 
 - **Framing grid:** Custom Setting d8, with On (4×4), Off, 3×3, or 2×2 (centre cross).
@@ -137,9 +139,10 @@ To restore the camera completely, download the Z 5 C 1.50 firmware from Nikon an
 | `src/` | Source for the card module and firmware hooks |
 | `tools/` | Audio converter |
 | `PLAN.md` | Completed and future work (Chinese) |
-| `docs/` | Development notes (Chinese) |
+| `docs/` | Development notes, custom DISP handoff and module build instructions (Chinese) |
+| `tests/card_module/` | Host tests for visibility, settings, refresh intervals and the shared histogram raster |
 
-The build scripts in `src/` depend on the author's development setup and are provided for reference and maintenance. Most users only need `patch.py`.
+The [module build instructions](docs/CARD_MODULE_BUILD.md) describe the pinned SDK and private MAIN inputs. Most users only need `patch.py` or the prebuilt module.
 
 ## Credits and licence
 

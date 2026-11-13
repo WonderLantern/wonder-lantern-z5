@@ -9,5 +9,10 @@ __pycache__/
 *.pyc
 *.WAV
 *.wav
-!card/SHUTTER/*.WAV
+!card/SHUTTER/[1-5].WAV
 MENU.DAT
+
+# Local research, generated build products and host metadata
+/experiments/
+/build/
+.DS_Store

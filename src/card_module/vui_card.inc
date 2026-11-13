@@ -854,8 +854,8 @@ IMG_FN static void vui_diag(cm_t *c, u32 kind, u32 *r, u32 app, u32 ui)
 }
 #endif
 
-/* Own portrait histogram. The stock one is not drawn through OpenVG (camera readout, group 50), so it cannot be
-   turned; it is hidden in portrait and redrawn here from the stock counts.
+/* Own LCD histogram: the detailed page in landscape/portrait, plus the original portrait pages.
+   The stock histogram is not OpenVG (camera readout, group 50); draw its counts with rectangle primitives.
    0x1034B914: 256 u32 counts copied from 0xC202A55C to 0xC2028DE8, display peak stored at 0xC2028094 + 0x34. */
 #define VUI_HIST_BINS  0xC2028DE8u
 #define VUI_HIST_PEAK  0xC20280C8u
@@ -865,7 +865,10 @@ IMG_FN static void vui_diag(cm_t *c, u32 kind, u32 *r, u32 app, u32 ui)
 #define VUI_CLEAR_FN   0x104A641Eu
 #define VUI_HX 236                     /* portrait box: 64 bars of 3 pixels */
 #define VUI_HY 330
-#define VUI_HX3 144                    /* on the level page: under the level, centred (group 97; landscape size, group 101) */
+#define VUI_HLX 476                    /* landscape, top-down coordinates, native histogram area */
+#define VUI_HLY 278
+#define VUI_HIST_INTERVAL 80u
+#define VUI_HX3 144                    /* on detailed/level pages: under the level, centred (group 97; landscape size, group 101) */
 #ifndef VUI_HY3
 #define VUI_HY3 480
 #endif
@@ -888,10 +891,16 @@ IMG_FN static u32 vui_udiv(u32 n, u32 d)       /* no libgcc in the module */
     return q;
 }
 
+IMG_FN static void vui_hist_rect(u32 ori, s32_v px, s32_v py, s32_v w, s32_v h, s32_v *o)
+{
+    if (ori) { vui_panel_rect(ori, px, py, w, h, o); return; }
+    o[0] = px; o[1] = 480 - py - h; o[2] = w; o[3] = h;
+}
+
 IMG_FN static void vui_prim(cm_t *c, u32 fn, u32 ori, s32_v px, s32_v py, s32_v w, s32_v h, u32 color)
 {
     s32_v d[7];
-    vui_panel_rect(ori, px, py, w, h, d);
+    vui_hist_rect(ori, px, py, w, h, d);
     d[4] = (s32_v)color; d[5] = 0; d[6] = 0;
     c->vui_drawing = 1u;                       /* our own calls pass the hooks untouched */
     FW(read_fn, fn)((u32)d);
@@ -903,26 +912,28 @@ IMG_FN static void vui_hist(cm_t *c, u32 kind, u32 ori, u32 active, u32 ui)
     volatile u32 *mask = (volatile u32 *)VUI_HIST_MASKS;
     u32 i, ms, peak, page = *(volatile u8 *)VUI_DISP_PAGE, want;
     s32_v hx, hy;
-    if (active && !c->vui_hm_saved) {
+    if (active && ori && !c->vui_hm_saved) {
         /* Bit 3 of the first mask is what the histogram-on-level-page gate (firmware, group 28 on) tests before
            sampling on DISP page 3. Keeping only that bit keeps the counts fresh there. */
         for (i = 0; i < 9u; i++) { c->vui_hm[i] = mask[i]; mask[i] = 0u; }
         if (c->vui_hm[0] & 8u) mask[0] = 0x08000000u;   /* bit 27: the gate only (firmware group 54) */
         c->vui_hm_saved = 1u;
-    } else if (!active && c->vui_hm_saved) {
+    } else if ((!active || !ori) && c->vui_hm_saved) {
         for (i = 0; i < 9u; i++) mask[i] = c->vui_hm[i];
         c->vui_hm_saved = 0u;
     }
     if (kind != VUI_K_CLEAR) return;           /* drawn alongside the page's periodic clears */
 #ifdef VUI_TEST_HIST
-    want = active && ui == 0u && !c->vui_strip && (page == 2u || page == 3u);
+    want = active && ui == 0u && !c->vui_strip && (page == 0u || (ori && (page == 2u || page == 3u)));
 #else
-    want = active && ui == 0u && !c->vui_strip && (page == 2u || (page == 3u && c->vui_hm_saved && (c->vui_hm[0] & 8u)));
+    want = active && ui == 0u && !c->vui_strip && (page == 0u || (ori &&
+           (page == 2u || (page == 3u && c->vui_hm_saved && (c->vui_hm[0] & 8u)))));
 #endif
+    if (page == 0u && (c->custom_flags & 5u) != 5u) want = 0u;
     if (c->vui_zoom || *(volatile u32 *)CM_MS_CLOCK - c->vui_zoom_ms < VUI_ZOOM_HOLD_MS) want = 0u;
-    hx = page == 3u ? VUI_HX3 : VUI_HX;
-    hy = page == 3u ? VUI_HY3 : VUI_HY;
-    if (c->vui_hist_on && (!want || hx != c->vui_hist_x || hy != c->vui_hist_y)) {
+    hx = !ori ? VUI_HLX : (page == 0u || page == 3u) ? VUI_HX3 : VUI_HX;
+    hy = !ori ? VUI_HLY : (page == 0u || page == 3u) ? VUI_HY3 : VUI_HY;
+    if (c->vui_hist_on && (!want || ori != c->vui_hist_ori || hx != c->vui_hist_x || hy != c->vui_hist_y)) {
         vui_prim(c, VUI_CLEAR_FN, c->vui_hist_ori, c->vui_hist_x, c->vui_hist_y, VUI_HWY(c->vui_hist_y), VUI_HHY(c->vui_hist_y), 0u);
         c->vui_hist_on = 0u;
     }
@@ -939,7 +950,7 @@ IMG_FN static void vui_hist_draw(cm_t *c, s32_v *b)
     s32_v hx = c->vui_hist_nx, hy = c->vui_hist_ny, d[4], hh = VUI_HHY(c->vui_hist_ny);
     s32_v cw = VUI_HCW(c->vui_hist_ny), hw = VUI_HWY(c->vui_hist_ny);
     c->vui_hist_due = 0u;
-    vui_panel_rect(ori, hx, hy, hw, hh, d);
+    vui_hist_rect(ori, hx, hy, hw, hh, d);
     if (b && b[2] > 0 && b[3] > 0 &&
         b[0] < d[0] + d[2] && d[0] < b[0] + b[2] && b[1] < d[1] + d[3] && d[1] < b[1] + b[3]) {
         s32_v e[7];                            /* group 94: the clear first, here, then the histogram over it */
@@ -951,7 +962,8 @@ IMG_FN static void vui_hist_draw(cm_t *c, s32_v *b)
         c->vui_hist_dirty = 1u;
     }
     ms = *(volatile u32 *)CM_MS_CLOCK;
-    if (c->vui_hist_on && !c->vui_hist_dirty && ms - c->vui_hist_ms < 80u) return;
+    /* Dirty/bank/rotation repairs reuse cached data immediately; ordinary updates retain the 80ms gate. */
+    if (c->vui_hist_on && !c->vui_hist_dirty && ms - c->vui_hist_ms < VUI_HIST_INTERVAL) return;
     {
         u8 hg[64];
         u8 *prev = c->vui_mtd ? (u8 *)(c->vui_mtd + 4u * 0x5Cu)   /* after the 4 kept image calls */ : (u8 *)0;
@@ -976,7 +988,7 @@ IMG_FN static void vui_hist_draw(cm_t *c, s32_v *b)
             hg[i] = (u8)(h > (u32)hh ? (u32)hh : h);
         }
 #ifndef VUI_NO_ZEROHOLD
-        if (prev && !full) {                   /* group 97: an all-zero reading in the middle of a refresh */
+        if (ori && *(volatile u8 *)VUI_DISP_PAGE != 0u && prev && !full) { /* original pages' zero hold */
             u32 now = 0u, before = 0u;
             for (i = 0; i < 64u; i++) { now |= hg[i]; before |= prev[i]; }
             if (!now && before && c->vui_hist_zero < 3u) { c->vui_hist_zero++; c->vui_hist_ms = ms; return; }
@@ -1013,6 +1025,91 @@ IMG_FN static void vui_hist_draw(cm_t *c, s32_v *b)
     vui_prim(c, VUI_RECT_FN, ori, hx, hy + hh - 2, hw, 2, 0xFFFFFFFFu);
     vui_prim(c, VUI_RECT_FN, ori, hx, hy, 2, hh, 0xFFFFFFFFu);
     vui_prim(c, VUI_RECT_FN, ori, hx + hw - 2, hy, 2, hh, 0xFFFFFFFFu);
+}
+
+/* Same packed-pixel conversion as the EVF batch painter. */
+IMG_FN static u32 vui_hist_pixel(u32 index)
+{
+    u32 rgba = FW(read_fn, 0x10526478u)(index);
+    return (rgba << 24) | ((rgba & 0xff00u) << 8) | ((rgba >> 8) & 0xff00u) | (rgba >> 24);
+}
+
+IMG_FN static void vui_hist_cpu_fill(u32 surface, u32 ori, s32_v x, s32_v y, s32_v w, s32_v h, u32 pixel)
+{
+    s32_v d[4];
+    vui_hist_rect(ori, x, y, w, h, d);
+    s32_v top = 480 - d[1] - d[3];
+    for (s32_v row = top; row < top + d[3]; row++) {
+        volatile u32 *out = (volatile u32 *)surface + row * 720 + d[0];
+        for (s32_v col = 0; col < d[2]; col++) out[col] = pixel;
+    }
+}
+
+/* CPU batch painter from the EVF design, fitted into the existing 192x96 landscape/portrait boxes.
+   Read only the pinned packet, never the ISP or its shared native-bin cache. */
+IMG_FN static void vui_hist_cpu_draw(cm_t *c, u32 surface, const u32 *packet, u16 *dirty_rows)
+{
+    u32 ori = c->vui_hist_nori, scale = packet[256], sequence = packet[257];
+    u32 ms = *(volatile u32 *)CM_MS_CLOCK;
+    if (!scale || !dirty_rows) return;
+    if (c->vui_hist_on && !c->vui_hist_dirty && c->vui_hist_last_publication == sequence &&
+        ms - c->vui_hist_ms < 150u) return;
+    s32_v hx = c->vui_hist_nx, hy = c->vui_hist_ny, d[4];
+    vui_hist_rect(ori, hx, hy, VUI_HW, VUI_HH, d);
+    s32_v top = 480 - d[1] - d[3];
+    if (d[0] < 0 || d[0] + d[2] > 720 || top < 0 || top + d[3] > 480) return;
+#define HIST_FILL(x,y,w,h,p) vui_hist_cpu_fill(surface, ori, hx + (x), hy + (y), (w), (h), (p))
+#define HIST_COLOR(i) vui_hist_pixel(i)
+#define HIST_BIN(i) packet[i]
+#define HIST_DIV(n,d) vui_udiv((n),(d))
+#include "custom_disp/histogram_raster.h"
+#undef HIST_FILL
+#undef HIST_COLOR
+#undef HIST_BIN
+#undef HIST_DIV
+    /* Merge CPU histogram damage into the level's existing sparse cache publication. */
+    for (s32_v y = top; y < top + d[3]; y++) {
+        if (dirty_rows[y * 2] > (u32)d[0]) dirty_rows[y * 2] = (u16)d[0];
+        if (dirty_rows[y * 2 + 1] < (u32)(d[0] + d[2])) dirty_rows[y * 2 + 1] = (u16)(d[0] + d[2]);
+    }
+    c->vui_hist_on = 1u; c->vui_hist_dirty = 0u;
+    c->vui_hist_ori = ori; c->vui_hist_x = hx; c->vui_hist_y = hy;
+    c->vui_hist_last_publication = sequence; c->vui_hist_ms = ms;
+}
+
+/* Two phases on the checked LCD tail: GPU cleanup before sync, cached CPU paint after sync.
+   This callback never calls a statistics-read service and does not skip painting while the worker waits. */
+IMG_FN static void vui_hist_before_level(u32 native_bank, u32 surface, const u32 *packet, u16 *dirty_rows)
+{
+    cm_t *c = cm_get();
+    if (!c || c->vui_drawing || c->custom_disp_rc) return;
+    if (!native_bank && !surface) { custom_apply(c); return; }
+    if ((c->custom_flags & 5u) != 5u) {
+        if (!surface && c->vui_hist_on) vui_hist(c, VUI_K_CLEAR, c->vui_hist_ori, 0u, 0u);
+        return;
+    }
+    u32 raw_ori = FW(read_fn, VUI_ORI_GET)(0u);
+    if (raw_ori > 2u) {
+        if (!surface) {
+            if (c->vui_hist_on && c->vui_hist_bank && *(volatile u8 *)VUI_TARGET == VUI_TARGET_OSD)
+                vui_hist(c, VUI_K_CLEAR, 0u, 0u, *(volatile u8 *)VUI_UI);
+            c->vui_hist_bank = 0u;
+        }
+        return;
+    }
+    u32 ori = c->vui ? raw_ori : 0u;
+    if (*(volatile u8 *)VUI_APP != 3u || *(volatile u8 *)VUI_UI != 0u ||
+        *(volatile u8 *)VUI_DISP_PAGE != 0u || *(volatile u8 *)VUI_TARGET != VUI_TARGET_OSD ||
+        vui_video(c) || c->vui_evf) return;
+    if (!surface) {
+        vui_hist(c, VUI_K_CLEAR, ori, 1u, 0u);
+        if (c->vui_hist_bank != native_bank) { c->vui_hist_dirty = 1u; c->vui_hist_bank = native_bank; }
+        return;
+    }
+    if (!packet || !c->vui_hist_due || ori != c->vui_hist_nori || c->vui_zoom ||
+        c->vui_hist_bank != native_bank) return;
+    c->vui_hist_due = 0u;
+    vui_hist_cpu_draw(c, surface, packet, dirty_rows);
 }
 
 #ifdef VUI_DIAG_FOCUS
@@ -1571,7 +1668,7 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
 #ifdef VUI_DIAG_FOCUS
     vui_dg_watch(c);                           /* group 95: every app, frozen or not */
 #endif
-    if (c->focal_on && *(volatile u8 *)VUI_APP == 3u && *(volatile u32 *)0xC2028608u) {   /* group 102: stock focal text for every CPU lens; menu switch (group 104) */
+    if (!custom_hide_native(c) && c->focal_on && *(volatile u8 *)VUI_APP == 3u && *(volatile u32 *)0xC2028608u) {   /* group 102: stock focal text for every CPU lens; menu switch (group 104) */
         u32 dsc = *(const u32 *)(0x10748504u + 0x3Cu * 4u);
         if (dsc >= RAM_LO && dsc < RAM_HI && !(dsc & 3u) && *(volatile u8 *)(dsc + 0x28u)) {
             u32 el = *(volatile u32 *)(dsc + 0x2Cu);
@@ -1598,6 +1695,21 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
             c->vui_wk_due = 0u; c->vui_wk_two = 0u; c->vui_wk_key = ms | 1u;
         }
         if (c->vui_wk_due && (s32_v)(ms - c->vui_wk_due) >= 3000) { c->vui_wk_due = 0u; c->vui_wk_st += 1u << 24; }   /* overdue */
+    }
+    /* The experimental detailed-page histogram is independent of the portrait-layout switch.
+       Track native erases even with that layout disabled; drawing remains in the level callback. */
+    if (c->vui_hist_bank && *(volatile u8 *)VUI_TARGET == VUI_TARGET_OSD) {
+        if (*(volatile u8 *)VUI_DISP_PAGE != 0u || *(volatile u8 *)VUI_APP != 3u ||
+            *(volatile u8 *)VUI_UI != 0u) {
+            if (c->vui_hist_on) vui_hist(c, VUI_K_CLEAR, c->vui_hist_ori, 0u, *(volatile u8 *)VUI_UI);
+            c->vui_hist_bank = 0u;
+        } else if (c->vui_hist_on && kind == VUI_K_CLEAR && r[0]) {
+            const s32_v *b = (const s32_v *)r[0];
+            s32_v d[4];
+            vui_hist_rect(c->vui_hist_ori, c->vui_hist_x, c->vui_hist_y, VUI_HW, VUI_HH, d);
+            if (b[2] > 0 && b[3] > 0 && b[0] < d[0] + d[2] && d[0] < b[0] + b[2] &&
+                b[1] < d[1] + d[3] && d[1] < b[1] + b[3]) c->vui_hist_dirty = 1u;
+        }
     }
     if (!c->vui) { c->vui_t_ori = 0u; return; }
 #ifdef VUI_DIAG_FOCUS
@@ -1728,7 +1840,13 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
         }
     }
     if (kind != VUI_K_SETTER && *(volatile u8 *)VUI_TARGET != VUI_TARGET_OSD) return;
-    if (kind != VUI_K_SETTER) vui_hist(c, kind, ori, active && app == 3u, ui);
+    if (kind != VUI_K_SETTER) {
+        u32 hist_active = active || (ori == 0u && !c->custom_disp_rc &&
+                                    *(volatile u8 *)VUI_DISP_PAGE == 0u &&
+                                    !vui_video(c) && !c->vui_evf &&
+                                    app == 3u && (ui == 0u || ui == 3u));
+        vui_hist(c, kind, ori, hist_active && app == 3u, ui);
+    }
     if (ui != 3u && !setting) c->vui_sub = 0u;
     else if (!setting && (kind == VUI_K_RECT || kind == VUI_K_CLEAR)) {
         /* The grid's backdrop is 0,54,720,146; setting pages start with a different one. */
@@ -1777,6 +1895,7 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
     if (kind == VUI_K_CLEAR && c->vui_pending) {
         s32_v *b = (s32_v *)r[0];
         c->vui_pending = 0u;                   /* drop everything drawn for the previous layout */
+        if (c->vui_hist_bank) c->vui_hist_dirty = 1u;
         b[0] = 0; b[1] = 0; b[2] = 720; b[3] = 480;
         c->vui_mtd_go = 2u;                    /* group 88: the metering icon again, 500 and 800 ms later */
         c->vui_mtd_due = *(volatile u32 *)CM_MS_CLOCK + 500u;
@@ -1858,7 +1977,10 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
         return;
     }
 #endif
-    if (!active) return;
+    if (!active) {
+        /* Landscape repair/drawing is performed by vui_hist_before_level, never by an arbitrary clear. */
+        return;
+    }
     if (kind == VUI_K_CLEAR && ui == 0u && app == 3u) {
         u32 ms = *(volatile u32 *)CM_MS_CLOCK;
         if (ms - c->vui_af_ms >= 150u) {
@@ -1950,5 +2072,6 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
 #ifdef VUI_DIAG_FOCUS
     if (dge) vui_dg_out(dge, kind, r);
 #endif
-    if (kind == VUI_K_CLEAR && c->vui_hist_due) vui_hist_draw(c, (s32_v *)r[0]);
+    if (kind == VUI_K_CLEAR && c->vui_hist_due && *(volatile u8 *)VUI_DISP_PAGE != 0u)
+        vui_hist_draw(c, (s32_v *)r[0]);
 }

@@ -5,8 +5,8 @@
 
 No firmware is stored in this repository. The tool checks the SHA-256 of the file
 you supply, decodes its MAIN module, verifies the original bytes of every edit,
-applies them, and refuses to write anything unless the result matches the build
-tested on a camera. Your input file is never changed and nothing is overwritten.
+applies them, and refuses to write anything unless the result matches the firmware hash
+in the release manifest. Your input file is never changed and nothing is overwritten.
 
 Decoding uses z5mod (https://github.com/youyli03/z5mod). It is downloaded once, at
 a fixed commit with checked hashes, into third_party/. Use --z5mod to point at a
@@ -134,10 +134,10 @@ def main():
     main_module = container.main_module(modules)
     output = apply_patches(main_module.data, data)
     if sha256(output) != data['output_sha256']:
-        raise SystemExit('The result does not match the tested build; nothing was written.')
+        raise SystemExit('The result does not match the release manifest; nothing was written.')
     card = CARD_MODULE.read_bytes()
     if sha256(card) != data['card_module_sha256']:
-        raise SystemExit('card/Z5APP.BIN does not match the tested build; nothing was written.')
+        raise SystemExit('card/Z5APP.BIN does not match the release manifest; nothing was written.')
 
     write_new(args.output / 'EG165050.BIN', output)
     write_new(args.output / 'card' / 'Z5APP.BIN', card)

@@ -1,0 +1,16 @@
+{
+  "firmware_group": 108,
+  "card_base_group": 119,
+  "firmware_sha256": "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
+  "legacy_firmware_sha256": "e7e4ec5477a301f6128d30352429f2e6d31eaaa22f13255ceebf531215e24d61",
+  "port_origin": {
+    "base_card_sha256": "06f885f656a2c048eedaf053865437d5b452656f138a2b4c1e0ac67548bf9fa4",
+    "base_source_hashes": {
+      "src/card_module/main.c": "8813eca3947b4225cf01f638e40c417d9ba97cad16b5eaafd594ded8592b0dce",
+      "src/card_module/vui_card.inc": "e83bfd11d971fde761de10ffc1124778281dfd0368f396ef1152755669f9889a"
+    },
+    "experiment_vui_sha256": "79e946f4da4e5c7dea0a9f8c4fd9171cf4eaf946713d21785e88d0afac17c36d",
+    "module": "portrait group 119 + L18 custom DISP"
+  },
+  "sdk_base_commit": "8cf0fb425a4988abdb9442f33a2773c7a242dc23"
+}
