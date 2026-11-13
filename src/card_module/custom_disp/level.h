@@ -13,78 +13,35 @@ typedef struct {
     level_pixel pixels[LEVEL_PIXEL_LIMIT];
 } level_backing;
 typedef struct {
-    u32 busy, paints, count, reason, entries;
+    u32 busy, reason;
     signed short previous[6][4];
-    u32 last_roll, last_pitch;
-    u32 surface, key_roll, key_pitch, last_tick, force, hist_damage, last_cost, gui_delay;
-    u32 window_start, window_span, window_calls, window_changes, window_seen;
-    s32 window_roll, window_a, window_b;
-    u32 window_cost;
-    volatile u32 requests, drive_fault;
-    u32 backing, current, surfaces;
+    u32 surface, force;
+    volatile u32 drive_fault;
+    u32 backing, current;
     u32 width, height;
-    volatile u32 sync_max, histogram_origin, histogram_count, attempts;
-    u32 max_gap, last_pose_tick, publications;
-    u32 rejects, pre_max, native_max, cache_max;
 } level_state;
 
 Z5_IMAGE(custom_disp_image) static level_state *level_data(void)
 {
-    return (level_state *)disp_metadata()[23] + (Z5_OVERLAY_OUTPUT == Z5_CUSTOM_DISP_EVF_PASS);
+    return (level_state *)disp_metadata()[22] + (Z5_OVERLAY_OUTPUT == Z5_CUSTOM_DISP_EVF_PASS);
 }
 
 
-Z5_IMAGE(custom_disp_image) static void level_sparse_reset(u32 surface)
+Z5_IMAGE(custom_disp_image) static void level_sparse_mark(u32 surface, u32 offset, u32 width, u32 height)
 {
-    lcd_state *s = lcd_data();
-    s->sparse_surface = surface;
-    for (u32 y = 0; y < 480u; y++) {
-        s->sparse_rows[y][0] = 0xffffu;
-        s->sparse_rows[y][1] = 0u;
-    }
-}
-
-Z5_IMAGE(custom_disp_image) static void level_sparse_mark(u32 surface, u32 offset)
-{
-    if (offset >= 720u * 480u) return;
-    lcd_state *s = lcd_data();
-    if (s->sparse_surface != surface) level_sparse_reset(surface);
-    u32 y = offset / 720u, x = offset - y * 720u;
-    if (x < s->sparse_rows[y][0]) s->sparse_rows[y][0] = (u16)x;
-    if (x + 1u > s->sparse_rows[y][1]) s->sparse_rows[y][1] = (u16)(x + 1u);
+    sparse_mark(&overlay_data()->sparse, surface, offset, width, height);
 }
 
 Z5_IMAGE(custom_disp_image) static u32 level_sparse_publish(u32 surface)
 {
-    lcd_state *s = lcd_data();
-    if (!surface || (surface & 3u) || surface > 0xffffffffu - 720u*480u*4u) return 0;
-    if (s->sparse_surface != surface) return 1;
-    u32 first = 0, last = 0;
-    for (u32 y = 0; y < 480u; y++) {
-        u32 low = s->sparse_rows[y][0], high = s->sparse_rows[y][1];
-        if (low >= high || high > 720u) continue;
-        u32 begin = ((y * 720u + low) * 4u) & ~63u;
-        u32 end = ((y * 720u + high) * 4u + 63u) & ~63u;
-        if (last && begin <= last + 64u && end - first <= 65536u) {
-            if (end > last) last = end;
-        } else {
-            if (last) Z5_LEVEL_CACHE_RANGE(surface + first, last - first);
-            first = begin; last = end;
-        }
-    }
-    if (last) Z5_LEVEL_CACHE_RANGE(surface + first, last - first);
-    level_sparse_reset(surface);
-    return 1;
+    return sparse_publish(&overlay_data()->sparse, surface);
 }
 
-/* Measure the native graphics wait without changing its ordering. */
+/* The shared tail callback measures this wait on both outputs. */
 Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2")))
-static void level_sync(level_state *l)
+static void level_sync(void)
 {
-    u32 start = Z5_FULL_TICK;
     Z5_LEVEL_SYNC();
-    u32 elapsed = Z5_FULL_TICK - start;
-    if (elapsed > l->sync_max) l->sync_max = elapsed;
 }
 
 Z5_IMAGE(custom_disp_image) static u32 level_div(u32 value, u32 denominator)
@@ -99,7 +56,6 @@ Z5_IMAGE(custom_disp_image) static u32 level_div(u32 value, u32 denominator)
     return quotient;
 }
 
-Z5_IMAGE(custom_disp_image) static void level_sparse_mark(u32 surface, u32 offset);
 
 /* Original integer trigonometry approximation; no firmware angle table. */
 Z5_IMAGE(custom_disp_image) static s32 level_sine(u32 angle)
@@ -183,73 +139,31 @@ Z5_IMAGE(custom_disp_image) static void level_prepare(void)
 {
     level_state *l = level_data();
     l->surface = 0;
-    if (Z5_OVERLAY_OUTPUT == 0u && lcd_data()->ready) {
-        l->surface = lcd_data()->drawing_image; l->width = 720u; l->height = 480u;
+    if (disp_pass_matches(disp_output()) && overlay_data()->ready) {
+        l->surface = overlay_data()->drawing_image;
         return;
     }
-    u32 output = Z5_OVERLAY_OUTPUT;
-    if (output != 0u && output != Z5_CUSTOM_DISP_EVF_PASS) return;
-    const u16 *size = Z5_LEVEL_FAST_SIZE(0u);
-    if (!size) return;
-    u32 width = size[0], height = size[1];
-    if (output == 0u) {
-        if (width != 720u || height != 480u) return;
-    } else if (!((width == 720u && height == 480u) ||
-                 (width == 1024u && (height == 682u || height == 768u)) ||
-                 (width == 1280u && height == 960u))) return;
-    l->width = width; l->height = height;
-    u32 buffer = Z5_LEVEL_FAST_BUFFER;
-    if (!buffer) return;
-    u32 mapped = Z5_LEVEL_FAST_SURFACE(buffer);
-    if (mapped && !(mapped & 3u)) l->surface = mapped;
 }
 
-/* An unretired current bank is not safe to repaint. Check before pose
- * sampling or another graphics wait; level_begin retains its final guard. */
-Z5_IMAGE(custom_disp_image) static u32 level_pending(void)
-{
-    level_state *l = level_data();
-    level_prepare();
-    level_backing *slots = (level_backing *)l->backing;
-    for (u32 i = 0; i < 4u; i++)
-        if (slots[i].surface == l->surface && slots[i].count) return 1;
-    return 0;
-}
-
-/* Limit maintenance to the current primary-display bitmap. Each native range stays below
- * its 0x45000 whole-cache threshold, avoiding the global kernel-cache path. */
+/* Publish only ranges covering restored or drawn pixels on either output. */
 Z5_IMAGE(custom_disp_image) static u32 level_publish(void)
 {
-    level_state *l = level_data();
-    if (Z5_OVERLAY_OUTPUT == 0u && Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 1u &&
-        l->width == 720u && l->height == 480u) return level_sparse_publish(l->surface);
-    u32 bytes = l->width * l->height * 4u;
-    if (!l->surface || !bytes || l->surface > 0xffffffffu - bytes) return 0;
-    for (u32 offset = 0; offset < bytes; offset += 65536u) {
-        u32 count = bytes - offset;
-        if (count > 65536u) count = 65536u;
-        Z5_LEVEL_CACHE_RANGE(l->surface + offset, count);
-    }
-    return 1;
+    return level_sparse_publish(level_data()->surface);
 }
 
 Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2")))
 static void level_retire(u32 output)
 {
-    level_state *l = (level_state *)disp_metadata()[23] + output;
+    level_state *l = (level_state *)disp_metadata()[22] + output;
     if (l->busy) return;
-    level_sync(l);
+    level_sync();
     /* Restore before the complete native page handler, regardless of the
      * last physical pass. Both primary displays use UI bank zero. */
     l->surface = 0;
     const u16 *size = Z5_LEVEL_FAST_SIZE(0u);
     if (!size) return;
     u32 width = size[0], height = size[1];
-    if (!output) {
-        if (width != 720u || height != 480u) return;
-    } else if (!((width == 720u && height == 480u) ||
-                 (width == 1024u && (height == 682u || height == 768u)) ||
-                 (width == 1280u && height == 960u))) return;
+    if (!disp_size_supported(output, width, height)) return;
     u32 buffer = Z5_LEVEL_FAST_BUFFER;
     if (!buffer) return;
     u32 mapped = Z5_LEVEL_FAST_SURFACE(buffer);
@@ -263,7 +177,7 @@ static void level_retire(u32 output)
     volatile u32 *surface = (volatile u32 *)l->surface;
     u32 pixels = l->width * l->height;
     for (u32 output = 0; output < 2u; output++) {
-        level_state *owner = (level_state *)disp_metadata()[23] + output;
+        level_state *owner = (level_state *)disp_metadata()[22] + output;
         level_backing *slots = (level_backing *)owner->backing;
         for (u32 i = 0; i < 4u; i++) {
             if (slots[i].surface != l->surface) continue;
@@ -273,47 +187,30 @@ static void level_retire(u32 output)
                 if (p.offset >= pixels) { slots[i].pixels[kept++] = p; continue; }
                 if (surface[p.offset] == p.drawn) {
                     surface[p.offset] = p.under;
-                    if (Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 1u && width == 720u && height == 480u)
-                        level_sparse_mark(l->surface, p.offset);
+                    level_sparse_mark(l->surface, p.offset, width, height);
                 }
             }
             slots[i].count = kept;
-            owner->count = 0;
         }
     }
     __asm__ volatile ("dmb sy" ::: "memory");
     /* Restored pixels must reach the GPU BEFORE native alpha blending. */
-    if (Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 1u && width == 720u && height == 480u)
-        level_sparse_publish(l->surface);
+    level_sparse_publish(l->surface);
 }
 
 Z5_IMAGE(custom_disp_image) static u32 level_paint(void)
 {
     level_state *l = level_data();
-    l->entries++;
-    l->hist_damage = 0;
     if (l->busy) { l->reason = 1; return 0; }
-    u32 reject = !disp_view() || !disp_gui_ready() ? 2u : 0u;
+    u32 reject = !overlay_data()->ready || !disp_view() || !disp_gui_ready() ? 2u : 0u;
     if (disp_metadata()[3]) reject |= 64u;
     if (reject) { l->reason = reject; return 0; }
     l->busy = 1;
     s32 raw_roll, raw_a, raw_b;
     Z5_LEVEL_POSE_READ(&raw_roll, &raw_a, &raw_b);
-    u32 elapsed = Z5_FULL_TICK - l->window_start;
-    l->window_span = elapsed < 8000u ? elapsed : 8000u;
-    if (elapsed < 8000u) {
-        u32 tick = Z5_FULL_TICK;
-        if (l->window_seen) {
-            u32 gap = tick - l->last_pose_tick;
-            if (gap > l->max_gap) l->max_gap = gap;
-        }
-        l->last_pose_tick = tick;
-        l->window_calls++;
-        l->histogram_count = disp_metadata()[13] - l->histogram_origin;
-        if (!l->window_seen || raw_roll != l->window_roll || raw_a != l->window_a || raw_b != l->window_b)
-            l->window_changes++;
-        l->window_roll = raw_roll; l->window_a = raw_a; l->window_b = raw_b;
-        l->window_seen = 1;
+    if (!disp_view() || !overlay_data()->ready ||
+        Z5_LEVEL_FAST_BUFFER != overlay_data()->drawing_bank) {
+        l->reason = 2u; l->busy = 0; return 0;
     }
     u32 valid_roll = raw_roll >= -23592960 && raw_roll <= 23592960 && raw_roll != -1;
     u32 valid_a = raw_a >= 0 && raw_a <= 23592960;
@@ -327,26 +224,13 @@ Z5_IMAGE(custom_disp_image) static u32 level_paint(void)
     if (angle >= 180u * LEVEL_UNITS) angle -= 180u * LEVEL_UNITS;
     if (angle > 90u * LEVEL_UNITS) angle = 180u * LEVEL_UNITS - angle;
     s32 pitch = negative ? -(s32)angle : (s32)angle;
-    u32 now = Z5_FULL_TICK;
-    u32 repair = l->force || now - l->last_tick >= 150u;
-    l->hist_damage = repair;
-    if (Z5_OVERLAY_OUTPUT != 0u || !lcd_data()->ready)
-    level_sync(l);
     level_prepare();
     if (!level_begin()) { l->busy = 0; return 0; }
-    /* Erase our preceding strokes. Only the legacy variant also clears the
-     * native horizon center rectangle. Never clear the whole canvas. */
-    l->count = 0;
     if (status < 6u && roll < 360u * LEVEL_UNITS && a < 360u * LEVEL_UNITS && b < 360u * LEVEL_UNITS) {
         /* The native pitch painter uses the larger axis and folds about 180
          * degrees. Preserve its half-turn sign convention; camera calibration
          * and the direction of visible motion remain a hardware check. */
-        l->last_roll = (roll + LEVEL_UNITS / 2u) / LEVEL_UNITS;
-        if (l->last_roll == 360u) l->last_roll = 0;
-        l->last_pitch = pitch < 0 ? (u32)-((-pitch + (s32)LEVEL_UNITS / 2) / (s32)LEVEL_UNITS) :
-                                  (u32)((pitch + (s32)LEVEL_UNITS / 2) / (s32)LEVEL_UNITS);
         level_geometry(l->previous, roll, pitch);
-        l->count = 4u;
         u32 upright = roll;
         while (upright >= 90u * LEVEL_UNITS) upright -= 90u * LEVEL_UNITS;
         u32 roll_color = upright <= LEVEL_UNITS || upright >= 89u * LEVEL_UNITS ? 4u : 1u;
@@ -357,11 +241,8 @@ Z5_IMAGE(custom_disp_image) static u32 level_paint(void)
         if (!l->surface) l->reason = 32;
     } else {
         l->reason = 128;
-        l->last_roll = l->last_pitch = 0xfffu;
     }
-    l->key_roll = roll; l->key_pitch = (u32)pitch;
-    l->last_tick = now; l->force = 0;
-    l->paints++;
+    l->force = 0;
     l->busy = 0;
     __asm__ volatile ("dmb sy" ::: "memory");
     return 1;

@@ -28,10 +28,15 @@
       "lcd_async",
       "native_overlay",
       "rectangle_level",
-      "source_rebinding"
+      "source_rebinding",
+      "independent_evf_surface_fallback",
+      "legacy_force3_restore",
+      "unread_evf_window_metrics"
     ],
     "removed_unused_stencil_bytes": 124944,
-    "state_revision": "0x112D0007"
+    "removed_evf_metadata_words": 6,
+    "metadata_words": 31,
+    "state_revision": "0x112D000A"
   },
   "compatible_firmware_sha256": [
     "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
@@ -40,9 +45,9 @@
   "lcd_walk_policy": "skip checked first walk; paint second and conditional later walks",
   "lcd_walk_identity": "callback-entry SP +28 wrapper LR, +44 controller LR; exact native code checks",
   "lcd_final_submission_hook": false,
-  "lcd_diagnostics": "L18: existing L7 metrics; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)",
-  "output_sha256": "ca37cb03fb5931feabc0111835cd99313c4921be6b106e83d8eddd75e2b2ea73",
-  "output_size": 63448,
+  "lcd_diagnostics": "L21: same R/U/C/F W/D/K/N metrics on last photo output (L21L/L21E); Q also reports page/activation refusal; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)",
+  "output_sha256": "84559a1f55156b13bbf918bc329870f8b41e1b8ecb1ed5d608f3e2180a0e6318",
+  "output_size": 62068,
   "custom_disp_settings": {
     "menu": "Extensions > DISP2 Custom",
     "flags": [
@@ -140,15 +145,35 @@
     "saved_state_bytes": 68
   },
   "lcd_level_target_hz": 60,
+  "evf_level_target_hz": 60,
   "lcd_request_intervals_ms": [
     16,
     17
   ],
+  "evf_request_intervals_ms": [
+    16,
+    17
+  ],
+  "unified_output_pipeline": {
+    "entry": "overlay_source_paint",
+    "first_walk": "skip on LCD and EVF",
+    "prepare": "restore sparse pixels before native child painters on either output",
+    "tail": "GPU sync, revalidate active output/bank/descriptor, cached histogram, level, sparse publication",
+    "output_states": 2,
+    "dirty_row_limit": 960,
+    "fullscreen_cache_maintenance": false,
+    "native_descriptor_masks": [
+      1
+    ],
+    "evf_source": "native current buffer, size and mapping; no LCD page-object/descriptor constraints",
+    "native_descriptor_map": "0xC18100AC",
+    "histogram_acquisition_interval_ms": 120
+  },
   "lcd_fullscreen_allocation_bytes": 0,
   "lcd_sparse_save_under": true,
   "lcd_occlusion": "native premultiplied RGBA source-over level",
   "lcd_visibility_mask_rules": 0,
-  "evf_path": "LCD shared 192x96 CPU histogram; EVF native origin and level path retained",
+  "evf_path": "shared 60Hz overlay pipeline and sparse cache publication; native EVF size/origin adapter",
   "production_vui_source_unchanged": false,
   "production_diagnostic_recorder": true,
   "own_histogram": {
@@ -169,14 +194,14 @@
       192,
       96
     ],
-    "landscape_throttle_ms": 80,
+    "landscape_throttle_ms": 120,
     "detailed_portrait_box_top_down": [
       144,
       480,
       192,
       96
     ],
-    "sampling": "original EVF disp_worker/disp_collect, 80ms attempt-start gate and 20ms poll; native 0x10456B34 only on independent worker",
+    "sampling": "shared disp_worker/disp_collect, 120ms attempt-start gate and 20ms poll; native 0x10456B34 only on independent worker",
     "sampling_failure": "keep last published private statistics packet",
     "evf_histogram_box_size": [
       192,
@@ -198,7 +223,7 @@
       2,
       3
     ],
-    "portrait_throttle_ms": 80,
+    "portrait_throttle_ms": 120,
     "full_screen_cache": false,
     "full_repaint_on_bank_change": true
   },
@@ -1263,8 +1288,8 @@
     },
     {
       "name": "disp_metadata",
-      "size": 10760,
-      "direct_branches": 798
+      "size": 9488,
+      "direct_branches": 727
     },
     {
       "name": "release_cb",
@@ -1304,42 +1329,42 @@
     "z5mod.ld": "eb739b180dea2e5e78a42362240a64a43420a2adf0e86238a8d58b52790062a6"
   },
   "source_hashes": {
-    "src/card_module/build.py": "96324148427c560581b457ba070bef7df816c15b6847d14e21bcf61c106748f2",
+    "src/card_module/build.py": "6761316017b4ff9853e78678dad737f89696f4e62fd9c7ff9ddb77fbedb897c7",
     "src/card_module/custom_disp/compatibility.json": "9a438d3605a5bf245175116e423c842bd1a738e9f0b3166adc3148df2de8b03d",
-    "src/card_module/custom_disp/compose.h": "db4dd5afb9aa42a6993711a8f65a6c21d889affea2f440fec5a5ed97ffbd52e7",
-    "src/card_module/custom_disp/diagnostics.h": "81934ac3c6d89c9f6e216d65408a9c6c3baec6579067802b2a7791178497c6ea",
-    "src/card_module/custom_disp/display.c": "c8339bc1121ed485786b0a5616d65ee4c2a4354c20a4ab40b24296b0170d829c",
-    "src/card_module/custom_disp/histogram.h": "dc193ffcf6b3096f1e786c5271943e417e00087720edd0e61c53537f517dea91",
+    "src/card_module/custom_disp/compose.h": "37a10e7c761cdb3e993369ca40f8618b279ee2a631243e7d5f77f7c05c6afcc3",
+    "src/card_module/custom_disp/diagnostics.h": "e6a8927c3f6fdec1b34679d5f839f22a6868222fb980417678fcdf43e0876edd",
+    "src/card_module/custom_disp/display.c": "2df661630ba28149e804d3b18e8a3ea68a257999af47a9e0fa8801f52c6c8586",
+    "src/card_module/custom_disp/histogram.h": "2ecafdae367032ea1c8c033392a3cf28f975e687a40f4a437b43fc329dfe9dd2",
     "src/card_module/custom_disp/histogram_raster.h": "4245759d4410af8d69590429413b09337137c008cf602bfe747265a13c9100e6",
-    "src/card_module/custom_disp/lcd_render.h": "306e2a7d783baa8e7c0496a931d79da6bb3a0b68413229c90a96b53baf56fabc",
-    "src/card_module/custom_disp/lcd_state.h": "778a28d00d8fc46bac60bbde05f2ee67641846636a09a8ea0dea01fa94c1d2ca",
-    "src/card_module/custom_disp/level.h": "61670c1e0379c76e60485376eb3f6a1763fd994ded86ad781cc11acdd87ec93e",
-    "src/card_module/custom_disp/platform.json": "253baea1c1a891521d6aef04ea673a6909d5103917ae1c4c1a663c001781212c",
-    "src/card_module/custom_disp/refresh.h": "0de32325dab9306035fafbc49852843a7941306d3f7891b4095da078424f9549",
+    "src/card_module/custom_disp/level.h": "570c2a963b23bcc4f9c42c7ad8a17958b7bac8563c344f3fe1cc9ddcccc71223",
+    "src/card_module/custom_disp/output.h": "61f52fb604cbf8db43150136b4fef32858f824c0350789b310a76165f6b82926",
+    "src/card_module/custom_disp/overlay_render.h": "0439b92c5fcf3a2f7f762ff4be8780c950563dbd7be46440d2502444d9a401b5",
+    "src/card_module/custom_disp/overlay_state.h": "d21137ccaba938a84869278dc6ba97a8bccd5a8f4fa308a53b0d3f744ce68a6f",
+    "src/card_module/custom_disp/platform.json": "e4a1b24f7c154c5d80764911c1c566444fb9fa2c4210ce501fb1f718b1e99d2f",
+    "src/card_module/custom_disp/refresh.h": "bd296e3a61b0e3ca0dbc57631ec72e253e0198abfa75fb7ff29176ce995bfbd5",
     "src/card_module/custom_disp/refresh_override.h": "42a61a1f508451af9177b9eacd79c245e45b99708a8445077481b07790281464",
     "src/card_module/custom_disp/responsive.h": "00f11c7a8230cd846eb6c45781383a0099df53168aab6248a064c6c4065e9fac",
     "src/card_module/custom_disp/sdk_compat.h": "5c3ab0cff2f943067d71979065b4619b991e718643f699370320dc8cf95f9210",
     "src/card_module/custom_disp/sdk_sources.json": "6e0ea598b02450f610abe69d9edbb1f1722c00e38430aa2751ed5beb4cab1b19",
-    "src/card_module/custom_disp/smooth.h": "a26d1d3839da4f5fb37b9103f5f8ce3658fcea4a30fec778cad85b51751cdc7c",
-    "src/card_module/custom_disp/target.h.in": "a9aaedac590cc92cc7c9c5db18d876d2b75295054afcfcd2f95981f0d7db9d4f",
+    "src/card_module/custom_disp/smooth.h": "9adf20520a08bc3743c98a854e562499b579b43d3f067dd16fd81243d92a226d",
+    "src/card_module/custom_disp/sparse.h": "fbf8e1f65fa693b41755729c28be83cce449af60a9cbcd6991521d7ab64d47c2",
+    "src/card_module/custom_disp/target.h.in": "25f53188682a20ba150b74170fe93a22e3e93a44886b8b258f1218a7cfd130dc",
     "src/card_module/custom_disp.h": "659bfca8eb63011c88502cd05d2a5eef574b35e5015b3241b562daac1df81a7b",
     "src/card_module/custom_disp_install.inc": "845bc8705c44c6488a4ac64f3e72d0e00a50a787a53f3c4452d221137d30d0c9",
     "src/card_module/custom_disp_runtime.inc": "834eed526279a0e740cd7378eb89435412853d0a797dcd229da80ee127a6b33f",
-    "src/card_module/main.c": "cc9f132ee1124f05e48bcc32232af786370ff28f6799c5c692fed35906c40724",
+    "src/card_module/main.c": "dcff6aef2af18efc3c6b3cb1c48e8bab9e0f695b4570a56b3b39778f0ec2cfe8",
     "src/card_module/vui_card.inc": "f38b1b71995cfdf6aa2963b4477f25e556620699d40803887bf2d86872a43f9f",
     "src/card_module/z5mod-sdk.patch": "d68e378f9f0c2a08e3cbccb2d0dd89279a8b0d9046e4a47e7772e1c8435a545f"
   },
   "compiler_version": "14.3.1",
   "limitations": "Build and static checks only. Camera timing, portrait layout and wake need hardware verification.",
-  "release": "L18 custom DISP cleanup",
-  "date": "2026-11-14",
-  "migration_byte_identical": false,
   "verification": {
     "host_tests": [
       "custom_disp: synthetic masks and both accepted firmware initializers",
       "config: legacy and extended MENU.DAT",
       "refresh_override: all selectors and compare-and-restore",
-      "histogram_raster: 256 bins and LCD/portrait/EVF adapters"
+      "histogram_raster: 256 bins and LCD/portrait/EVF adapters",
+      "output_sync: checked-tail surface ownership, actual walk wrapper, native EVF activation/descriptor independence, shooting/busy guards, LCD descriptor mismatch rejection, sparse bounds/banks, 60Hz cadence/wrap, worker-failure versus normal sleep result, 120ms gate"
     ],
     "windows_packager_unit_tests": {
       "passed": 7,
@@ -1347,8 +1372,8 @@
     },
     "sdk_reconstructed_from_commit_and_patch": true,
     "source_export_without_local_research_build_passed": true,
-    "source_export_current_only_size": 56548,
-    "source_export_current_only_sha256": "9857023054c60d4903273885f92760fdd5625d179f830f0c0144dffb8510aa0e",
+    "source_export_current_only_size": 55128,
+    "source_export_current_only_sha256": "01f705464cf4aa7462865d0294553933af80f86523bf5efbb5f7b555ad89ff5e",
     "firmware_patch_payload_unchanged": true,
     "camera_verified": false,
     "qemu_or_arm_dynamic_tests_run": false,
@@ -1363,6 +1388,11 @@
       "patch_data/patches.json"
     ],
     "obsolete_module_name_references": 0,
-    "unused_stencil_allocation_removed_bytes": 124944
+    "unused_stencil_allocation_removed_bytes": 124944,
+    "hardware_feedback_baseline": {
+      "version": "L20",
+      "sha256": "711f14e101cbf5a4b547219c7d0523835f64d100dda8d95491af20cc8cfce248",
+      "scope": "user reports EVF level and histogram display restored; not a full combination acceptance test"
+    }
   }
 }

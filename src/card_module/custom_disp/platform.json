@@ -484,6 +484,14 @@
     [
       272978084,
       3246501192
+    ],
+    [
+      273077484,
+      3246457004
+    ],
+    [
+      273077488,
+      3252254308
     ]
   ],
   "ram_init": {
@@ -509,7 +517,7 @@
     "evf_canvas": 3254948772,
     "info_table": 276071684
   },
-  "lcd_source": {
+  "overlay_source": {
     "source_offset": 40,
     "source_mode_offset": 76,
     "gui_lock": 3246521116,

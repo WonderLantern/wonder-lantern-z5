@@ -1,10 +1,10 @@
 /* Z5 card extensions: portrait UI, custom DISP, cached histogram and custom DISP level.
- * Target: C1.50 group-108 firmware; no new firmware edits are needed for L18.
+ * Target: C1.50 group-108 firmware; no new firmware edits are needed for L21.
  * The stage0 loader invokes boot setup and the MY MENU status row. Callbacks
  * retained after loading live in copied Z5_IMAGE code; persistent data lives
  * in the SDK state or explicit heap allocations, not in the freed loader image.
  * See docs/CUSTOM_DISP_HANDOFF.md for ownership, drawing order and settings.
- * camera_verified: false for this exact L18 integration.
+ * camera_verified: false for this exact L21 integration.
  */
 #include "z5/audio.h"
 #include "z5/fs.h"

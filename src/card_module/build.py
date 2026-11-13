@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Build the L18 custom DISP card module with checked native drawing entry points.
+"""Build the L21 custom DISP card module with checked native drawing entry points.
 
-Fixed target: original detailed-information LCD page, 60 Hz refresh requests.
+Fixed target: original detailed-information LCD/EVF page, 60 Hz refresh requests.
 No firmware changes, flashing, dynamic tests, or full-screen output buffers.
 """
 from __future__ import annotations
@@ -98,7 +98,7 @@ def target_header(image):
     k_initial = read(ram['source'] + 0xC18E74B0 - ram['destination'], 16 * 8)
     if k_initial != struct.pack('<2I', 1, 0) * 16:
         raise ValueError('native k-table initialization differs')
-    native = profile['lcd_source']
+    native = profile['overlay_source']
     def literal_word(address):
         opcode = int.from_bytes(read(address, 2), 'little')
         if opcode & 0xf800 != 0x4800:
@@ -115,7 +115,7 @@ def target_header(image):
         raise ValueError('native UI mode binding differs')
     gate_literals = [(gate_literal, gate_base), (walk_literal, walk_base),
                      (ui_literal, ui_address)]
-    for item in profile['lcd_source']['functions'].values():
+    for item in profile['overlay_source']['functions'].values():
         actual = read(item['entry'], item['length'])
         if sha(actual) != item['sha256']:
             raise ValueError('native source function digest differs')
@@ -142,10 +142,10 @@ def target_header(image):
                            FUNCTIONS='do { ' + ' '.join(functions) + ' } while (0)',
                            LITERALS='(' + ' && '.join(literals) + ')',
                            LCD_CANVAS='0x%Xu' % lcd, EVF_CANVAS='0x%Xu' % evf,
-                           PRESENT_LOCK='0x%Xu' % profile['lcd_source']['gui_lock'],
-                           UI_MODE_GETTER='0x%X' % profile['lcd_source']['functions']['ui_mode']['entry'],
-                           PRESENT_MODE='0x%Xu' % profile['lcd_source']['gui_mode'],
-                           PRESENT_MAP='0x%Xu' % (profile['presentation']['output_map'] + 1),
+                           PRESENT_LOCK='0x%Xu' % profile['overlay_source']['gui_lock'],
+                           UI_MODE_GETTER='0x%X' % profile['overlay_source']['functions']['ui_mode']['entry'],
+                           PRESENT_MODE='0x%Xu' % profile['overlay_source']['gui_mode'],
+                           PRESENT_MAP='0x%Xu' % profile['presentation']['output_map'],
                            PRESENT_POOL='0x%Xu' % profile['presentation']['descriptor_pool']).items():
         if header.count('@' + key + '@') != 1: raise ValueError('target template marker differs')
         header = header.replace('@' + key + '@', value)
@@ -253,29 +253,36 @@ def main():
     report = dict(camera_verified=False, dynamic_tests_run=False,
         firmware_modified=False, compatibility=compatibility, firmware_sha256=sha(image),
         source_cleanup=dict(module="custom_disp", single_rendering_path=True,
-            removed_paths=["layer_cache", "lcd_clock", "lcd_async", "native_overlay", "rectangle_level", "source_rebinding"],
-            removed_unused_stencil_bytes=124944, state_revision="0x112D0007"),
+            removed_paths=["layer_cache", "lcd_clock", "lcd_async", "native_overlay", "rectangle_level", "source_rebinding", "independent_evf_surface_fallback", "legacy_force3_restore", "unread_evf_window_metrics"],
+            removed_unused_stencil_bytes=124944, removed_evf_metadata_words=6, metadata_words=31, state_revision="0x112D000A"),
         compatible_firmware_sha256=accepted_hashes,
         lcd_walk_policy='skip checked first walk; paint second and conditional later walks',
         lcd_walk_identity='callback-entry SP +28 wrapper LR, +44 controller LR; exact native code checks',
         lcd_final_submission_hook=False,
-        lcd_diagnostics='L18: existing L7 metrics; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)',
+        lcd_diagnostics='L21: same R/U/C/F W/D/K/N metrics on last photo output (L21L/L21E); Q also reports page/activation refusal; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)',
         output_sha256=sha(args.output.read_bytes()), output_size=args.output.stat().st_size,
         custom_disp_settings=dict(menu='Extensions > DISP2 Custom', flags=['enabled','level','histogram','detailed_info'], default_flags=15, persistence='MENU.DAT optional tagged third word', visibility_groups=list(range(64)), native_base_when_info_off="DISP1 simple-page mask projected to DISP0 per mode nibble", projected_disp_mask="0x111111", outputs=["LCD","EVF"]),
         target_disp=0, lcd_native_ui='original-detailed-page',
         native_refresh_override=dict(k=1, minimum_interval_ms=0, table='0xC18E74B0', entries=16, stride=8, scope='active detailed photo page, LCD or EVF, normal UI', owner='APPLV page wrapper; override for native callback only, restore immediately on return', restore='compare-and-restore owned entries; preserve paired word and changed native values', saved_state_bytes=68),
-        lcd_level_target_hz=60, lcd_request_intervals_ms=[16, 17],
+        lcd_level_target_hz=60, evf_level_target_hz=60, lcd_request_intervals_ms=[16, 17],
+        evf_request_intervals_ms=[16, 17],
+        unified_output_pipeline=dict(entry='overlay_source_paint', first_walk='skip on LCD and EVF',
+            prepare='restore sparse pixels before native child painters on either output',
+            tail='GPU sync, revalidate active output/bank/descriptor, cached histogram, level, sparse publication',
+            output_states=2, dirty_row_limit=960, fullscreen_cache_maintenance=False,
+            native_descriptor_masks=[1], evf_source='native current buffer, size and mapping; no LCD page-object/descriptor constraints', native_descriptor_map='0xC18100AC',
+            histogram_acquisition_interval_ms=120),
         lcd_fullscreen_allocation_bytes=0, lcd_sparse_save_under=True,
         lcd_occlusion='native premultiplied RGBA source-over level',
-        lcd_visibility_mask_rules=0, evf_path='LCD shared 192x96 CPU histogram; EVF native origin and level path retained',
+        lcd_visibility_mask_rules=0, evf_path='shared 60Hz overlay pipeline and sparse cache publication; native EVF size/origin adapter',
         production_vui_source_unchanged=False, production_diagnostic_recorder=True,
         own_histogram=dict(landscape_disp_pages=[0], portrait_disp_pages=[0, 2, 3],
             landscape_requires_portrait_switch=False,
             portrait_position_follows_portrait_switch=True,
             detailed_page_callback='retained cm callback: prepare before GPU sync; cached CPU raster after GPU sync; all supported orientations',
-            landscape_box_top_down=[476, 278, 192, 96], landscape_throttle_ms=80,
+            landscape_box_top_down=[476, 278, 192, 96], landscape_throttle_ms=120,
             detailed_portrait_box_top_down=[144, 480, 192, 96],
-            sampling='original EVF disp_worker/disp_collect, 80ms attempt-start gate and 20ms poll; native 0x10456B34 only on independent worker',
+            sampling='shared disp_worker/disp_collect, 120ms attempt-start gate and 20ms poll; native 0x10456B34 only on independent worker',
             sampling_failure='keep last published private statistics packet',
             evf_histogram_box_size=[192, 96], evf_histogram_origin='checked native EVF top-left',
             shared_raster='custom_disp/histogram_raster.h', statistics_packets=3, statistics_packet_bytes=1056, statistics_total_bytes=3168,
@@ -284,7 +291,7 @@ def main():
             lcd_histogram_uses_native_bins_cache=False,
             gui_updates='on new completed packet or dirty/bank/geometry repair; unchanged packet safety repair at 150ms',
             dirty_repair_bypasses_sampling_throttle=False, dirty_repair_bypasses_draw_throttle=True,
-            landscape_stock_pages_untouched=[2, 3], portrait_throttle_ms=80,
+            landscape_stock_pages_untouched=[2, 3], portrait_throttle_ms=120,
             full_screen_cache=False, full_repaint_on_bank_change=True),
         build_defines=['VUI_DIAG_FOCUS'], layout=layout,
         native_function_checks=checks, legacy_native_function_checks=legacy_checks,
@@ -293,7 +300,7 @@ def main():
         compiler_version=subprocess.check_output([builder.CC, '-dumpfullversion'], text=True).strip(),
         limitations='Build and static checks only. Camera timing, portrait layout and wake need hardware verification.')
     (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
-    print('Firmware-unchanged L18 module sha256:', report['output_sha256'])
+    print('Firmware-unchanged L21 module sha256:', report['output_sha256'])
 
 
 if __name__ == '__main__':

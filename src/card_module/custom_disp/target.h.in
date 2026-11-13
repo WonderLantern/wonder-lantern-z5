@@ -17,16 +17,14 @@
 #define Z5_OVERLAY_CONDITION Z5_FN(u32 (*)(u32), 0x1042C00C)
 #define Z5_OVERLAY_CHECK_FUNCTIONS() @FUNCTIONS@
 #define Z5_OVERLAY_CHECK_LITERALS() @LITERALS@
-#define Z5_FULL_META_BYTES 148u
-#define Z5_FULL_META_BYTES_TEXT "148"
+#define Z5_FULL_META_BYTES 124u
+#define Z5_FULL_META_BYTES_TEXT "124"
 #define Z5_FULL_TICK (*(volatile const u32 *)0xC18EB388u)
 #define Z5_FULL_BUSY_WORD (*(volatile const u32 *)0xC18217C0u)
 #define Z5_LEVEL_CACHE_RANGE Z5_FN(void (*)(u32,u32), 0x10213886)
 #define Z5_LEVEL_INFO_TABLE ((volatile const u32 *)0x10748504u)
-#define Z5_LEVEL_TARGET_DISP 0u
-#define Z5_LCD_TARGET_DISP 0u
+#define Z5_CUSTOM_DISP_TARGET_DISP 0u
 #define Z5_HBASE_READ Z5_FN(u32 (*)(void *), 0x10456B34)
-#define Z5_HBASE_MODE (*(volatile const u8 *)0xC1886B99u)
 #define Z5_HBASE_ADD Z5_FN(u32 (*)(u32,u32), 0x10446EB4)
 #define Z5_HBASE_FIND Z5_FN(u32 (*)(u32,u32), 0x10446EB8)
 #define Z5_HBASE_REMOVE Z5_FN(u32 (*)(u32,u32), 0x10446EBC)
@@ -58,11 +56,11 @@
 #define Z5_LEVEL_GUI_POST Z5_FN(s32 (*)(u32,u32), 0x104557F4)
 
 
-#define Z5_LCD_PRESENT_SLOT (*(volatile const u8 *)@PRESENT_MAP@)
-#define Z5_LCD_PRESENT_POOL @PRESENT_POOL@
+#define Z5_PRESENT_SLOT(mask) (((volatile const u8 *)@PRESENT_MAP@)[(mask)])
+#define Z5_PRESENT_POOL @PRESENT_POOL@
 
-#define Z5_LCD_GUI_MODE (*(volatile const u32 *)@PRESENT_MODE@)
-#define Z5_LCD_GUI_LOCK (*(volatile const u32 *)@PRESENT_LOCK@)
+#define Z5_GUI_MODE (*(volatile const u32 *)@PRESENT_MODE@)
+#define Z5_GUI_LOCK (*(volatile const u32 *)@PRESENT_LOCK@)
 
-#define Z5_LCD_UI_MODE Z5_FN(u32 (*)(void), @UI_MODE_GETTER@)
+#define Z5_GUI_UI_MODE Z5_FN(u32 (*)(void), @UI_MODE_GETTER@)
 

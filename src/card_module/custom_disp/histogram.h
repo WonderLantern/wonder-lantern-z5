@@ -1,31 +1,5 @@
 /* Original CPU implementation of the checked native LCD/EVF histogram layouts.
  * No firmware code, resources or copied instructions are embedded. */
-Z5_IMAGE(custom_disp_image) static u32 histogram_information_visible(void)
-{
-    /* DISP-zero-only groups use mask one. Their payload visibility is native
-     * state, after native filtering, rather than an inferred button value. */
-    for (u32 i = 0; i < 64u; i++) {
-        u32 address = Z5_LEVEL_INFO_TABLE[i];
-        if ((address & 3u) || address < Z5_OVERLAY_RAM_LOW ||
-            address > Z5_OVERLAY_RAM_HIGH - 48u) return 0;
-        volatile const u32 *descriptor = (volatile const u32 *)address;
-        /* Normal-scene mask words are per output: descriptor[1] for LCD,
-         * descriptor[3] for EVF. Higher bits describe other shooting scenes;
-         * they do not identify different physical outputs. */
-        u32 mask = descriptor[Z5_OVERLAY_OUTPUT == Z5_CUSTOM_DISP_EVF_PASS ? 3u : 1u];
-        if (mask != 1u) continue;
-        u32 count = ((volatile const u8 *)address)[40], payload = descriptor[11];
-        if (count > 96u || (count && ((payload & 3u) || payload < Z5_OVERLAY_RAM_LOW ||
-                                   payload > Z5_OVERLAY_RAM_HIGH - count * 48u))) return 0;
-        for (u32 j = 0; j < count; j++) {
-            u32 visible = ((volatile const u8 *)payload)[j * 48u + 1u];
-            if (visible > 1u) return 0;
-            if (visible) return 1;
-        }
-    }
-    return 0;
-}
-
 Z5_IMAGE(custom_disp_image) static u32 histogram_pixel(u32 index)
 {
     u32 rgba = Z5_LEVEL_FAST_COLOR(index);
@@ -39,6 +13,10 @@ Z5_IMAGE(custom_disp_image) static void histogram_fill(u32 left, u32 top, u32 wi
     for (u32 y = top; y < top + height; y++) {
         volatile u32 *row = surface + y * level_data()->width + left;
         for (u32 x = 0; x < width; x++) row[x] = pixel;
+        level_sparse_mark(level_data()->surface, y * level_data()->width + left,
+                          level_data()->width, level_data()->height);
+        level_sparse_mark(level_data()->surface, y * level_data()->width + left + width - 1u,
+                          level_data()->width, level_data()->height);
     }
 }
 
@@ -46,7 +24,8 @@ Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conv
 static u32 histogram_paint(volatile const u32 *packet)
 {
     level_state *l = level_data();
-    level_prepare();
+    /* The shared tail callback supplied this surface after GPU sync and
+     * bank revalidation; never reopen the old independent EVF setup path. */
     if (!l->surface) { l->reason = 32; return 0; }
     u32 left = Z5_LEVEL_HIST_RECT(0), top = Z5_LEVEL_HIST_RECT(1);
     u32 right = Z5_LEVEL_HIST_RECT(2), bottom = Z5_LEVEL_HIST_RECT(3);

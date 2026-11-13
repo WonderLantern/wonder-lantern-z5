@@ -1,32 +1,35 @@
 /* Native detailed-page overlays and refresh diagnostics. */
 
 typedef struct {
-    u32 active, conflict, reason, pending, entries, installs, restores, invalidations;
+    u32 active, reason, entries, installs, restores;
     volatile u32 ready, paints, source_reason, source_busy, source_gate;
-    u32 drawing_image;
-    u32 late_frames, tail_moves, pre_passes, af_frames;
+    u32 drawing_image, drawing_bank;
+    u32 histogram_surface, histogram_sequence, histogram_tick;
+    u32 histogram_width, histogram_height, histogram_left, histogram_top;
+    u32 late_frames, tail_moves, pre_passes;
     u32 before_level;  /* retained card-module callback; no firmware patch or copied transient code */
     u32 level_next, level_fraction, level_armed;
     u32 level_start, level_frames, level_last, level_gap, level_hz, level_gap_max;
     u32 diag_start, diag_counts[4], diag_max[4], diag_rates[4], diag_costs[4];
     u32 diag_custom_ms;
     u32 walk_tick, walk_own_ms, walk_tracking, walk_delay;
-    u32 sparse_surface;
-    u16 sparse_rows[480][2];
-} lcd_state;
+    sparse_dirty sparse;
+} overlay_state;
 
-Z5_IMAGE(custom_disp_image) static lcd_state *lcd_data(void)
+Z5_IMAGE(custom_disp_image) static overlay_state *overlay_data(void)
 {
-    return (lcd_state *)disp_metadata()[33];
+    return (overlay_state *)disp_metadata()[27] + disp_output();
 }
 
 
-Z5_IMAGE(custom_disp_image) static u32 lcd_mask_reason(void)
+Z5_IMAGE(custom_disp_image) static u32 overlay_mask_reason(void)
 {
     volatile const u8 *s = (volatile const u8 *)Z5_OVERLAY_SNAPSHOT;
-    if (!Z5_CUSTOM_DISP_SHOOTING_PAGE() || Z5_CUSTOM_DISP_PRIMARY_DISPLAY != 1u ||
+    /* The page-object identity belongs to the LCD controller. The EVF used
+     * the checked shooting snapshot before the shared scheduler was added. */
+    if ((!disp_output() && !Z5_CUSTOM_DISP_SHOOTING_PAGE()) || (Z5_CUSTOM_DISP_PRIMARY_DISPLAY != 1u && Z5_CUSTOM_DISP_PRIMARY_DISPLAY != 4u) ||
         Z5_PROBE_SELECTOR != 1u ||
-        s[0x18e] != Z5_LCD_TARGET_DISP || s[0x40] || s[0x41] || s[0x196] ||
+        s[0x18e] != Z5_CUSTOM_DISP_TARGET_DISP || s[0x40] || s[0x41] || s[0x196] ||
         (s[0x197] != 0u && s[0x197] != 3u) ||
         *(volatile const u32 *)(s + 0x2e8) > 1u ||
         *(volatile const u32 *)(s + 0x2f4) ||
@@ -35,20 +38,20 @@ Z5_IMAGE(custom_disp_image) static u32 lcd_mask_reason(void)
     return 0u;
 }
 
-Z5_IMAGE(custom_disp_image) static u32 lcd_reason(void)
+Z5_IMAGE(custom_disp_image) static u32 overlay_reason(void)
 {
     /* Temporary controls pause composition without restoring fixed labels. */
-    if (Z5_LCD_UI_MODE() != 0u) return 8u;
-    return lcd_mask_reason();
+    if (!disp_output() && Z5_GUI_UI_MODE() != 0u) return 8u;
+    return overlay_mask_reason();
 }
 
 /* The original detailed page already owns its complete native UI. There are
  * no mask changes, visibility overrides, or extra whole-page invalidations. */
-Z5_IMAGE(custom_disp_image) static void lcd_update(u32 event)
+Z5_IMAGE(custom_disp_image) static void overlay_update(u32 event)
 {
-    lcd_state *s = lcd_data();
+    overlay_state *s = overlay_data();
     s->entries++;
-    u32 reason = lcd_mask_reason();
+    u32 reason = overlay_mask_reason();
     u32 desired = !reason;
     if (desired && event != 9u && !s->active) desired = 0;
     if (desired != s->active) {

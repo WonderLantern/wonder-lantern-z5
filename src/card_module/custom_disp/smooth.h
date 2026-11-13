@@ -92,7 +92,6 @@ Z5_IMAGE(custom_disp_image) static void level_flush(void)
         level_pixel *p = slot->pixels + i;
         p->drawn = level_source_over(p->under, p->drawn);
         surface[p->offset] = p->drawn;
-        if (Z5_OVERLAY_OUTPUT == 0u && Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 1u)
-            level_sparse_mark(l->surface, p->offset);
+        level_sparse_mark(l->surface, p->offset, l->width, l->height);
     }
 }

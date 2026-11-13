@@ -61,6 +61,7 @@ python3 -B tests/card_module/verify_custom_disp.py
 python3 -B tests/card_module/verify_config.py
 python3 -B tests/card_module/verify_refresh_override.py
 python3 -B tests/card_module/verify_histogram_raster.py
+python3 -B tests/card_module/verify_output_sync.py
 ```
 
 显示掩码测试还可核对自备 MAIN 的真实初始描述符，参数可重复：
@@ -88,8 +89,8 @@ python3 -B -m unittest discover -s tools/windows_packager -p 'test_*.py'
 
 ```sh
 python3 tools/windows_packager/make_update.py \
-  --repo . --version l18-custom-disp \
-  --output build/l18-custom-disp.zip
+  --repo . --version l21-custom-disp \
+  --output build/l21-custom-disp.zip
 ```
 
 该 ZIP 是数据包，包含插件、补丁数据和五个默认音效，不含生成后的尼康固件。既有上游 Windows EXE 不会自动包含本 fork 的插件；需导入本 fork 的数据包或重新构建 EXE。没有在本次任务中发布 GitHub release。

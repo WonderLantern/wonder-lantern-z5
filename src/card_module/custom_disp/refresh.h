@@ -1,9 +1,9 @@
-/* Clean LCD level: deadline requests only; no additional image cache. */
-Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2"))) static u32 lcd_level60_due(void)
+/* Shared 60 Hz request deadlines; output states have independent clocks. */
+Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2"))) static u32 overlay_refresh_due(void)
 {
-    lcd_state *s = lcd_data();
+    overlay_state *s = overlay_data();
     u32 now = Z5_FULL_TICK;
-    if (lcd_reason()) {
+    if (overlay_reason()) {
         s->level_armed = 0;
         return 0;
     }
@@ -25,11 +25,11 @@ Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conv
     return 1;
 }
 
-Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2"))) static u32 lcd_level60_sleep(void)
+Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2"))) static u32 overlay_refresh_sleep(void)
 {
-    lcd_state *s = lcd_data();
+    overlay_state *s = overlay_data();
     volatile u32 *m = disp_metadata();
-    if (!m[4] || m[3] || m[21] || !s->active || lcd_reason()) {
+    if (!m[4] || m[3] || m[20] || !s->active || overlay_reason()) {
         s->level_armed = 0;
         return 33u;
     }
@@ -38,9 +38,9 @@ Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conv
     return left <= 0 ? 1u : left > 17 ? 17u : (u32)left;
 }
 
-Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2"))) static void lcd_level60_completed(void)
+Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2"))) static void overlay_refresh_completed(void)
 {
-    lcd_state *s = lcd_data();
+    overlay_state *s = overlay_data();
     u32 now = Z5_FULL_TICK;
     if (!s->level_start) { s->level_start = s->level_last = now; return; }
     u32 gap = now - s->level_last;
