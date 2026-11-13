@@ -31,7 +31,11 @@ HERE = Path(__file__).resolve().parent
 DATA = HERE / 'patch_data' / 'patches.json'
 CARD_MODULE = HERE / 'card' / 'Z5APP.BIN'
 THIRD_PARTY = HERE / 'third_party' / 'z5mod'
-MENU_DAT = struct.pack('<II', 0x4D53355A, 1 | (1 << 8) | (5 << 16))  # on, type 1, volume 5
+# Settings file: shutter sound on, type 1, volume 5, portrait display on (bit 27). Focal length, battery percent and
+# portrait touch are on when their "off" bits (28, 29, 30) are clear.
+MENU_DAT = struct.pack('<II', 0x4D53355A, 1 | (1 << 8) | (5 << 16) | (1 << 27))
+RECORD_FILES = 20          # empty test-record files A:\Z5LOG\DIAG01.BIN .. DIAG20.BIN (the camera keeps only overwritten files)
+RECORD_SIZE = 0x40000
 
 
 def sha256(data):
@@ -143,10 +147,12 @@ def main():
         if sha256(sound) != digest:
             raise SystemExit('card/SHUTTER/%s does not match the tested file.' % name)
         write_new(args.output / 'card' / 'SHUTTER' / name, sound)
+    for i in range(1, RECORD_FILES + 1):
+        write_new(args.output / 'card' / 'Z5LOG' / ('DIAG%02d.BIN' % i), bytes(RECORD_SIZE))
     print('Built %s' % (args.output / 'EG165050.BIN'))
     print('  SHA-256 %s' % data['output_sha256'])
     print('Card files are in %s' % (args.output / 'card'))
-    print('Three test sounds are included. See README.md before flashing.')
+    print('Three test sounds and 20 empty test-record files (Z5LOG) are included. See README.md before flashing.')
 
 
 if __name__ == '__main__':

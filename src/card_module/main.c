@@ -120,7 +120,8 @@
 #define GRID_TOTAL    4u
 #define GRID_ON_FN    0x10482397u      /* stock "On" handler                      */
 #define LAYOUTS_2ROW  0x11547838u      /* row layouts of the stock 2-row grid page */
-#define SLOT_TITLE_Z  239u
+#define SLOT_TITLE_Z  238u             /* group 116: the sub views share one title slot (238) */
+#define SLOT_SAVE     239u             /* group 116: hub row "save test record" */
 #define SLOT_Z_ON     240u
 #define SLOT_Z_OFF    241u
 #define SLOT_Z_ENTRY  242u
@@ -131,6 +132,29 @@
 #define ID_Z_ENTRY    0x2FF7u
 #define ID_3X3        0x2FF8u
 #define ID_CROSS      0x2FF9u
+#define SLOT_TITLE_V  238u
+#define SLOT_V_ENTRY  245u
+#define ID_V_ON       0x2FF2u
+#define ID_V_OFF      0x2FF3u
+#define ID_V_ENTRY    0x2FF4u
+#define SLOT_TITLE_F  238u             /* group 104: focal-length switch page title (group 116: shared) */
+#define SLOT_B_ENTRY  236u             /* group 116: hub row "battery display" */
+#define SLOT_SOUND    251u             /* group 116: hub row "shutter sound" */
+#define SLOT_T_ENTRY  252u             /* group 119: hub row "portrait touch" */
+#define ID_T_ON       0x2FE7u
+#define ID_T_OFF      0x2FE8u
+#define ID_T_ENTRY    0x2FE9u
+#define ID_B_ON       0x2FECu
+#define ID_B_OFF      0x2FEDu
+#define ID_B_ENTRY    0x2FEEu
+#define ID_SAVE       0x2FEBu
+#define ID_SOUND      0x2FEAu
+#define DG_FILES      20u              /* group 116: A:\SHUTTER\DIAG01.BIN .. DIAG20.BIN */
+#define SLOT_F_ENTRY  237u
+#define ID_F_ON       0x2FEFu
+#define ID_F_OFF      0x2FF0u
+#define ID_F_ENTRY    0x2FF1u
+#define VUI_SITE      0x104A673Cu      /* B.W on the firmware with portrait hooks */
 #define PLAIN_ROW     0x1000u          /* no value column, as the stock On/Off rows */
 #define OWN_INDEX     0u
 
@@ -194,6 +218,7 @@
 
 typedef struct {
     u32 magic;
+    u32 vui_fn;             /* portrait UI entry, +4: read by firmware stubs */
     u32 orig;               /* firmware release callback                     */
     u32 image;              /* heap image base (Thumb bit clear)             */
     u32 reqs;               /* play requests raised                          */
@@ -221,6 +246,86 @@ typedef struct {
     u32 title_slot;         /* text slot of the owned page's current title   */
     u32 own_hdr;            /* owned page: shutter-sound view                */
     u32 zebra_hdr;          /* owned page: photo-zebra view                  */
+    u32 vui;                /* portrait UI switch                            */
+    u32 focal_on;           /* group 104: focal length shown for every CPU lens */
+    u32 vui_t_ori, vui_t_ui, vui_t_on;  /* group 109: layout state for the touch entry; a press mapped */
+    int vui_t_ox, vui_t_oy;             /* group 109: landscape - portrait offset of the pressed control */
+    u32 vui_t_n, vui_t_x;               /* group 109: presses mapped, presses cancelled */
+    u32 focal_hdr;          /* owned page: focal-length view                 */
+    u32 vui_state, vui_pending;   /* last layout and a pending full clear    */
+    u32 vui_sub;            /* an i-menu setting page is showing             */
+    u32 vui_half, vui_half_ms;    /* synthetic half-press in progress        */
+    u32 vui_sw[13];         /* switch snapshot passed to the firmware        */
+    u32 vui_ok_open;        /* a page was opened from the i menu with OK     */
+    u32 vui_bd_top, vui_min, vui_max;   /* setting page: top edge, option rows */
+    int vui_hl_c, vui_hl_w, vui_idx;    /* setting page: highlight, cursor     */
+    u32 vui_test;           /* only used by -DVUI_TEST_IMG3                  */
+    u32 vui_bd_h;           /* setting page: backdrop height                 */
+    u32 vui_bar_min, vui_bar_max, vui_bar_dirty, vui_band_dirty;   /* setting page: bottom bar, row moved */
+    u32 vui_evf, vui_evf_ms;   /* the viewfinder is in use                   */
+    u32 vui_zoom, vui_fit;     /* magnified view; row scaled to the screen   */
+    u32 vui_zoom_ms;           /* last time the magnified-view navigator was drawn */
+    u32 vui_fbox[32], vui_fpos;   /* last 16 focus frames drawn in place: x | y << 16, w | h << 16 */
+    u32 vui_af, vui_af_ok, vui_af_ms, vui_af_win;   /* AF-area mode, last read, end of the extra-clear window */
+    u32 vui_occ[128], vui_occ_pos;   /* last 64 moved items, native top-down: x | y << 16, w | h << 16 */
+    u32 vui_af_rep, vui_af_p;       /* redraw the page once the extra-clear window has ended; redraws done */
+    u32 vui_mv[80], vui_mv_pos;     /* last 16 moved clears: x, y-up, w, h at their own place, time */
+    u32 vui_zoom_n;                 /* -DVUI_DIAG_FOCUS: navigator recognitions */
+    u32 vui_af_cut;                 /* an extra clear in this window overlapped a moved portrait item */
+    u32 vui_pl[32], vui_pl_pos, vui_pl_n;   /* last 16 polyline boxes drawn in place: x | y << 16, w | h << 16 */
+    u32 vui_pk[3], vui_pl_rep;      /* -DVUI_DIAG_FOCUS: calls of the three path entries; clears repeated in place */
+    u32 vui_i3_n;                   /* -DVUI_DIAG_FOCUS: renderer-3 calls on the portrait shooting page */
+    u32 vui_fill_n, vui_fill_red, vui_fhit_n;   /* -DVUI_DIAG_FOCUS: fills, red fills noted, clears run in place */
+    u32 vui_bat_n;                  /* -DVUI_DIAG_FOCUS: battery icons drawn by the module (group 115) */
+    u32 vui_af_m, vui_af_n, vui_af_s;   /* -DVUI_DIAG_FOCUS counters: changes, extra clears, skipped */
+    u32 vui_drawing, vui_hist_on, vui_hist_ms, vui_hist_ori;   /* own portrait histogram */
+    int vui_hist_x, vui_hist_y;    /* where it was last drawn                   */
+    u32 vui_hist_due, vui_hist_dirty, vui_hist_nori;   /* drawn at the end of a clear's hook, unless it covers the box */
+    int vui_hist_nx, vui_hist_ny;
+    u32 vui_hist_zero;              /* group 97: all-zero readings kept back in a row */
+    u32 vui_strip, vui_strip_end;   /* group 100: quick-adjust strip (ui_mode 9) open; it has just closed */
+    u32 vui_adj;                    /* group 111: shutter/aperture/ISO adjust page (ui 11-13) open */
+    u32 vui_lk;                     /* group 111: grip kept while the i menu is open (grip | 0x100) */
+    u32 vui_bat_xy, vui_bat_k, vui_bat_st, vui_bat_pc, vui_bat_ms;   /* group 115: battery percent icon */
+    u32 bat_on;                     /* group 116: battery percent shown (MENU.DAT bit 29 = off) */
+    u32 touch_on, touch_hdr;        /* group 119: portrait touch (MENU.DAT bit 30 = off); its view */
+    u32 hub_hdr, bat_hdr, hub_rows, hub_n;   /* group 116: owned page views: hub, battery switch; hub rows */
+    u32 dg_ix;                      /* group 116: last test record: 1-20 DIAGnn.BIN, 0x80 DIAG.BIN, 0xFE failed, 0xFF full */
+    u32 vui_det;                    /* group 116: third-level setting page (whole page at 2/3) */
+    u32 vui_wk_ms, vui_wk_due;      /* group 116: last hook call; repaint due after a quiet spell (standby) */
+    u32 vui_wk_key;                 /* group 117: last key (not half-press) | 1 */
+    u32 vui_cp[6], vui_cp_ok, vui_ps[2], vui_dr_n;   /* group 117/118: drag texture copies (origin, box x0|x1) x 3, last paste */
+    u32 vui_wk_st;                  /* group 118: start-up/wake repaint: scheduled | run << 8 | key-cancelled << 16 | overdue << 24 */
+    u32 vui_wk_two;                 /* group 118: a second repaint is still to come after this one */
+    u32 vui_wk_t0, vui_bat_seen;    /* group 118: when the repaint was scheduled; last battery icon call | 1 */
+    int vui_t_bx, vui_t_by, vui_t_px;   /* group 112: setting-page touch: landscape point and portrait x at the press */
+    u32 vui_t_fit;                      /* group 112: that press was on a fit (2/3) row */
+    u32 vui_ct[3], vui_ct_ok;           /* group 112: last stock clear's arguments 4-6 (template for our own clears) */
+    u32 vui_ro, vui_ro_o, vui_ro_ms;    /* group 112: i-menu reopen: state, new grip seen | 0x100, its time */
+    u32 vui_mt[4], vui_mt_n;        /* -DVUI_DIAG_FOCUS: metering icon's placed rectangle, its draws */
+    u32 dg_ec, dg_ef;                   /* group 107: last failing create-open result, file status halfword */
+    u32 dg_buf, dg_i, dg_n, dg_ori, dg_writes, dg_res;   /* -DVUI_DIAG_FOCUS: draw-call ring and DIAG.BIN writes */
+    u32 dg_left;                    /* calls still recorded after an AF-area change; 0 with dg_frozen set: stopped */
+    u32 dg_st[14];                  /* last ui_mode, app, DISP page, orientation, zoom, switch snapshot (group 95) */
+    u32 dg_sw[9], dg_sw_ms;         /* -DVUI_DIAG_FOCUS: switch snapshot values, read every 50 ms */
+    u32 dg_wbuf, dg_w_ms, dg_w_init;   /* -DVUI_DIAG_FOCUS: wide watch copies (heap), last pass, first pass done */
+    u32 vui_vid, vui_vid_ms;        /* group 95: video mode (switch snapshot +0x7C bit 0), last read */
+    u32 vui_ff_n;                       /* group 102 readout: focal show byte set by us (VUI_FOCAL_FORCE) */
+    u32 vui_ic, vui_ic_pos, vui_ic_n;   /* group 96: kept icon image calls (heap, 64 x 0x70, group 102), draw sequence, redraws */
+    int vui_tr_dx, vui_tr_dy, vui_tr_x1, vui_tr_f;   /* group 96: last glyph's offset, end and baseline */
+    u32 vui_arm_n, vui_arm_due;     /* bracket-arm clears still to run after leaving auto-area, and when */
+    u32 dg_frozen;
+    u32 vui_tp_fn, vui_tp_n, vui_tp_i;   /* group 91 readout: touch recorder entry, presses seen, roots wrapped */
+    u32 vui_hm_saved, vui_hm[9];   /* stock histogram masks while hidden       */
+#ifdef VUI_DIAG
+    u32 vui_d_tup[4], vui_d_n, vui_d_k, vui_d_i2, vui_d_i3, vui_d_t, vui_d_h, vui_d_hs[4];   /* -DVUI_DIAG only */
+#endif
+    u32 vui_install;        /* 1 installed, >= 50 refused (why)              */
+    u32 vui_hdr;            /* owned page: portrait-UI view                  */
+    u16 hz_vui[L_HZ];
+    char en_vui[L_EN];
+    u16 hz_fl[L_HZ];
+    char en_fl[L_EN];
     u16 hz_zebra[L_HZ];
     char en_zebra[L_EN];
     u32 phase;              /* first-run progress, PH_DONE when finished     */
@@ -230,11 +335,14 @@ typedef struct {
     u32 title;              /* heap title record                             */
     char wav_path[20];      /* "A:\SHUTTER\1.WAV"                            */
     char cfg_path[24];      /* "A:\SHUTTER\MENU.DAT"                         */
+    char dg_path[24];       /* "A:\SHUTTER\DIAG.BIN" (-DVUI_DIAG_FOCUS)      */
     char en[NROWS + 1][L_EN];
     u16 hz[NROWS + 1][L_HZ];
     char en_on[4], en_off[4], en_bad[4], en_done[8], en_fail[12];
     u16 hz_on[2], hz_off[2], hz_bad[4], hz_done[4], hz_fail[4];
     char text[TEXT_CHARS * 2];   /* MY MENU diagnostics line (UTF-16)        */
+    u32 vui_mtd;                    /* group 90: heap block, 4 kept image calls (metering x2, battery x2) */
+    u32 vui_mtd_ok, vui_mtd_go, vui_mtd_due, vui_mtd_pg, vui_mtd_n, vui_bat_go;
 } cm_t;
 
 typedef signed short s16;
@@ -365,6 +473,20 @@ IMG_FN static void zero_words(u32 *p, u32 words)
     for (u32 i = 0; i < words; i++) p[i] = 0;
 }
 
+#define DG_SIZE    0x40000u            /* -DVUI_DIAG_FOCUS: DIAG.BIN image (group 87: 256 KiB) */
+#ifndef DG_POST
+#define DG_POST    3000u               /* records kept after a trigger before the ring freezes */
+#endif
+#define DG_MAGIC   0x4744355Au         /* 'Z5DG' */
+#define DG_EV_OFF  0x1000u
+#define DG_EV_SIZE 48u
+#define DG_TE_OFF  (DG_SIZE - 0x1000u)  /* group 92: touch events, 256 x 16 bytes, count at 0xDF8 */
+#define DG_WL_OFF  (DG_SIZE - 0x3000u)  /* group 95: wide watch log, 512 x 16 bytes, count at 0xDF4 */
+#define DG_KR_OFF  (DG_WL_OFF - 0x2000u)  /* group 106: key/touch ring, 128 x 64 bytes, count at 0xDF0 */
+#define DG_EV_CAP  ((DG_KR_OFF - DG_EV_OFF) / DG_EV_SIZE)
+#define DG_AFAREA  0xC1819D28u         /* AF_AREA task state */
+#define DG_LAYERS  0xC1D61388u         /* GUI layer enables, LCD (0xC1D61160 + 0x228) */
+
 /* Write MENU.DAT: magic, on | type << 8 | vol << 16. */
 IMG_FN static void save_cfg(cm_t *c)
 {
@@ -383,7 +505,10 @@ IMG_FN static void save_cfg(cm_t *c)
     FW(close_fn, FW_CLOSE)(f);
     zero_words(f, 16);
     data[0] = CFG_MAGIC;
-    data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26);
+    data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26) | (c->vui << 27) |
+              ((c->focal_on ? 0u : 1u) << 28) |  /* group 104: bit 28 = focal display off */
+              ((c->bat_on ? 0u : 1u) << 29) |    /* group 116: bit 29 = battery display off */
+              ((c->touch_on ? 0u : 1u) << 30);   /* group 119: bit 30 = portrait touch off */
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     c->stage = 10u;
     if ((u32)FW(open_fn, FW_OPEN)(f, FS_CREATE, 0) != FS_OPEN_OK) {
@@ -395,6 +520,118 @@ IMG_FN static void save_cfg(cm_t *c)
     if (out == sizeof(data)) c->saves += 1u;
     else c->save_err += 1u;
 }
+
+#ifdef VUI_DIAG_FOCUS
+/* Write the recorder image to A:\SHUTTER\DIAG.BIN; like MENU.DAT, only an existing file is overwritten. */
+IMG_FN static void diag_write(cm_t *c)
+{
+    u32 f[16], out = 0u, i, n;
+    u32 *b = (u32 *)c->dg_buf;
+    if (!b) { c->dg_res = 4u; return; }
+    b[0] = DG_MAGIC; b[1] = 1u; b[2] = sizeof(cm_t); b[3] = c->dg_i; b[4] = c->dg_n;
+    b[5] = *(volatile u32 *)CM_MS_CLOCK; b[6] = c->dg_writes + 1u; b[7] = DG_EV_OFF; b[8] = DG_EV_SIZE;
+    b[9] = DG_EV_CAP; b[10] = 0x200u; b[11] = 0xC00u; b[12] = 0xD00u;
+    n = sizeof(cm_t) < 0xA00u ? sizeof(cm_t) : 0xA00u;
+    for (i = 0; i < n / 4u; i++) b[0x200u / 4u + i] = ((const u32 *)c)[i];
+    for (i = 0; i < 0x80u / 4u; i++) b[0xC00u / 4u + i] = ((const volatile u32 *)DG_AFAREA)[i];
+    for (i = 0; i < 0x14u / 4u; i++) b[0xC80u / 4u + i] = ((const volatile u32 *)DG_LAYERS)[i];
+    b[13] = c->dg_frozen; b[14] = c->dg_left;
+    b[15] = 119u;                              /* group 116: module group that wrote this record */
+    {   /* group 106: firmware words at the two touch entries, hook calls per kind, header 0x40-0x8F */
+        u32 *q = b + 0x40u / 4u;
+        q[0] = 0x4B4F4F48u;                    /* 'HOOK' */
+        q[1] = *(const volatile u32 *)0x102BFAFCu; q[2] = *(const volatile u32 *)0x1049BD44u;
+        /* q[4]..q[23] (0x50-0x9F): hook calls per kind, counted in place (group 112) */
+        q[24] = *(const volatile u32 *)0x103B4F4Eu; q[25] = *(const volatile u32 *)0x1036C7E8u;   /* group 108, 0xA0 */
+    }
+    {   /* group 104: touch page state at write time, header 0xC0-0xFF */
+        u32 *q = b + 0xC0u / 4u;
+        q[0] = 0x50484354u;                    /* 'TCHP' */
+        q[1] = *(volatile u32 *)(0xC2071154u + 0x24u); q[2] = *(volatile u32 *)(0xC2071154u + 0x0Cu);
+        q[3] = c->vui_tp_i; q[4] = c->vui_tp_n;
+        for (i = 0; i < 11u; i++) q[5u + i] = ((const volatile u32 *)0xC2071154u)[i];
+    }
+    {   /* group 101: focal-length widget 0x3C (descriptor, show flags) and the focal words, header 0x100-0x1DF */
+        u32 *q = b + 0x100u / 4u, dsc = *(const u32 *)(0x10748504u + 0x3Cu * 4u), el = 0u, n = 0u;
+        for (i = 0; i < 0xE0u / 4u; i++) q[i] = 0u;
+        q[0] = 0x4C434F46u;                    /* 'FOCL' */
+        q[1] = *(volatile u32 *)0xC2028608u;
+        q[2] = *(volatile u32 *)0xC2028D78u; q[3] = *(volatile u32 *)0xC2028D7Cu; q[4] = *(volatile u32 *)0xC2028D80u;
+        q[5] = dsc;
+        if (dsc >= 0xC0000000u && dsc < 0xCFFFFF00u && !(dsc & 3u)) {
+            for (i = 0; i < 0x30u / 4u; i++) q[8u + i] = ((const volatile u32 *)dsc)[i];
+            n = *(const volatile u8 *)(dsc + 0x28u);
+            el = *(const volatile u32 *)(dsc + 0x2Cu);
+            if (el >= 0xC0000000u && el < 0xCFFFFF00u && !(el & 3u)) {
+                u32 m = n < 3u ? n : 3u;
+                for (i = 0; i < m * 12u; i++) q[20u + i] = ((const volatile u32 *)el)[i];
+            }
+        }
+        q[6] = el; q[7] = n;
+        q[56] = 0x32303146u;                   /* 'F102', header 0x1E0 */
+        q[57] = c->vui_ff_n;                   /* group 102: times the show byte was set by the module */
+        q[58] = c->vui_cp[0]; q[59] = c->vui_cp[1]; q[60] = c->vui_cp[2]; q[61] = c->vui_cp[3];   /* group 117, 0x1E8 */
+        q[62] = c->vui_ps[0]; q[63] = c->vui_ps[1];
+    }
+    {   /* group 115: battery block 0xC2370E44 (charge at +0x18), header 0xCA0-0xCFF */
+        u32 *q = b + 0xCA0u / 4u;
+        q[0] = 0x54544142u;                    /* 'BATT' */
+        q[1] = 0xC2370E44u; q[2] = c->vui_bat_n; q[3] = c->vui_bat_pc; q[4] = c->vui_bat_k; q[5] = c->vui_bat_xy;
+        for (i = 0; i < 0x38u / 4u; i++) q[6u + i] = ((const volatile u32 *)0xC2370E44u)[i];
+        q[20] = c->vui_cp[4]; q[21] = c->vui_cp[5];   /* group 118, 0xCF0: third drag copy */
+        q[22] = c->vui_wk_st; q[23] = c->vui_dr_n;    /* 0xCF8: repaint counters, module drag pastes */
+    }
+    {   /* the card driver reads RAM: write the cached lines back first (third capture: header lost) */
+        u32 a = (u32)b, e = (u32)b + DG_SIZE;
+        for (a &= ~31u; a < e; a += 32u) __asm__ volatile ("mcr p15, 0, %0, c7, c10, 1" :: "r"(a) : "memory");
+        __asm__ volatile ("dsb sy" ::: "memory");
+    }
+    zero_words(f, 16);
+    FW(bind_fn, FW_BIND)(f, c->dg_path);
+    if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) != FS_OPEN_OK) { c->dg_res = 1u; return; }
+    FW(close_fn, FW_CLOSE)(f);
+    zero_words(f, 16);
+    FW(bind_fn, FW_BIND)(f, c->dg_path);
+    {   /* group 107: keep the error, then one more try with a fresh file object */
+        u32 rc = (u32)FW(open_fn, FW_OPEN)(f, FS_CREATE, 0);
+        if (rc != FS_OPEN_OK) {
+            c->dg_ec = rc; c->dg_ef = f[1] & 0xFFFFu;
+            FW(close_fn, FW_CLOSE)(f);
+            zero_words(f, 16);
+            FW(bind_fn, FW_BIND)(f, c->dg_path);
+            if ((u32)FW(open_fn, FW_OPEN)(f, FS_CREATE, 0) != FS_OPEN_OK) { c->dg_res = 2u; return; }
+        }
+    }
+#ifdef VUI_DIAG_RAMDUMP
+    {   /* group 104/105 probe: two RAM blocks for the focus-distance search, over the draw-call ring; copied only
+           after the file is open (camera: R2 when copied before), then the cache is left as it was found */
+        u32 *q = b + 0x1E8u / 4u, a;
+        q[0] = 0x444D4152u;                    /* 'RAMD' */
+        q[1] = 0xC2018000u; q[2] = 0x18000u; q[3] = 0xC1810000u; q[4] = 0x20000u; q[5] = 0x1C000u;
+        for (i = 0; i < 0x18000u / 4u; i++) b[0x4000u / 4u + i] = ((const volatile u32 *)0xC2018000u)[i];
+        for (i = 0; i < 0x20000u / 4u; i++) b[0x1C000u / 4u + i] = ((const volatile u32 *)0xC1810000u)[i];
+        b[3] = 0u; b[4] = 0u;                  /* no draw-call records in this image */
+        for (a = 0xC2018000u; a < 0xC2030000u; a += 32u) __asm__ volatile ("mcr p15, 0, %0, c7, c14, 1" :: "r"(a) : "memory");
+        for (a = 0xC1810000u; a < 0xC1830000u; a += 32u) __asm__ volatile ("mcr p15, 0, %0, c7, c14, 1" :: "r"(a) : "memory");
+        for (a = (u32)b & ~31u; a < (u32)b + DG_SIZE; a += 32u) __asm__ volatile ("mcr p15, 0, %0, c7, c10, 1" :: "r"(a) : "memory");
+        __asm__ volatile ("dsb sy" ::: "memory");
+    }
+#endif
+    {   /* group 107: 512 bytes per call, the largest transfer the FS accepts (SDK fs.c) */
+        u32 off, got;
+        for (off = 0; off < DG_SIZE; off += 512u) {
+            got = 0u;
+            FW(write_fn, FW_WRITE)(f[2], (const u8 *)b + off, 512u, &got);
+            if (got != 512u) break;
+            out += got;
+        }
+    }
+    FW(close_fn, FW_CLOSE)(f);
+    c->dg_writes++;
+    c->dg_res = out == DG_SIZE ? 0u : 3u;
+    c->dg_frozen = 0u; c->dg_left = 0u;     /* recording resumes for the next test */
+}
+#endif
 
 /* Swap a new clip into the running SDK audio task; frees the old buffer. */
 IMG_FN static u32 audio_swap(u32 buf, u32 len)
@@ -495,7 +732,8 @@ IMG_FN static u32 cfg_load(cm_t *c)
     u32 state = 1u;
     zero_words(f, 16);
     data[0] = 0; data[1] = 0;
-    c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u;
+    c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u; c->vui = 0u; c->focal_on = 1u;
+    c->bat_on = 1u; c->touch_on = 1u;
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) == FS_OPEN_OK) {
         FW(readat_fn, FW_READAT)(f, data, 0, 8u);
@@ -510,6 +748,10 @@ IMG_FN static u32 cfg_load(cm_t *c)
         if (vol >= 1u && vol <= 5u) c->vol = vol;
         if (((data[1] >> 24) & 3u) <= STYLE_CROSS) c->grid = (data[1] >> 24) & 3u;
         c->zebra = (data[1] >> 26) & 1u;
+        c->vui = (data[1] >> 27) & 1u;
+        c->focal_on = !((data[1] >> 28) & 1u);
+        c->bat_on = !((data[1] >> 29) & 1u);   /* group 116 */
+        c->touch_on = !((data[1] >> 30) & 1u); /* group 119 */
     }
     return state;
 }
@@ -540,6 +782,9 @@ IMG_FN static u32 title_cb(u32 page, u32 a1, u32 a2, u32 a3)
     return result;
 }
 
+IMG_FN static void hub_labels(cm_t *c);
+IMG_FN static void hub_open(cm_t *c);
+
 IMG_FN static u32 entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
@@ -553,6 +798,8 @@ IMG_FN static u32 entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     if (!c->len) c->err = load_clip(c);        /* the start-up load may have failed */
     c->reload = 0;
     refresh_labels(c);
+    hub_labels(c);
+    if (c->hub_hdr) { hub_open(c); return 0; }   /* group 116: the hub */
     c->title_slot = TITLE_SLOT;
     ((volatile u32 *)PAGE0)[10] = c->own_hdr;
     FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
@@ -656,6 +903,32 @@ IMG_FN static void fx_apply(cm_t *c)
     }
 }
 
+/* Group 116: a sub view's title in the shared slot: the row text up to its colon. */
+IMG_FN static void sub_title(cm_t *c, const u16 *hz, const char *en)
+{
+    u32 n = 0;
+    if (c->hans) {
+        u16 b[12];
+        while (n < L_HZ && hz[n] && hz[n] != 0xFF1Au && hz[n] != ':') { b[n] = hz[n]; n++; }
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_TITLE_V, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[24];
+        while (n < L_EN && en[n] && en[n] != ':') { b[n] = en[n]; n++; }
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_TITLE_V, 0u);
+    }
+}
+
+IMG_FN static void hub_open(cm_t *c)
+{
+    if (!c->hub_hdr) return;
+    c->title_slot = TITLE_SLOT;                /* "扩展功能", as the SETUP row */
+    ((volatile u32 *)PAGE0)[10] = c->hub_hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+}
+
 /* SETUP row text: "photo zebra: on/off". */
 IMG_FN static void zebra_label(cm_t *c)
 {
@@ -683,6 +956,7 @@ IMG_FN static u32 zebra_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
     if (!c || !c->zebra_hdr) return 0;
+    sub_title(c, c->hz_zebra, c->en_zebra);    /* group 116 */
     c->title_slot = SLOT_TITLE_Z;
     ((volatile u32 *)PAGE0)[10] = c->zebra_hdr;
     FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
@@ -697,6 +971,7 @@ IMG_FN static u32 zebra_set(u32 on)
         fx_apply(c);
         zebra_label(c);
         save_cfg(c);
+        hub_open(c);                           /* group 116: back to the hub */
     }
     return 0;
 }
@@ -712,6 +987,396 @@ IMG_FN static u32 zebra_off_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     (void)a0; (void)a1; (void)a2; (void)a3;
     return zebra_set(0u);
 }
+
+/* SETUP row text: "portrait display: on/off". */
+IMG_FN static void vui_label(cm_t *c)
+{
+    u32 n = 0, i;
+    if (c->hans) {
+        u16 b[12];
+        const u16 *v = c->vui ? c->hz_on : c->hz_off;
+        for (i = 0; i < L_HZ && c->hz_vui[i]; i++) b[n++] = c->hz_vui[i];
+        for (i = 0; i < 2 && v[i]; i++) b[n++] = v[i];
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_V_ENTRY, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[28];
+        const char *v = c->vui ? c->en_on : c->en_off;
+        for (i = 0; i < L_EN && c->en_vui[i]; i++) b[n++] = c->en_vui[i];
+        for (i = 0; i < 4 && v[i]; i++) b[n++] = v[i];
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_V_ENTRY, 0u);
+    }
+}
+
+IMG_FN static u32 vui_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !c->vui_hdr) return 0;
+    sub_title(c, c->hz_vui, c->en_vui);        /* group 116 */
+    c->title_slot = SLOT_TITLE_V;
+    ((volatile u32 *)PAGE0)[10] = c->vui_hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+    return 0;
+}
+
+IMG_FN static u32 vui_set(u32 on)
+{
+    cm_t *c = cm_get();
+    if (c) {
+        c->vui = on;
+        vui_label(c);
+        save_cfg(c);
+        hub_open(c);                           /* group 116 */
+    }
+    return 0;
+}
+
+IMG_FN static u32 vui_on_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    return vui_set(1u);
+}
+
+IMG_FN static u32 vui_off_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    return vui_set(0u);
+}
+
+/* Group 104: SETUP row text "focal length: on/off" and its page, like the portrait switch. */
+IMG_FN static void focal_label(cm_t *c)
+{
+    u32 n = 0, i;
+    if (c->hans) {
+        u16 b[12];
+        const u16 *v = c->focal_on ? c->hz_on : c->hz_off;
+        for (i = 0; i < L_HZ && c->hz_fl[i]; i++) b[n++] = c->hz_fl[i];
+        for (i = 0; i < 2 && v[i]; i++) b[n++] = v[i];
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_F_ENTRY, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[28];
+        const char *v = c->focal_on ? c->en_on : c->en_off;
+        for (i = 0; i < L_EN && c->en_fl[i]; i++) b[n++] = c->en_fl[i];
+        for (i = 0; i < 4 && v[i]; i++) b[n++] = v[i];
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_F_ENTRY, 0u);
+    }
+}
+
+IMG_FN static u32 focal_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !c->focal_hdr) return 0;
+    sub_title(c, c->hz_fl, c->en_fl);          /* group 116 */
+    c->title_slot = SLOT_TITLE_F;
+    ((volatile u32 *)PAGE0)[10] = c->focal_hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+    return 0;
+}
+
+IMG_FN static u32 focal_set(u32 on)
+{
+    cm_t *c = cm_get();
+    if (c) {
+        c->focal_on = on;
+        focal_label(c);
+        save_cfg(c);
+        hub_open(c);                           /* group 116 */
+    }
+    return 0;
+}
+
+IMG_FN static u32 focal_on_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    return focal_set(1u);
+}
+
+IMG_FN static u32 focal_off_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    return focal_set(0u);
+}
+
+/* Group 116: labels built from character constants (string literals are not in the copied image). */
+IMG_FN static void hz_put(u16 *b, u32 *n, u32 ch) { b[(*n)++] = (u16)ch; }
+IMG_FN static void en_put(char *b, u32 *n, u32 ch) { b[(*n)++] = (char)ch; }
+
+IMG_FN static void bat_label(cm_t *c)          /* "电量显示：开/关" */
+{
+    u32 n = 0;
+    if (c->hans) {
+        u16 b[12];
+        hz_put(b, &n, 0x7535u); hz_put(b, &n, 0x91CFu); hz_put(b, &n, 0x663Eu); hz_put(b, &n, 0x793Au);
+        hz_put(b, &n, 0xFF1Au); hz_put(b, &n, c->bat_on ? 0x5F00u : 0x5173u);
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_B_ENTRY, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[20];
+        en_put(b, &n, 'B'); en_put(b, &n, 'a'); en_put(b, &n, 't'); en_put(b, &n, 't'); en_put(b, &n, 'e');
+        en_put(b, &n, 'r'); en_put(b, &n, 'y'); en_put(b, &n, ' '); en_put(b, &n, '%'); en_put(b, &n, ':');
+        en_put(b, &n, ' ');
+        if (c->bat_on) { en_put(b, &n, 'O'); en_put(b, &n, 'n'); }
+        else { en_put(b, &n, 'O'); en_put(b, &n, 'f'); en_put(b, &n, 'f'); }
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_B_ENTRY, 0u);
+    }
+}
+
+IMG_FN static void sound_label(cm_t *c)        /* hub row: the shutter-sound row's text up to its colon */
+{
+    u32 n = 0;
+    if (c->hans) {
+        u16 b[12];
+        while (n < L_HZ && c->hz[R_ONOFF][n] && c->hz[R_ONOFF][n] != 0xFF1Au) { b[n] = c->hz[R_ONOFF][n]; n++; }
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_SOUND, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[24];
+        while (n < L_EN && c->en[R_ONOFF][n] && c->en[R_ONOFF][n] != ':') { b[n] = c->en[R_ONOFF][n]; n++; }
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_SOUND, 0u);
+    }
+}
+
+#ifdef VUI_DIAG_FOCUS
+IMG_FN static void save_label(cm_t *c)         /* "保存测试记录" [：已存 NN / ：已满 / ：失败] */
+{
+    u32 n = 0, ix = c->dg_ix, t = 0;
+    if (ix >= 1u && ix <= DG_FILES) while (ix >= 10u) { ix -= 10u; t++; }
+    if (c->hans) {
+        u16 b[16];
+        hz_put(b, &n, 0x4FDDu); hz_put(b, &n, 0x5B58u); hz_put(b, &n, 0x6D4Bu); hz_put(b, &n, 0x8BD5u);
+        hz_put(b, &n, 0x8BB0u); hz_put(b, &n, 0x5F55u);
+        if (c->dg_ix) hz_put(b, &n, 0xFF1Au);
+        if (c->dg_ix >= 1u && c->dg_ix <= DG_FILES) {
+            hz_put(b, &n, 0x5DF2u); hz_put(b, &n, 0x5B58u); hz_put(b, &n, ' ');
+            hz_put(b, &n, '0' + t); hz_put(b, &n, '0' + ix);
+        } else if (c->dg_ix == 0x80u) { hz_put(b, &n, 0x5DF2u); hz_put(b, &n, 0x5B58u); }
+        else if (c->dg_ix == 0xFFu) { hz_put(b, &n, 0x5DF2u); hz_put(b, &n, 0x6EE1u); }
+        else if (c->dg_ix == 0xFEu) { hz_put(b, &n, 0x5931u); hz_put(b, &n, 0x8D25u); }
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_SAVE, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[28];
+        en_put(b, &n, 'S'); en_put(b, &n, 'a'); en_put(b, &n, 'v'); en_put(b, &n, 'e'); en_put(b, &n, ' ');
+        en_put(b, &n, 'l'); en_put(b, &n, 'o'); en_put(b, &n, 'g');
+        if (c->dg_ix) { en_put(b, &n, ':'); en_put(b, &n, ' '); }
+        if (c->dg_ix >= 1u && c->dg_ix <= DG_FILES) { en_put(b, &n, '0' + t); en_put(b, &n, '0' + ix); }
+        else if (c->dg_ix == 0x80u) { en_put(b, &n, 'O'); en_put(b, &n, 'K'); }
+        else if (c->dg_ix == 0xFFu) { en_put(b, &n, 'f'); en_put(b, &n, 'u'); en_put(b, &n, 'l'); en_put(b, &n, 'l'); }
+        else if (c->dg_ix == 0xFEu) { en_put(b, &n, 'f'); en_put(b, &n, 'a'); en_put(b, &n, 'i'); en_put(b, &n, 'l'); }
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_SAVE, 0u);
+    }
+}
+
+/* Group 117: "A:\Z5LOG\DIAGnn.BIN" (folder 0) or "A:\SHUTTER\DIAGnn.BIN" (folder 1); i = 0 gives DIAG.BIN.
+   Characters one by one: string literals are not in the copied image. */
+IMG_FN static void dg_name(char *p, u32 shutter, u32 i)
+{
+    u32 n = 0, t = 0;
+    p[n++] = 'A'; p[n++] = ':'; p[n++] = '\\';
+    if (shutter) { p[n++] = 'S'; p[n++] = 'H'; p[n++] = 'U'; p[n++] = 'T'; p[n++] = 'T'; p[n++] = 'E'; p[n++] = 'R'; }
+    else { p[n++] = 'Z'; p[n++] = '5'; p[n++] = 'L'; p[n++] = 'O'; p[n++] = 'G'; }
+    p[n++] = '\\'; p[n++] = 'D'; p[n++] = 'I'; p[n++] = 'A'; p[n++] = 'G';
+    if (i) {
+        while (i >= 10u) { i -= 10u; t++; }
+        p[n++] = (char)('0' + t); p[n++] = (char)('0' + i);
+    }
+    p[n++] = '.'; p[n++] = 'B'; p[n++] = 'I'; p[n++] = 'N'; p[n] = 0;
+}
+
+/* Group 116/117: the record goes to the first DIAGnn.BIN that does not hold one yet: A:\Z5LOG first, then
+   A:\SHUTTER (group 116 cards); a folder whose DIAG01.BIN is missing is skipped. Without numbered files, the old
+   A:\SHUTTER\DIAG.BIN. */
+IMG_FN static void diag_save(cm_t *c)
+{
+    u32 f[16], w0, i, s;
+    char *p = c->dg_path;
+    for (s = 0u; s < 2u; s++) {
+        for (i = 1u; i <= DG_FILES; i++) {
+            dg_name(p, s, i);
+            zero_words(f, 16);
+            FW(bind_fn, FW_BIND)(f, p);
+            if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) != FS_OPEN_OK) break;
+            w0 = 0u;
+            FW(readat_fn, FW_READAT)(f, &w0, 0, 4u);
+            FW(close_fn, FW_CLOSE)(f);
+            if (w0 != DG_MAGIC) {
+                diag_write(c);
+                c->dg_ix = c->dg_res ? 0xFEu : i;
+                return;
+            }
+        }
+        if (i > 1u) { c->dg_ix = 0xFFu; return; }   /* this folder has the files and all hold records: full */
+    }
+    dg_name(p, 1u, 0u);                        /* no numbered files on this card: the old single file */
+    diag_write(c);
+    c->dg_ix = c->dg_res ? 0xFEu : 0x80u;
+}
+
+IMG_FN static u32 save_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c) return 0;
+    diag_save(c);
+    save_label(c);
+    hub_open(c);
+    return 0;
+}
+#endif
+
+IMG_FN static u32 bat_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !c->bat_hdr) return 0;
+    if (c->hans) {
+        u16 b[6];
+        u32 n = 0;
+        hz_put(b, &n, 0x7535u); hz_put(b, &n, 0x91CFu); hz_put(b, &n, 0x663Eu); hz_put(b, &n, 0x793Au);
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_TITLE_V, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[12];
+        u32 n = 0;
+        en_put(b, &n, 'B'); en_put(b, &n, 'a'); en_put(b, &n, 't'); en_put(b, &n, 't'); en_put(b, &n, 'e');
+        en_put(b, &n, 'r'); en_put(b, &n, 'y'); en_put(b, &n, ' '); en_put(b, &n, '%');
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_TITLE_V, 0u);
+    }
+    c->title_slot = SLOT_TITLE_V;
+    ((volatile u32 *)PAGE0)[10] = c->bat_hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+    return 0;
+}
+
+IMG_FN static u32 bat_set(u32 on)
+{
+    cm_t *c = cm_get();
+    if (c) {
+        c->bat_on = on;
+        c->vui_bat_k = 0u;                     /* the stock icon comes back on its next redraw */
+        bat_label(c);
+        save_cfg(c);
+        hub_open(c);
+    }
+    return 0;
+}
+
+IMG_FN static u32 bat_on_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return bat_set(1u); }
+IMG_FN static u32 bat_off_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return bat_set(0u); }
+
+/* Group 119: "竖拍触控：开/关". */
+IMG_FN static void touch_label(cm_t *c)
+{
+    u32 n = 0;
+    if (c->hans) {
+        u16 b[10];
+        hz_put(b, &n, 0x7ad6u); hz_put(b, &n, 0x62cdu); hz_put(b, &n, 0x89e6u); hz_put(b, &n, 0x63a7u);
+        hz_put(b, &n, 0xFF1Au); hz_put(b, &n, c->touch_on ? 0x5F00u : 0x5173u);
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_T_ENTRY, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[24];
+        en_put(b, &n, 'P'); en_put(b, &n, 'o'); en_put(b, &n, 'r'); en_put(b, &n, 't'); en_put(b, &n, 'r');
+        en_put(b, &n, 'a'); en_put(b, &n, 'i'); en_put(b, &n, 't'); en_put(b, &n, ' '); en_put(b, &n, 't');
+        en_put(b, &n, 'o'); en_put(b, &n, 'u'); en_put(b, &n, 'c'); en_put(b, &n, 'h'); en_put(b, &n, ':');
+        en_put(b, &n, ' ');
+        if (c->touch_on) { en_put(b, &n, 'O'); en_put(b, &n, 'n'); }
+        else { en_put(b, &n, 'O'); en_put(b, &n, 'f'); en_put(b, &n, 'f'); }
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_T_ENTRY, 0u);
+    }
+}
+
+IMG_FN static u32 touch_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !c->touch_hdr) return 0;
+    if (c->hans) {
+        u16 b[6];
+        u32 n = 0;
+        hz_put(b, &n, 0x7ad6u); hz_put(b, &n, 0x62cdu); hz_put(b, &n, 0x89e6u); hz_put(b, &n, 0x63a7u);
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, SLOT_TITLE_V, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[16];
+        u32 n = 0;
+        en_put(b, &n, 'P'); en_put(b, &n, 'o'); en_put(b, &n, 'r'); en_put(b, &n, 't'); en_put(b, &n, 'r');
+        en_put(b, &n, 'a'); en_put(b, &n, 'i'); en_put(b, &n, 't'); en_put(b, &n, ' '); en_put(b, &n, 't');
+        en_put(b, &n, 'o'); en_put(b, &n, 'u'); en_put(b, &n, 'c'); en_put(b, &n, 'h');
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, SLOT_TITLE_V, 0u);
+    }
+    c->title_slot = SLOT_TITLE_V;
+    ((volatile u32 *)PAGE0)[10] = c->touch_hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+    return 0;
+}
+
+IMG_FN static u32 touch_set(u32 on)
+{
+    cm_t *c = cm_get();
+    if (c) {
+        c->touch_on = on;
+        touch_label(c);
+        save_cfg(c);
+        hub_open(c);
+    }
+    return 0;
+}
+
+IMG_FN static u32 touch_on_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return touch_set(1u); }
+IMG_FN static u32 touch_off_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return touch_set(0u); }
+
+IMG_FN static u32 sound_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c) return 0;
+    sub_title(c, c->hz[R_ONOFF], c->en[R_ONOFF]);
+    c->title_slot = SLOT_TITLE_V;
+    ((volatile u32 *)PAGE0)[10] = c->own_hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+    return 0;
+}
+
+/* Group 116: every hub label, and the hub rows' label kind for the current language. */
+IMG_FN static void hub_labels(cm_t *c)
+{
+    u32 k, kind = c->hans ? F_UTF16 : F_ASCII;
+    for (k = 0; c->hub_rows && k < c->hub_n; k++) {
+        volatile u32 *r = (volatile u32 *)(c->hub_rows + k * ROW_SIZE);
+        r[4] = (r[4] & ~(F_ASCII | F_UTF16)) | kind;
+    }
+    sound_label(c);
+    if (c->zebra_hdr) zebra_label(c);
+    if (c->vui_hdr) vui_label(c);
+    if (c->focal_hdr) focal_label(c);
+    if (c->bat_hdr) bat_label(c);
+    if (c->touch_hdr) touch_label(c);          /* group 119 */
+#ifdef VUI_DIAG_FOCUS
+    save_label(c);
+#endif
+}
+
+#include "vui_card.inc"   /* research/vertical-ui/vui_card.inc in the development tree */
 
 /* Grid rows: choose the style, then let the stock "On" handler turn the grid on. */
 IMG_FN static u32 grid_pick(u32 style, u32 a0, u32 a1, u32 a2, u32 a3)
@@ -756,11 +1421,30 @@ static void init_strings(cm_t *c)
 {
     copy_str(c->wav_path, sizeof(c->wav_path), "A:\\SHUTTER\\1.WAV");
     copy_str(c->cfg_path, sizeof(c->cfg_path), "A:\\SHUTTER\\MENU.DAT");
+    if (!c->vui_mtd) {                         /* group 90: kept image calls for the portrait redraws */
+        u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(4u * 0x5Cu + 64u, 0);   /* group 96: + 64 histogram heights */
+        if (b) { u32 i; for (i = 0; i < (4u * 0x5Cu + 64u) / 4u; i++) b[i] = 0u; c->vui_mtd = (u32)b; }
+    }
+    if (!c->vui_ic) {                          /* group 96: kept icon image calls */
+        u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(64u * 0x70u, 0);
+        if (b) { u32 i; for (i = 0; i < 64u * 0x70u / 4u; i++) b[i] = 0u; c->vui_ic = (u32)b; }
+    }
+#ifdef VUI_DIAG_FOCUS
+    copy_str(c->dg_path, sizeof(c->dg_path), "A:\\SHUTTER\\DIAG.BIN");   /* group 116: diag_save names DIAGnn.BIN */
+    if (!c->dg_buf) {                          /* 64 KiB ring for the draw-call recorder */
+        u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(DG_SIZE, 0);
+        if (b) { u32 i; for (i = 0; i < DG_SIZE / 4u; i++) b[i] = 0u; c->dg_buf = (u32)b; }
+    }
+    if (!c->dg_wbuf) {                         /* group 95: wide watch copies and counts */
+        u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(0xE00u, 0);   /* group 101: 680 words + 680 counts */
+        if (b) { u32 i; for (i = 0; i < 0xE00u / 4u; i++) b[i] = 0u; c->dg_wbuf = (u32)b; }
+    }
+#endif
     copy_str(c->en[R_ONOFF], L_EN, "Shutter sound: ");
     copy_str(c->en[R_TYPE], L_EN, "Type: ");
     copy_str(c->en[R_VOL], L_EN, "Volume: ");
     copy_str(c->en[R_RELOAD], L_EN, "Reload");
-    copy_str(c->en[R_ENTRY], L_EN, "Shutter sound");
+    copy_str(c->en[R_ENTRY], L_EN, "Extensions");
     copy_str(c->en_zebra, L_EN, "Photo zebra: ");
     copy_str(c->en_on, sizeof(c->en_on), "On");
     copy_str(c->en_off, sizeof(c->en_off), "Off");
@@ -771,8 +1455,12 @@ static void init_strings(cm_t *c)
     copy_u16(c->hz[R_TYPE], L_HZ, (const u16 *)u"类型：");
     copy_u16(c->hz[R_VOL], L_HZ, (const u16 *)u"音量：");
     copy_u16(c->hz[R_RELOAD], L_HZ, (const u16 *)u"重新载入");
-    copy_u16(c->hz[R_ENTRY], L_HZ, (const u16 *)u"快门声音");
+    copy_u16(c->hz[R_ENTRY], L_HZ, (const u16 *)u"扩展功能");
     copy_u16(c->hz_zebra, L_HZ, (const u16 *)u"照片高光显示：");
+    copy_u16(c->hz_vui, L_HZ, (const u16 *)u"竖拍显示：");
+    copy_str(c->en_vui, L_EN, "Portrait UI: ");
+    copy_u16(c->hz_fl, L_HZ, (const u16 *)u"焦距显示：");
+    copy_str(c->en_fl, L_EN, "Focal length: ");
     copy_u16(c->hz_on, 2, (const u16 *)u"开");
     copy_u16(c->hz_off, 2, (const u16 *)u"关");
     copy_u16(c->hz_bad, 4, (const u16 *)u" !");
@@ -844,8 +1532,8 @@ static u32 install_zebra_page(cm_t *c, u32 *title, u32 first_map)
     copy_words(rows + ROW_WORDS, rows, ROW_WORDS);
     rows[0] = SLOT_Z_ON;  rows[4] = PLAIN_ROW | kind; rows[6] = ID_Z_ON;
     rows[ROW_WORDS] = SLOT_Z_OFF;  rows[ROW_WORDS + 4u] = PLAIN_ROW | kind; rows[ROW_WORDS + 6u] = ID_Z_OFF;
-    disp[0] = build_map(first_map, img_addr(c, zebra_on_ok), BACK);
-    disp[1] = build_map(first_map, img_addr(c, zebra_off_ok), BACK);
+    disp[0] = build_map(first_map, img_addr(c, zebra_on_ok), STAY);
+    disp[1] = build_map(first_map, img_addr(c, zebra_off_ok), STAY);
     if (!disp[0] || !disp[1]) return 42u;
     if (c->hans) {
         FW(set_fn, UTF16_SET)((const u16 *)u"照片高光显示", SLOT_TITLE_Z, HANS_STYLE);
@@ -860,6 +1548,149 @@ static u32 install_zebra_page(cm_t *c, u32 *title, u32 first_map)
     hdr[0] = th[0]; hdr[1] = LAYOUTS_2ROW; hdr[2] = (u32)title;
     hdr[3] = (u32)rows; hdr[4] = (u32)disp; hdr[5] = (2u << 16) | 2u; hdr[6] = th[6];
     c->zebra_hdr = (u32)hdr;
+    return 1u;
+}
+
+/* Portrait UI view of the owned page: two rows like the stock On/Off pages. */
+static u32 install_vui_page(cm_t *c, u32 *title, u32 first_map)
+{
+    const u32 *th = (const u32 *)TEMPLATE_HDR;
+    if (((const u32 *)LAYOUTS_2ROW)[0] != 2u) return 50u;
+    u32 *rows = (u32 *)z5_alloc(2u * ROW_SIZE, 0);
+    u32 *disp = (u32 *)z5_alloc(2u * 4u, 0);
+    u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
+    if (!rows || !disp || !hdr) return 51u;
+    u32 kind = c->hans ? F_UTF16 : F_ASCII;
+    copy_words(rows, (const u32 *)GRID_ROWS, ROW_WORDS);
+    copy_words(rows + ROW_WORDS, rows, ROW_WORDS);
+    rows[0] = SLOT_Z_ON;  rows[4] = PLAIN_ROW | kind; rows[6] = ID_V_ON;
+    rows[ROW_WORDS] = SLOT_Z_OFF;  rows[ROW_WORDS + 4u] = PLAIN_ROW | kind; rows[ROW_WORDS + 6u] = ID_V_OFF;
+    disp[0] = build_map(first_map, img_addr(c, vui_on_ok), STAY);
+    disp[1] = build_map(first_map, img_addr(c, vui_off_ok), STAY);
+    if (!disp[0] || !disp[1]) return 52u;
+    if (c->hans) {
+        FW(set_fn, UTF16_SET)((const u16 *)u"竖拍显示", SLOT_TITLE_V, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        FW(set_fn, ASCII_SET)("Portrait UI", SLOT_TITLE_V, 0u);
+    }
+    hdr[0] = th[0]; hdr[1] = LAYOUTS_2ROW; hdr[2] = (u32)title;
+    hdr[3] = (u32)rows; hdr[4] = (u32)disp; hdr[5] = (2u << 16) | 2u; hdr[6] = th[6];
+    c->vui_hdr = (u32)hdr;
+    return 1u;
+}
+
+/* Group 104: focal-length view of the owned page, two rows like the portrait switch. */
+static u32 install_focal_page(cm_t *c, u32 *title, u32 first_map)
+{
+    const u32 *th = (const u32 *)TEMPLATE_HDR;
+    if (((const u32 *)LAYOUTS_2ROW)[0] != 2u) return 50u;
+    u32 *rows = (u32 *)z5_alloc(2u * ROW_SIZE, 0);
+    u32 *disp = (u32 *)z5_alloc(2u * 4u, 0);
+    u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
+    if (!rows || !disp || !hdr) return 51u;
+    u32 kind = c->hans ? F_UTF16 : F_ASCII;
+    copy_words(rows, (const u32 *)GRID_ROWS, ROW_WORDS);
+    copy_words(rows + ROW_WORDS, rows, ROW_WORDS);
+    rows[0] = SLOT_Z_ON;  rows[4] = PLAIN_ROW | kind; rows[6] = ID_F_ON;
+    rows[ROW_WORDS] = SLOT_Z_OFF;  rows[ROW_WORDS + 4u] = PLAIN_ROW | kind; rows[ROW_WORDS + 6u] = ID_F_OFF;
+    disp[0] = build_map(first_map, img_addr(c, focal_on_ok), STAY);
+    disp[1] = build_map(first_map, img_addr(c, focal_off_ok), STAY);
+    if (!disp[0] || !disp[1]) return 52u;
+    if (c->hans) {
+        FW(set_fn, UTF16_SET)((const u16 *)u"焦距显示", SLOT_TITLE_F, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        FW(set_fn, ASCII_SET)("Focal length", SLOT_TITLE_F, 0u);
+    }
+    hdr[0] = th[0]; hdr[1] = LAYOUTS_2ROW; hdr[2] = (u32)title;
+    hdr[3] = (u32)rows; hdr[4] = (u32)disp; hdr[5] = (2u << 16) | 2u; hdr[6] = th[6];
+    c->focal_hdr = (u32)hdr;
+    return 1u;
+}
+
+/* Group 116: battery-display view, two rows like the focal switch. */
+static u32 install_bat_page(cm_t *c, u32 *title, u32 first_map)
+{
+    const u32 *th = (const u32 *)TEMPLATE_HDR;
+    if (((const u32 *)LAYOUTS_2ROW)[0] != 2u) return 60u;
+    u32 *rows = (u32 *)z5_alloc(2u * ROW_SIZE, 0);
+    u32 *disp = (u32 *)z5_alloc(2u * 4u, 0);
+    u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
+    if (!rows || !disp || !hdr) return 61u;
+    u32 kind = c->hans ? F_UTF16 : F_ASCII;
+    copy_words(rows, (const u32 *)GRID_ROWS, ROW_WORDS);
+    copy_words(rows + ROW_WORDS, rows, ROW_WORDS);
+    rows[0] = SLOT_Z_ON;  rows[4] = PLAIN_ROW | kind; rows[6] = ID_B_ON;
+    rows[ROW_WORDS] = SLOT_Z_OFF;  rows[ROW_WORDS + 4u] = PLAIN_ROW | kind; rows[ROW_WORDS + 6u] = ID_B_OFF;
+    disp[0] = build_map(first_map, img_addr(c, bat_on_ok), STAY);
+    disp[1] = build_map(first_map, img_addr(c, bat_off_ok), STAY);
+    if (!disp[0] || !disp[1]) return 62u;
+    hdr[0] = th[0]; hdr[1] = LAYOUTS_2ROW; hdr[2] = (u32)title;
+    hdr[3] = (u32)rows; hdr[4] = (u32)disp; hdr[5] = (2u << 16) | 2u; hdr[6] = th[6];
+    c->bat_hdr = (u32)hdr;
+    return 1u;
+}
+
+/* Group 119: portrait-touch view, two rows like the battery switch. */
+static u32 install_touch_page(cm_t *c, u32 *title, u32 first_map)
+{
+    const u32 *th = (const u32 *)TEMPLATE_HDR;
+    if (((const u32 *)LAYOUTS_2ROW)[0] != 2u) return 80u;
+    u32 *rows = (u32 *)z5_alloc(2u * ROW_SIZE, 0);
+    u32 *disp = (u32 *)z5_alloc(2u * 4u, 0);
+    u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
+    if (!rows || !disp || !hdr) return 81u;
+    u32 kind = c->hans ? F_UTF16 : F_ASCII;
+    copy_words(rows, (const u32 *)GRID_ROWS, ROW_WORDS);
+    copy_words(rows + ROW_WORDS, rows, ROW_WORDS);
+    rows[0] = SLOT_Z_ON;  rows[4] = PLAIN_ROW | kind; rows[6] = ID_T_ON;
+    rows[ROW_WORDS] = SLOT_Z_OFF;  rows[ROW_WORDS + 4u] = PLAIN_ROW | kind; rows[ROW_WORDS + 6u] = ID_T_OFF;
+    disp[0] = build_map(first_map, img_addr(c, touch_on_ok), STAY);
+    disp[1] = build_map(first_map, img_addr(c, touch_off_ok), STAY);
+    if (!disp[0] || !disp[1]) return 82u;
+    hdr[0] = th[0]; hdr[1] = LAYOUTS_2ROW; hdr[2] = (u32)title;
+    hdr[3] = (u32)rows; hdr[4] = (u32)disp; hdr[5] = (2u << 16) | 2u; hdr[6] = th[6];
+    c->touch_hdr = (u32)hdr;
+    return 1u;
+}
+
+/* Group 116: the hub view: one row per feature, each opening its view. Rows shaped like the owned page's. */
+static u32 install_hub(cm_t *c, u32 *title, u32 first_map)
+{
+    const u32 *th = (const u32 *)TEMPLATE_HDR;
+    u32 slots[8], ids[8], fns[8], n = 0, k;
+    slots[n] = SLOT_SOUND; ids[n] = ID_SOUND; fns[n++] = img_addr(c, sound_entry_ok);
+    if (c->zebra_hdr) { slots[n] = SLOT_Z_ENTRY; ids[n] = ID_Z_ENTRY; fns[n++] = img_addr(c, zebra_entry_ok); }
+    if (c->vui_hdr) { slots[n] = SLOT_V_ENTRY; ids[n] = ID_V_ENTRY; fns[n++] = img_addr(c, vui_entry_ok); }
+    if (c->touch_hdr) { slots[n] = SLOT_T_ENTRY; ids[n] = ID_T_ENTRY; fns[n++] = img_addr(c, touch_entry_ok); }   /* group 119 */
+    if (c->focal_hdr) { slots[n] = SLOT_F_ENTRY; ids[n] = ID_F_ENTRY; fns[n++] = img_addr(c, focal_entry_ok); }
+    if (c->bat_hdr) { slots[n] = SLOT_B_ENTRY; ids[n] = ID_B_ENTRY; fns[n++] = img_addr(c, bat_entry_ok); }
+#ifdef VUI_DIAG_FOCUS
+    slots[n] = SLOT_SAVE; ids[n] = ID_SAVE; fns[n++] = img_addr(c, save_ok);
+#endif
+    if (n < 3u) return 70u;                    /* the layout list starts at 3 rows */
+    const u32 *layout = 0;
+    for (k = 0; k < 8u; k++)                   /* group 119: the list is not in row order (3,4,5,6,6,7,8) */
+        if (((const u32 *)(th[1] + k * 0x10u))[0] == n) { layout = (const u32 *)(th[1] + k * 0x10u); break; }
+    if (!layout) return 71u;
+    u32 *rows = (u32 *)z5_alloc(n * ROW_SIZE, 0);
+    u32 *disp = (u32 *)z5_alloc(n * 4u, 0);
+    u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
+    if (!rows || !disp || !hdr) return 72u;
+    for (k = 0; k < n; k++) {
+        u32 *r = rows + k * ROW_WORDS;
+        copy_words(r, (const u32 *)SETUP_ROWS + (STOCK_ROWS - 1u) * ROW_WORDS, ROW_WORDS);
+        r[0] = slots[k];
+        r[4] = ENTRY_FLAGS | (c->hans ? F_UTF16 : F_ASCII);
+        r[6] = ids[k];
+        disp[k] = build_map(first_map, fns[k], STAY);
+        if (!disp[k]) return 73u;
+    }
+    hdr[0] = th[0]; hdr[1] = (u32)layout; hdr[2] = (u32)title;
+    hdr[3] = (u32)rows; hdr[4] = (u32)disp; hdr[5] = (n << 16) | n; hdr[6] = th[6];
+    c->hub_rows = (u32)rows; c->hub_n = n;
+    c->hub_hdr = (u32)hdr;
     return 1u;
 }
 
@@ -879,7 +1710,8 @@ static u32 install_menu(cm_t *c)
     if (((const u32 *)th[1])[0] != 3u || layout4[0] != NROWS) return 18u;
 
     /* SETUP: 41 stock rows + row 42 (copy of row 41 with our slot, flags, id). */
-    u32 extra = c->fx ? 2u : 1u;               /* shutter sound, then photo zebra */
+    u32 vui_ok = c->fx && *(volatile u16 *)VUI_SITE != 0xE92Du;
+    u32 extra = 1u;                            /* group 116: one row, "扩展功能"; the features are on its hub */
     u32 *rows = (u32 *)z5_alloc((STOCK_ROWS + extra) * ROW_SIZE, 0);
     u32 *disp = (u32 *)z5_alloc((STOCK_ROWS + extra) * 4u, 0);
     if (!rows || !disp) return 13u;
@@ -893,13 +1725,27 @@ static u32 install_menu(cm_t *c)
     disp[STOCK_ROWS] = build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, entry_ok), STAY);
     if (!disp[STOCK_ROWS]) return 14u;
     c->entry_row = (u32)entry;
-    if (c->fx) {
+    if (0) {                                   /* group 116: these rows are on the hub now */
         u32 *z = entry + ROW_WORDS;
         copy_words(z, entry, ROW_WORDS);
         z[0] = SLOT_Z_ENTRY;
         z[6] = ID_Z_ENTRY;
         disp[STOCK_ROWS + 1u] = build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, zebra_entry_ok), STAY);
         if (!disp[STOCK_ROWS + 1u]) return 24u;
+        if (vui_ok) {
+            u32 *v = entry + 2u * ROW_WORDS;
+            copy_words(v, entry, ROW_WORDS);
+            v[0] = SLOT_V_ENTRY;
+            v[6] = ID_V_ENTRY;
+            disp[STOCK_ROWS + 2u] = build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, vui_entry_ok), STAY);
+            if (!disp[STOCK_ROWS + 2u]) return 25u;
+            u32 *fr = entry + 3u * ROW_WORDS;  /* group 104: focal-length switch */
+            copy_words(fr, entry, ROW_WORDS);
+            fr[0] = SLOT_F_ENTRY;
+            fr[6] = ID_F_ENTRY;
+            disp[STOCK_ROWS + 3u] = build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, focal_entry_ok), STAY);
+            if (!disp[STOCK_ROWS + 3u]) return 26u;
+        }
     }
 
     /* Owned page: 4 rows shaped like SETUP row 41 (plain list row, value column
@@ -945,6 +1791,11 @@ static u32 install_menu(cm_t *c)
     c->own_hdr = (u32)ohdr;
     c->title_slot = TITLE_SLOT;
     if (c->fx) c->zebra_install = install_zebra_page(c, title, first_map);
+    if (vui_ok) c->vui_install = install_vui_page(c, title, first_map);
+    if (vui_ok && install_focal_page(c, title, first_map) != 1u) c->focal_hdr = 0u;
+    if (vui_ok && install_bat_page(c, title, first_map) != 1u) c->bat_hdr = 0u;   /* group 116 */
+    if (vui_ok && install_touch_page(c, title, first_map) != 1u) c->touch_hdr = 0u;   /* group 119 */
+    if (install_hub(c, title, first_map) != 1u) c->hub_hdr = 0u;                   /* group 116 */
 
     /* Labels before anything can show them. */
     for (u32 k = 0; k <= R_TITLE; k++) set_label(c, k);
@@ -1072,6 +1923,11 @@ static void first_run(cm_t *c)
     c->phase = PH_MENU;
     c->fx = fx_hooks_present();
     c->install = install_menu(c);
+    if (c->vui_install == 1u) { vui_label(c); focal_label(c); c->vui_fn = img_addr(c, vui_hook); }
+    hub_labels(c);                             /* group 116 */
+#ifdef VUI_DIAG_FOCUS
+    if (c->vui_install == 1u) c->vui_tp_fn = img_addr(c, vui_tp_hit);   /* group 91: touch recorder */
+#endif
     if (c->fx) {
         c->grid_tab = (u32)z5_alloc(GRID_MODES * GRID_REC, 0);
         if (c->grid_tab) {
@@ -1231,6 +2087,93 @@ int z5_main(z5_ctx *ctx)
     u32 pos = 0;
     u32 hans = FW(read_fn, SETTING_READ)(LANG_KEY) != LANG_ENGLISH;
     if (c->dual && !c->err && c->install == 1u && !c->cfg_state) {
+#ifdef VUI_DIAG         /* oldest first: application.ui.target, then the entries seen in the quality-label area */
+        {
+            /* Read-only search for the stock histogram: 256 words, all below 2^20, most of them non-zero, going up
+               and down (a lookup table only rises). Only around the histogram state block at 0xC2028094 (the Z6II
+               counterpart keeps its 256 counts inside that block). Shows the two best windows as
+               (address - 0xC2026000) / 4 and their sums. */
+            const volatile u32 *m = (const volatile u32 *)0xC2026000u;
+            u32 i, nz = 0u, big = 0u, dec = 0u, sum = 0u, prev = 0u;
+            u32 a1 = 0u, n1 = 0u, s1 = 0u, a2 = 0u, n2 = 0u, s2 = 0u;
+            for (i = 0u; i < 0x1800u; i++) {
+                u32 v = m[i];
+                if (v) nz++;
+                if (v >= 0x100000u) big++; else sum += v;
+                if (i && v < prev) dec++;
+                if (i >= 256u) {
+                    u32 o = m[i - 256u], op = m[i - 257u];
+                    if (o) nz--;
+                    if (o >= 0x100000u) big--; else sum -= o;
+                    if (o < op) dec--;
+                }
+                prev = v;
+                if (i >= 256u && !big && dec >= 16u && sum >= 4096u && nz >= 64u) {
+                    u32 at = i - 255u;
+                    if (nz > n1) {
+                        if (at - a1 >= 256u && a1 - at >= 256u) { a2 = a1; n2 = n1; s2 = s1; }
+                        a1 = at; n1 = nz; s1 = sum;
+                    } else if (nz > n2 && at - a1 >= 256u && a1 - at >= 256u) {
+                        a2 = at; n2 = nz; s2 = sum;
+                    }
+                }
+            }
+            pos = z5_puts(line, TEXT_CHARS, pos, "A");
+            pos = z5_putdec(line, TEXT_CHARS, pos, a1);
+            pos = z5_puts(line, TEXT_CHARS, pos, " S");
+            pos = z5_putdec(line, TEXT_CHARS, pos, s1);
+            pos = z5_puts(line, TEXT_CHARS, pos, " B");
+            pos = z5_putdec(line, TEXT_CHARS, pos, a2);
+            pos = z5_puts(line, TEXT_CHARS, pos, " S");
+            pos = z5_putdec(line, TEXT_CHARS, pos, s2);
+            z5_row_set_text(ctx->element, line, pos * 2);
+            z5_row_draw(ctx->element, ctx->r1, ctx->r2, ctx->r3);
+            return 0;
+        }
+#endif
+#ifdef VUI_DIAG_FOCUS   /* one red-ish shooting-page draw per opening: n/N kind x y w h colour */
+        {
+            pos = z5_puts(line, TEXT_CHARS, pos, "A");
+            pos = z5_putdec(line, TEXT_CHARS, pos, c->vui_af);
+            {   /* draw-call recorder (patch_card_78.py) */
+#ifdef VUI_DIAG_AUTOWRITE
+                if (!c->dg_writes && c->dg_res == 0u) diag_write(c);   /* emulator only */
+#endif
+                pos = z5_puts(line, TEXT_CHARS, pos, " W");
+                pos = z5_putdec(line, TEXT_CHARS, pos, c->dg_writes);
+                pos = z5_puts(line, TEXT_CHARS, pos, " R");
+                pos = z5_putdec(line, TEXT_CHARS, pos, c->dg_res);
+                if (c->dg_ec) {                /* group 107: the failing create-open */
+                    pos = z5_puts(line, TEXT_CHARS, pos, " X");
+                    pos = z5_puthex(line, TEXT_CHARS, pos, c->dg_ec, 8u);
+                    pos = z5_puts(line, TEXT_CHARS, pos, "/");
+                    pos = z5_puthex(line, TEXT_CHARS, pos, c->dg_ef, 4u);
+                }
+                pos = z5_puts(line, TEXT_CHARS, pos, " U");   /* group 107: seconds since power-up */
+                pos = z5_putdec(line, TEXT_CHARS, pos, *(volatile u32 *)CM_MS_CLOCK / 1000u);
+                pos = z5_puts(line, TEXT_CHARS, pos, " F");
+                pos = z5_putdec(line, TEXT_CHARS, pos, c->dg_frozen);
+                pos = z5_puts(line, TEXT_CHARS, pos, " T");
+                pos = z5_putdec(line, TEXT_CHARS, pos, c->vui_tp_n);
+                pos = z5_puts(line, TEXT_CHARS, pos, "/");
+                pos = z5_putdec(line, TEXT_CHARS, pos, c->vui_tp_i);
+            }
+            z5_row_set_text(ctx->element, line, pos * 2);
+            z5_row_draw(ctx->element, ctx->r1, ctx->r2, ctx->r3);
+            return 0;
+        }
+#endif
+#ifdef CM_ORIENT_TEST   /* read-only: stock orientation getter and the two words it reads */
+        pos = z5_puts(line, TEXT_CHARS, pos, "ORI ");
+        pos = z5_putdec(line, TEXT_CHARS, pos, FW(read_fn, 0x101EA71Eu)(0));
+        pos = z5_puts(line, TEXT_CHARS, pos, " S");
+        pos = z5_putdec(line, TEXT_CHARS, pos, *(volatile u32 *)(0xC1D4126Cu + 0x1A4u));
+        pos = z5_puts(line, TEXT_CHARS, pos, " M");
+        pos = z5_putdec(line, TEXT_CHARS, pos, *(volatile u32 *)(0xC1807DDCu + 0xCu));
+        z5_row_set_text(ctx->element, line, pos * 2);
+        z5_row_draw(ctx->element, ctx->r1, ctx->r2, ctx->r3);
+        return 0;
+#endif
         if (hans) {
             pos = puts16(line, TEXT_CHARS, pos, (const u16 *)u"正常 类型");
         } else {

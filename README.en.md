@@ -16,10 +16,16 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Framing grid styles | Adds 3×3 and 2×2 to Custom Setting d8. The stock "On" remains 4×4 | Yes (photo mode, rear monitor) |
 | Photo highlight display (zebra) | Brings the stock movie highlight display to photo live view, with its own switch in the Setup menu | Yes (photo mode, rear monitor) |
 | Standby wake fix | Keeps the features when the camera wakes immediately after the display turns off | Yes |
+| Portrait UI (test) | Shooting display, i menu and setting pages turn upright when the camera is held vertically | Author's camera, still in testing |
+| Portrait touch (test) | Touch follows the portrait layout, including strip dragging; can be turned off | Author: "mostly usable" |
+| Focal length | Shown for every CPU lens (stock: power-zoom lenses only); can be turned off | Yes |
+| Battery percent | Remaining charge shown in the battery icon; can be turned off | Yes |
+| Extensions menu | All switches in one row, "Extensions", at the end of the Setup menu | Yes |
+| Test records | One-press record of a problem (`Z5LOG` folder) for feedback | Yes |
 
 The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
 
-Portrait UI is still in development and camera testing, and is not part of the current release. What it does, how it works, how to reproduce the early version and what is left are in the [portrait UI notes](docs/PORTRAIT_UI.md) (in Chinese, updated 2026-11-12).
+**This release is the portrait UI test version** (firmware group 108 + card module group 119). Known issue: after waking from standby the battery and focal length only appear after one more half-press. In portrait, the i-menu sub pages, third-level pages and touch were **tuned only for the author's own 12 custom i-menu items** (Picture Control, ISO, flash mode, silent photography, HDR, AF-area mode, white balance, Active D-Lighting, metering, image area, vibration reduction, focus mode); other items may or may not work. The item list and the full development log are in the [portrait UI notes](docs/PORTRAIT_UI.md) (in Chinese, updated 2026-11-13). Please save a test record when something goes wrong.
 
 The features live in a module on the memory card. The firmware gains only small entry points and checks. Without the module, the grid, highlight display and histogram-with-level paths behave as stock. Changes are limited to the MAIN module and do not touch the boot area.
 
@@ -52,9 +58,10 @@ output/EG165050.BIN              firmware update
 output/card/Z5APP.BIN            card module
 output/card/SHUTTER/MENU.DAT     settings file, must stay on the card
 output/card/SHUTTER/1-3.WAV      default test sounds
+output/card/Z5LOG/DIAG01-20.BIN  20 empty test-record files
 ```
 
-The SHA-256 of `EG165050.BIN` should be `e7e4ec5477a301f6128d30352429f2e6d31eaaa22f13255ceebf531215e24d61`. Do not redistribute this file.
+The SHA-256 of `EG165050.BIN` should be `6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf`. Do not redistribute this file.
 
 ### 3. Flash (once)
 
@@ -71,9 +78,10 @@ Copy the contents of `output/card/` to the root of the card. Three test sounds a
 A:\Z5APP.BIN
 A:\SHUTTER\MENU.DAT
 A:\SHUTTER\1.WAV ... 5.WAV
+A:\Z5LOG\DIAG01.BIN ... DIAG20.BIN
 ```
 
-A `MENU.DAT` created by the camera does not persist, so this file must already be on the card.
+Files created by the camera do not persist, so `MENU.DAT` and the 20 record files in `Z5LOG` must already be on the card.
 
 ### 5. Sound format
 
@@ -89,11 +97,25 @@ The result is `SND.WAV` in that folder. Rename it and put it in `SHUTTER`.
 
 ### 6. Menus
 
-- **Shutter sound:** with silent photography on, open the second-to-last row of the Setup menu for on/off, sound type, volume and reload.
-- **Photo highlight display:** the last row of the Setup menu, labelled "Photo zebra" in English. You also need to turn on the stock highlight display pattern in Custom Settings group g.
+The last row of the Setup menu, "Extensions" (扩展功能 in Chinese), holds:
+
+| Item | What it does |
+| --- | --- |
+| Shutter sound | With silent photography on: on/off, sound type, volume, reload |
+| Photo zebra | Also turn on the stock highlight display pattern in Custom Settings group g |
+| Portrait UI | Portrait layout master switch (on in the generated settings file) |
+| Portrait touch | Touch in portrait; when off, touches in portrait are ignored, landscape is unaffected |
+| Focal length | Focal length for every CPU lens |
+| Battery % | Charge in percent inside the battery icon, red at 20 % and below |
+| Save log | Saves a test record; the row shows the file number ("01"), or "full" after 20 |
+
 - **Framing grid:** Custom Setting d8, with On (4×4), Off, 3×3, or 2×2 (centre cross).
 - **Histogram with level:** press DISP to reach the virtual horizon page. It appears about 1 second after power-on or wake, and "Apply settings to live view" must be on.
 - **Status:** the last row of MY MENU shows the module status. `OK ...` means it is working (`正常 ...` in Chinese).
+
+### 7. Reporting a problem
+
+Stay on the screen where the problem shows, take a photo of it, then use Extensions → Save log and note the number with a sentence on what you did. Send the written DIAG files from `Z5LOG`, the photos and the notes. The records hold only UI drawing, touch and battery state, no image content.
 
 ## Recovery
 
