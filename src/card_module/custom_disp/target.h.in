@@ -1,0 +1,66 @@
+/* Fixed custom DISP profile; native checks are generated from the pinned base. */
+/* Share the upstream audio controller's rotating ready queue. Both overlay
+ * tasks sleep; a lower priority can starve behind its always-ready loop. */
+#define Z5_CUSTOM_DISP_TASK_PRIORITY 0x30u
+#define Z5_PROBE_SELECTOR (*(volatile const u8 *)0xC1821714u)
+#define Z5_PROBE_CALLBACK(i) (((volatile const u32 *)0xC1821718u)[(i)])
+#define Z5_PROBE_TARGET_MATCH() @PROBE@
+#define Z5_PROBE_INACTIVE 4u
+#define Z5_CUSTOM_DISP_SHOOTING_PAGE() (*(volatile const u32 *)0xC1819F90u == 0xC18216A0u)
+#define Z5_PROBE_SET_CALLBACK(i, v) (((volatile u32 *)0xC1821718u)[(i)] = (v))
+#define Z5_PROBE_EXPECTED(i) ((i) == 0u ? 0x102F4819u : (i) == 1u ? 0x102F5DF5u : (i) == 2u ? 0x102F5ED7u : (i) == 3u ? 0x102F5ED7u : (i) == 4u ? 0x102F5F09u : 0u)
+#define Z5_OVERLAY_SNAPSHOT 0xC20282B4u
+#define Z5_OVERLAY_OUTPUT (*(volatile const u8 *)0xC1821781u)
+#define Z5_OVERLAY_RAM_LOW 0xC1800000u
+#define Z5_OVERLAY_RAM_HIGH 0xC8700000u
+#define Z5_OVERLAY_BUSY Z5_FN(u32 (*)(void), 0x1042DF92)
+#define Z5_OVERLAY_CONDITION Z5_FN(u32 (*)(u32), 0x1042C00C)
+#define Z5_OVERLAY_CHECK_FUNCTIONS() @FUNCTIONS@
+#define Z5_OVERLAY_CHECK_LITERALS() @LITERALS@
+#define Z5_FULL_META_BYTES 124u
+#define Z5_FULL_META_BYTES_TEXT "124"
+#define Z5_FULL_TICK (*(volatile const u32 *)0xC18EB388u)
+#define Z5_FULL_BUSY_WORD (*(volatile const u32 *)0xC18217C0u)
+#define Z5_LEVEL_CACHE_RANGE Z5_FN(void (*)(u32,u32), 0x10213886)
+#define Z5_LEVEL_INFO_TABLE ((volatile const u32 *)0x10748504u)
+#define Z5_CUSTOM_DISP_TARGET_DISP 0u
+#define Z5_HBASE_READ Z5_FN(u32 (*)(void *), 0x10456B34)
+#define Z5_HBASE_ADD Z5_FN(u32 (*)(u32,u32), 0x10446EB4)
+#define Z5_HBASE_FIND Z5_FN(u32 (*)(u32,u32), 0x10446EB8)
+#define Z5_HBASE_REMOVE Z5_FN(u32 (*)(u32,u32), 0x10446EBC)
+#define Z5_HBASE_CANVAS @LCD_CANVAS@
+#define Z5_HBASE_EVF_CANVAS @EVF_CANVAS@
+/* Native list prepend, used only on each canvas's child list on the GUI task. */
+#define Z5_HBASE_PREPEND Z5_FN(u32 (*)(u32,u32), 0x10198D0A)
+#define Z5_HBASE_PENDING (*(volatile const u32 *)0xC1886B58u)
+#define Z5_HBASE_DIRTY (*(volatile u8 *)0xC18260E4u)
+#define Z5_HBASE_PAYLOAD (*(volatile const u32 *)0xC1826140u)
+#define Z5_HBASE_EXPECTED_PAYLOAD 0xC18260E4u
+#define Z5_HBASE_SLEEP ((s32 (*)(u32))0x100363A8u)
+#define Z5_HBASE_SLEEP_TIMEOUT (-3276800)
+#define Z5_HBASE_EXIT ((void (*)(void))0x100360E4u)
+#define Z5_LEVEL_POSE_READ Z5_FN(void (*)(s32 *,s32 *,s32 *), 0x104B8FF0)
+#define Z5_LEVEL_SYNC Z5_FN(void (*)(void), 0x10446740)
+#define Z5_LEVEL_COS(i) level_sine((i) + 90u * LEVEL_UNITS)
+#define Z5_LEVEL_SIN(i) level_sine(i)
+#define Z5_LEVEL_FAST_SIZE Z5_FN(const u16 *(*)(u32), 0x10446336)
+#define Z5_LEVEL_FAST_SURFACE Z5_FN(u32 (*)(u32), 0x10231BFA)
+#define Z5_LEVEL_FAST_COLOR Z5_FN(u32 (*)(u32), 0x10526478)
+#define Z5_REFRESH_K_TABLE ((volatile u32 *)0xC18E74B0u)
+#define Z5_LEVEL_GUI_DELAY Z5_FN(u32 (*)(void), 0x1042C680)
+#define Z5_LEVEL_FAST_BUFFER (*(volatile const u32 *)0xC181FAECu)
+#define Z5_CUSTOM_DISP_EVF_PASS 2u
+#define Z5_CUSTOM_DISP_PRIMARY_DISPLAY (*(volatile const u32 *)0xC181AD60u)
+#define Z5_LEVEL_HIST_RECT(i) (((volatile const u16 *)0xC18260EEu)[(i) + (Z5_OVERLAY_OUTPUT == Z5_CUSTOM_DISP_EVF_PASS ? 8u : 0u)])
+#define Z5_LEVEL_GUI_EVENT Z5_FN(u32 (*)(void), 0x1045579C)
+#define Z5_LEVEL_GUI_POST Z5_FN(s32 (*)(u32,u32), 0x104557F4)
+
+
+#define Z5_PRESENT_SLOT(mask) (((volatile const u8 *)@PRESENT_MAP@)[(mask)])
+#define Z5_PRESENT_POOL @PRESENT_POOL@
+
+#define Z5_GUI_MODE (*(volatile const u32 *)@PRESENT_MODE@)
+#define Z5_GUI_LOCK (*(volatile const u32 *)@PRESENT_LOCK@)
+
+#define Z5_GUI_UI_MODE Z5_FN(u32 (*)(void), @UI_MODE_GETTER@)
+

@@ -1,31 +1,10 @@
-/* cardmenu - the shutter-sound menu, entirely in the card module (Z5APP.BIN).
- *
- * Runs on the unchanged, camera-verified baseline firmware (stage0_c4, group 18):
- * the stage0 loader starts this module once at power-up (ctx->sequence == 2) and
- * again whenever the MY MENU row is drawn (sequence 1). Without the card nothing
- * of this exists: every table, page, label and handler lives in heap memory that
- * this module builds at its first run after power-up.
- *
- * First run:
- *   1. read A:\SHUTTER\MENU.DAT (on/off, type 1-5, volume 1-5; defaults on, 1, 5);
- *   2. start the SDK audio task with a short silent clip, then swap in
- *      A:\SHUTTER\<type>.WAV (canonical 48 kHz stereo 16-bit) scaled to the volume;
- *   3. hook the capture-sequence release slot (as bootsound v6, camera-verified):
- *      one play request per silent-photography frame while the sound is on;
- *   4. SETUP MENU (page 0x1CB, header RAM 0xC18750C0): heap copy of the 41 stock
- *      rows plus row 42 "Shutter sound" (text slot 250, control id 0x2FFF), whose
- *      OK opens the owned page;
- *   5. owned page = the unused kind-2 page-0 slot 0xC18324DC (the getter returns
- *      table + 0 * 44; FUN_10450814(2, 0) opens it), 4 rows built from template
- *      page 0x1FE: Shutter sound On/Off, Type 1-5, Volume 1-5, Reload. OK on a row
- *      changes its value in place, rewrites the label and saves MENU.DAT.
- * Labels: English when the language setting 0x1400 is 3, otherwise Simplified Chinese
- * (UTF-16 slot style 114 with stock font 2; see research/menu/README.md).
- *
- * Everything that runs after the first run (release callback, menu handlers, clip
- * loader, settings writer) is one Z5_IMAGE copied to the heap.
- *
- * camera_verified: false.
+/* Z5 card extensions: portrait UI, custom DISP, cached histogram and custom DISP level.
+ * Target: C1.50 group-108 firmware; no new firmware edits are needed for L21.
+ * The stage0 loader invokes boot setup and the MY MENU status row. Callbacks
+ * retained after loading live in copied Z5_IMAGE code; persistent data lives
+ * in the SDK state or explicit heap allocations, not in the freed loader image.
+ * See docs/CUSTOM_DISP_HANDOFF.md for ownership, drawing order and settings.
+ * camera_verified: false for this exact L21 integration.
  */
 #include "z5/audio.h"
 #include "z5/fs.h"
@@ -34,6 +13,7 @@
 #include "z5/state.h"
 #include "z5/str.h"
 #include "z5/ui.h"
+#include "custom_disp.h"
 
 #define SEQ_BOOT      2u
 
@@ -343,6 +323,13 @@ typedef struct {
     char text[TEXT_CHARS * 2];   /* MY MENU diagnostics line (UTF-16)        */
     u32 vui_mtd;                    /* group 90: heap block, 4 kept image calls (metering x2, battery x2) */
     u32 vui_mtd_ok, vui_mtd_go, vui_mtd_due, vui_mtd_pg, vui_mtd_n, vui_bat_go;
+    void *custom_disp;            /* Custom DISP owner; preserve the portrait-hook ABI. */
+    int custom_disp_rc;
+    u32 vui_hist_sample_calls, vui_hist_sample_state, vui_hist_sample_busy, vui_hist_sample_max;
+    u32 vui_hist_bank;
+    char hist_text[48u * 2u];  /* L9: room for the existing metrics plus histogram wait H. */
+    u32 vui_hist_last_publication; /* L11: packet last rasterized into the current LCD bank */
+    u32 custom_flags, custom_hdr, custom_state;
 } cm_t;
 
 typedef signed short s16;
@@ -491,7 +478,7 @@ IMG_FN static void zero_words(u32 *p, u32 words)
 IMG_FN static void save_cfg(cm_t *c)
 {
     u32 f[16];
-    u32 data[2];
+    u32 data[3];
     u32 out = 0;
     c->edited = 1u;
     /* Camera test 2026-11-08: a MENU.DAT created here never reaches the card, while
@@ -505,6 +492,7 @@ IMG_FN static void save_cfg(cm_t *c)
     FW(close_fn, FW_CLOSE)(f);
     zero_words(f, 16);
     data[0] = CFG_MAGIC;
+    data[2] = 0xD2150000u | (c->custom_flags & 15u);
     data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26) | (c->vui << 27) |
               ((c->focal_on ? 0u : 1u) << 28) |  /* group 104: bit 28 = focal display off */
               ((c->bat_on ? 0u : 1u) << 29) |    /* group 116: bit 29 = battery display off */
@@ -728,20 +716,23 @@ IMG_FN static u32 load_clip(cm_t *c)
 IMG_FN static u32 cfg_load(cm_t *c)
 {
     u32 f[16];
-    u32 data[2];
+    u32 data[3];
     u32 state = 1u;
     zero_words(f, 16);
-    data[0] = 0; data[1] = 0;
+    data[0] = 0; data[1] = 0; data[2] = 0;
+    c->custom_flags = 15u;
     c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u; c->vui = 0u; c->focal_on = 1u;
     c->bat_on = 1u; c->touch_on = 1u;
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) == FS_OPEN_OK) {
         FW(readat_fn, FW_READAT)(f, data, 0, 8u);
+        FW(readat_fn, FW_READAT)(f, data + 2, 8u, 4u);
         FW(close_fn, FW_CLOSE)(f);
         state = data[0] == CFG_MAGIC ? 0u : 2u;
     }
     c->cfg_state = state;
     if (!state) {
+        if ((data[2] & 0xFFFFFFF0u) == 0xD2150000u) c->custom_flags = data[2] & 15u;
         u32 on = data[1] & 0xFFu, type = (data[1] >> 8) & 0xFFu, vol = (data[1] >> 16) & 0xFFu;
         if (on <= 1u) c->on = on;
         if (type >= 1u && type <= 5u) c->type = type;
@@ -784,6 +775,9 @@ IMG_FN static u32 title_cb(u32 page, u32 a1, u32 a2, u32 a3)
 
 IMG_FN static void hub_labels(cm_t *c);
 IMG_FN static void hub_open(cm_t *c);
+
+IMG_FN static void sub_title(cm_t *c, const u16 *hz, const char *en);
+#include "custom_disp_runtime.inc"
 
 IMG_FN static u32 entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
@@ -1350,6 +1344,7 @@ IMG_FN static u32 sound_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
     if (!c) return 0;
+    refresh_labels(c); /* restore shared row slots after the custom DISP view */
     sub_title(c, c->hz[R_ONOFF], c->en[R_ONOFF]);
     c->title_slot = SLOT_TITLE_V;
     ((volatile u32 *)PAGE0)[10] = c->own_hdr;
@@ -1370,6 +1365,7 @@ IMG_FN static void hub_labels(cm_t *c)
     if (c->vui_hdr) vui_label(c);
     if (c->focal_hdr) focal_label(c);
     if (c->bat_hdr) bat_label(c);
+    if (c->custom_hdr) custom_label(c);
     if (c->touch_hdr) touch_label(c);          /* group 119 */
 #ifdef VUI_DIAG_FOCUS
     save_label(c);
@@ -1655,6 +1651,8 @@ static u32 install_touch_page(cm_t *c, u32 *title, u32 first_map)
     return 1u;
 }
 
+#include "custom_disp_install.inc"
+
 /* Group 116: the hub view: one row per feature, each opening its view. Rows shaped like the owned page's. */
 static u32 install_hub(cm_t *c, u32 *title, u32 first_map)
 {
@@ -1669,6 +1667,7 @@ static u32 install_hub(cm_t *c, u32 *title, u32 first_map)
 #ifdef VUI_DIAG_FOCUS
     slots[n] = SLOT_SAVE; ids[n] = ID_SAVE; fns[n++] = img_addr(c, save_ok);
 #endif
+    if (c->custom_hdr) { slots[n] = 253u; ids[n] = 0x2FD0u; fns[n++] = img_addr(c, custom_entry_ok); }
     if (n < 3u) return 70u;                    /* the layout list starts at 3 rows */
     const u32 *layout = 0;
     for (k = 0; k < 8u; k++)                   /* group 119: the list is not in row order (3,4,5,6,6,7,8) */
@@ -1795,6 +1794,7 @@ static u32 install_menu(cm_t *c)
     if (vui_ok && install_focal_page(c, title, first_map) != 1u) c->focal_hdr = 0u;
     if (vui_ok && install_bat_page(c, title, first_map) != 1u) c->bat_hdr = 0u;   /* group 116 */
     if (vui_ok && install_touch_page(c, title, first_map) != 1u) c->touch_hdr = 0u;   /* group 119 */
+    if (install_custom_page(c, title, first_map) != 1u) return 90u;
     if (install_hub(c, title, first_map) != 1u) c->hub_hdr = 0u;                   /* group 116 */
 
     /* Labels before anything can show them. */
@@ -1938,6 +1938,7 @@ static void first_run(cm_t *c)
         zebra_label(c);
     }
 #endif
+    c->custom_disp_rc = custom_disp_init(&c->custom_disp, img_addr(c, vui_hist_before_level), &c->vui_hist_sample_calls, &c->custom_flags);
 }
 
 /* The module's block as this anchor describes it, read without writing anything;
@@ -2084,7 +2085,20 @@ int z5_main(z5_ctx *ctx)
      * play requests. Otherwise the codes: D<level-page histogram> E<clip> I<install>
      * C<MENU.DAT> P<start progress> B<draw class of the start>. */
     char *line = c->text;
-    u32 pos = 0;
+    if (!c->custom_disp_rc) {
+        line = c->hist_text;
+        u32 count = custom_disp_format(c->custom_disp, line, 48u);
+        count = z5_puts(line, 48u, count, " H");
+        count = z5_puthex(line, 48u, count, c->vui_hist_sample_max > 0xFFFu ? 0xFFFu : c->vui_hist_sample_max, 3u);
+        count = z5_puts(line, 48u, count, " S");
+        count = z5_puthex(line, 48u, count, c->vui_hist_sample_state, 1u);
+        z5_row_set_text(ctx->element, line, count * 2u);
+        z5_row_draw(ctx->element, ctx->r1, ctx->r2, ctx->r3);
+        return 0;
+    }
+    u32 pos = z5_puts(line, TEXT_CHARS, 0u, "AE");
+    pos = z5_puthex(line, TEXT_CHARS, pos, (u32)(-c->custom_disp_rc), 2u);
+    pos = z5_puts(line, TEXT_CHARS, pos, " ");
     u32 hans = FW(read_fn, SETTING_READ)(LANG_KEY) != LANG_ENGLISH;
     if (c->dual && !c->err && c->install == 1u && !c->cfg_state) {
 #ifdef VUI_DIAG         /* oldest first: application.ui.target, then the entries seen in the quality-label area */

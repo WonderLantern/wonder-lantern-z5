@@ -1,0 +1,1398 @@
+{
+  "camera_verified": false,
+  "dynamic_tests_run": false,
+  "firmware_modified": false,
+  "compatibility": {
+    "firmware_group": 108,
+    "card_base_group": 119,
+    "firmware_sha256": "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
+    "legacy_firmware_sha256": "e7e4ec5477a301f6128d30352429f2e6d31eaaa22f13255ceebf531215e24d61",
+    "port_origin": {
+      "base_card_sha256": "06f885f656a2c048eedaf053865437d5b452656f138a2b4c1e0ac67548bf9fa4",
+      "base_source_hashes": {
+        "src/card_module/main.c": "8813eca3947b4225cf01f638e40c417d9ba97cad16b5eaafd594ded8592b0dce",
+        "src/card_module/vui_card.inc": "e83bfd11d971fde761de10ffc1124778281dfd0368f396ef1152755669f9889a"
+      },
+      "experiment_vui_sha256": "79e946f4da4e5c7dea0a9f8c4fd9171cf4eaf946713d21785e88d0afac17c36d",
+      "module": "portrait group 119 + L18 custom DISP"
+    },
+    "sdk_base_commit": "8cf0fb425a4988abdb9442f33a2773c7a242dc23"
+  },
+  "firmware_sha256": "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
+  "source_cleanup": {
+    "module": "custom_disp",
+    "single_rendering_path": true,
+    "removed_paths": [
+      "layer_cache",
+      "lcd_clock",
+      "lcd_async",
+      "native_overlay",
+      "rectangle_level",
+      "source_rebinding",
+      "independent_evf_surface_fallback",
+      "legacy_force3_restore",
+      "unread_evf_window_metrics"
+    ],
+    "removed_unused_stencil_bytes": 124944,
+    "removed_evf_metadata_words": 6,
+    "metadata_words": 31,
+    "state_revision": "0x112D000A"
+  },
+  "compatible_firmware_sha256": [
+    "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
+    "e7e4ec5477a301f6128d30352429f2e6d31eaaa22f13255ceebf531215e24d61"
+  ],
+  "lcd_walk_policy": "skip checked first walk; paint second and conditional later walks",
+  "lcd_walk_identity": "callback-entry SP +28 wrapper LR, +44 controller LR; exact native code checks",
+  "lcd_final_submission_hook": false,
+  "lcd_diagnostics": "L21: same R/U/C/F W/D/K/N metrics on last photo output (L21L/L21E); Q also reports page/activation refusal; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)",
+  "output_sha256": "84559a1f55156b13bbf918bc329870f8b41e1b8ecb1ed5d608f3e2180a0e6318",
+  "output_size": 62068,
+  "custom_disp_settings": {
+    "menu": "Extensions > DISP2 Custom",
+    "flags": [
+      "enabled",
+      "level",
+      "histogram",
+      "detailed_info"
+    ],
+    "default_flags": 15,
+    "persistence": "MENU.DAT optional tagged third word",
+    "visibility_groups": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37,
+      38,
+      39,
+      40,
+      41,
+      42,
+      43,
+      44,
+      45,
+      46,
+      47,
+      48,
+      49,
+      50,
+      51,
+      52,
+      53,
+      54,
+      55,
+      56,
+      57,
+      58,
+      59,
+      60,
+      61,
+      62,
+      63
+    ],
+    "native_base_when_info_off": "DISP1 simple-page mask projected to DISP0 per mode nibble",
+    "projected_disp_mask": "0x111111",
+    "outputs": [
+      "LCD",
+      "EVF"
+    ]
+  },
+  "target_disp": 0,
+  "lcd_native_ui": "original-detailed-page",
+  "native_refresh_override": {
+    "k": 1,
+    "minimum_interval_ms": 0,
+    "table": "0xC18E74B0",
+    "entries": 16,
+    "stride": 8,
+    "scope": "active detailed photo page, LCD or EVF, normal UI",
+    "owner": "APPLV page wrapper; override for native callback only, restore immediately on return",
+    "restore": "compare-and-restore owned entries; preserve paired word and changed native values",
+    "saved_state_bytes": 68
+  },
+  "lcd_level_target_hz": 60,
+  "evf_level_target_hz": 60,
+  "lcd_request_intervals_ms": [
+    16,
+    17
+  ],
+  "evf_request_intervals_ms": [
+    16,
+    17
+  ],
+  "unified_output_pipeline": {
+    "entry": "overlay_source_paint",
+    "first_walk": "skip on LCD and EVF",
+    "prepare": "restore sparse pixels before native child painters on either output",
+    "tail": "GPU sync, revalidate active output/bank/descriptor, cached histogram, level, sparse publication",
+    "output_states": 2,
+    "dirty_row_limit": 960,
+    "fullscreen_cache_maintenance": false,
+    "native_descriptor_masks": [
+      1
+    ],
+    "evf_source": "native current buffer, size and mapping; no LCD page-object/descriptor constraints",
+    "native_descriptor_map": "0xC18100AC",
+    "histogram_acquisition_interval_ms": 120
+  },
+  "lcd_fullscreen_allocation_bytes": 0,
+  "lcd_sparse_save_under": true,
+  "lcd_occlusion": "native premultiplied RGBA source-over level",
+  "lcd_visibility_mask_rules": 0,
+  "evf_path": "shared 60Hz overlay pipeline and sparse cache publication; native EVF size/origin adapter",
+  "production_vui_source_unchanged": false,
+  "production_diagnostic_recorder": true,
+  "own_histogram": {
+    "landscape_disp_pages": [
+      0
+    ],
+    "portrait_disp_pages": [
+      0,
+      2,
+      3
+    ],
+    "landscape_requires_portrait_switch": false,
+    "portrait_position_follows_portrait_switch": true,
+    "detailed_page_callback": "retained cm callback: prepare before GPU sync; cached CPU raster after GPU sync; all supported orientations",
+    "landscape_box_top_down": [
+      476,
+      278,
+      192,
+      96
+    ],
+    "landscape_throttle_ms": 120,
+    "detailed_portrait_box_top_down": [
+      144,
+      480,
+      192,
+      96
+    ],
+    "sampling": "shared disp_worker/disp_collect, 120ms attempt-start gate and 20ms poll; native 0x10456B34 only on independent worker",
+    "sampling_failure": "keep last published private statistics packet",
+    "evf_histogram_box_size": [
+      192,
+      96
+    ],
+    "evf_histogram_origin": "checked native EVF top-left",
+    "shared_raster": "custom_disp/histogram_raster.h",
+    "statistics_packets": 3,
+    "statistics_packet_bytes": 1056,
+    "statistics_total_bytes": 3168,
+    "gui_statistics_acquisition": false,
+    "raster": "CPU batch, native EVF palette and bin aggregation, scaled into 192x96",
+    "raster_publication": "merged into the existing level sparse cache ranges",
+    "lcd_histogram_uses_native_bins_cache": false,
+    "gui_updates": "on new completed packet or dirty/bank/geometry repair; unchanged packet safety repair at 150ms",
+    "dirty_repair_bypasses_sampling_throttle": false,
+    "dirty_repair_bypasses_draw_throttle": true,
+    "landscape_stock_pages_untouched": [
+      2,
+      3
+    ],
+    "portrait_throttle_ms": 120,
+    "full_screen_cache": false,
+    "full_repaint_on_bank_change": true
+  },
+  "build_defines": [
+    "VUI_DIAG_FOCUS"
+  ],
+  "layout": {
+    "cm_size": 2716,
+    "vui_fn_offset": 4,
+    "custom_disp_offset": 2576,
+    "sdk_state_size": 4096
+  },
+  "native_function_checks": [
+    {
+      "address": 273391692,
+      "length": 86,
+      "fnv1a": 3911242483
+    },
+    {
+      "address": 271762064,
+      "length": 50,
+      "fnv1a": 2411919111
+    },
+    {
+      "address": 271761970,
+      "length": 94,
+      "fnv1a": 136831155
+    },
+    {
+      "address": 272818066,
+      "length": 8,
+      "fnv1a": 879925674
+    },
+    {
+      "address": 272809996,
+      "length": 20,
+      "fnv1a": 2743761420
+    },
+    {
+      "address": 271852206,
+      "length": 48,
+      "fnv1a": 3449696028
+    },
+    {
+      "address": 273391598,
+      "length": 88,
+      "fnv1a": 998459876
+    },
+    {
+      "address": 271748692,
+      "length": 280,
+      "fnv1a": 3668037150
+    },
+    {
+      "address": 271748972,
+      "length": 980,
+      "fnv1a": 2313355770
+    },
+    {
+      "address": 271878654,
+      "length": 176,
+      "fnv1a": 2070321170
+    },
+    {
+      "address": 271744202,
+      "length": 630,
+      "fnv1a": 402707434
+    },
+    {
+      "address": 272984884,
+      "length": 4,
+      "fnv1a": 4027264062
+    },
+    {
+      "address": 270716736,
+      "length": 4,
+      "fnv1a": 1743403138
+    },
+    {
+      "address": 269891150,
+      "length": 4,
+      "fnv1a": 4077974248
+    },
+    {
+      "address": 270772580,
+      "length": 20,
+      "fnv1a": 3638380044
+    },
+    {
+      "address": 269105982,
+      "length": 270,
+      "fnv1a": 2974913678
+    },
+    {
+      "address": 272920244,
+      "length": 4,
+      "fnv1a": 2160140564
+    },
+    {
+      "address": 272920248,
+      "length": 4,
+      "fnv1a": 2161229470
+    },
+    {
+      "address": 271314586,
+      "length": 16,
+      "fnv1a": 1942793475
+    },
+    {
+      "address": 271314602,
+      "length": 72,
+      "fnv1a": 3160481282
+    },
+    {
+      "address": 271314674,
+      "length": 42,
+      "fnv1a": 1625329861
+    },
+    {
+      "address": 268657576,
+      "length": 36,
+      "fnv1a": 2965253862
+    },
+    {
+      "address": 268656868,
+      "length": 36,
+      "fnv1a": 3016534670
+    },
+    {
+      "address": 274219088,
+      "length": 20,
+      "fnv1a": 3998580669
+    },
+    {
+      "address": 272810600,
+      "length": 4,
+      "fnv1a": 95176753
+    },
+    {
+      "address": 271857624,
+      "length": 56,
+      "fnv1a": 3752027811
+    },
+    {
+      "address": 271876756,
+      "length": 120,
+      "fnv1a": 2954183369
+    },
+    {
+      "address": 273387504,
+      "length": 94,
+      "fnv1a": 860320866
+    },
+    {
+      "address": 272984954,
+      "length": 4,
+      "fnv1a": 3107830392
+    },
+    {
+      "address": 272984958,
+      "length": 4,
+      "fnv1a": 1821978132
+    },
+    {
+      "address": 270449116,
+      "length": 22,
+      "fnv1a": 660363715
+    },
+    {
+      "address": 270444318,
+      "length": 70,
+      "fnv1a": 1107086041
+    },
+    {
+      "address": 272917610,
+      "length": 92,
+      "fnv1a": 1522596121
+    },
+    {
+      "address": 272918336,
+      "length": 4,
+      "fnv1a": 832818538
+    },
+    {
+      "address": 271314450,
+      "length": 96,
+      "fnv1a": 297974570
+    },
+    {
+      "address": 272917302,
+      "length": 308,
+      "fnv1a": 1077559813
+    },
+    {
+      "address": 273835128,
+      "length": 8,
+      "fnv1a": 4091612158
+    },
+    {
+      "address": 270736378,
+      "length": 28,
+      "fnv1a": 2141667083
+    },
+    {
+      "address": 272916844,
+      "length": 88,
+      "fnv1a": 2034011213
+    },
+    {
+      "address": 272811648,
+      "length": 18,
+      "fnv1a": 304879809
+    },
+    {
+      "address": 270646538,
+      "length": 20,
+      "fnv1a": 1044291426
+    },
+    {
+      "address": 272979868,
+      "length": 4,
+      "fnv1a": 3260904947
+    },
+    {
+      "address": 272979956,
+      "length": 70,
+      "fnv1a": 3022429367
+    },
+    {
+      "address": 270115224,
+      "length": 6,
+      "fnv1a": 1576766580
+    },
+    {
+      "address": 268657460,
+      "length": 36,
+      "fnv1a": 4203381625
+    },
+    {
+      "address": 271636256,
+      "length": 36,
+      "fnv1a": 527344485
+    },
+    {
+      "address": 276071684,
+      "length": 256,
+      "fnv1a": 4239478969
+    },
+    {
+      "address": 271748634,
+      "length": 58,
+      "fnv1a": 788881247
+    },
+    {
+      "address": 272927286,
+      "length": 64,
+      "fnv1a": 3821501879
+    },
+    {
+      "address": 270612614,
+      "length": 52,
+      "fnv1a": 1413729391
+    },
+    {
+      "address": 270736454,
+      "length": 18,
+      "fnv1a": 1240942302
+    },
+    {
+      "address": 270736472,
+      "length": 34,
+      "fnv1a": 2573631775
+    },
+    {
+      "address": 270612554,
+      "length": 8,
+      "fnv1a": 244710527
+    },
+    {
+      "address": 270109962,
+      "length": 52,
+      "fnv1a": 1656327670
+    },
+    {
+      "address": 270109914,
+      "length": 48,
+      "fnv1a": 3947058173
+    },
+    {
+      "address": 270171676,
+      "length": 14,
+      "fnv1a": 1101205264
+    },
+    {
+      "address": 271746984,
+      "length": 80,
+      "fnv1a": 2225044338
+    },
+    {
+      "address": 271772306,
+      "length": 16,
+      "fnv1a": 2676863695
+    },
+    {
+      "address": 272917702,
+      "length": 82,
+      "fnv1a": 3112879292
+    },
+    {
+      "address": 271635534,
+      "length": 24,
+      "fnv1a": 3491762876
+    },
+    {
+      "address": 271635632,
+      "length": 4,
+      "fnv1a": 3820954615
+    },
+    {
+      "address": 272978078,
+      "length": 6,
+      "fnv1a": 488480102
+    },
+    {
+      "address": 271747248,
+      "length": 1056,
+      "fnv1a": 375393437
+    },
+    {
+      "address": 271747062,
+      "length": 186,
+      "fnv1a": 2707223838
+    },
+    {
+      "address": 272920256,
+      "length": 14,
+      "fnv1a": 128685880
+    },
+    {
+      "address": 271746984,
+      "length": 78,
+      "fnv1a": 2164628121
+    },
+    {
+      "address": 272927520,
+      "length": 30,
+      "fnv1a": 1902883871
+    },
+    {
+      "address": 271314450,
+      "length": 96,
+      "fnv1a": 297974570
+    },
+    {
+      "address": 271890668,
+      "length": 140,
+      "fnv1a": 671648604
+    },
+    {
+      "address": 272818576,
+      "length": 42,
+      "fnv1a": 1785401372
+    },
+    {
+      "address": 272818632,
+      "length": 40,
+      "fnv1a": 369196573
+    },
+    {
+      "address": 272007280,
+      "length": 120,
+      "fnv1a": 2119329766
+    },
+    {
+      "address": 272007896,
+      "length": 4,
+      "fnv1a": 2597819595
+    },
+    {
+      "address": 272982168,
+      "length": 4,
+      "fnv1a": 1900573992
+    },
+    {
+      "address": 272984884,
+      "length": 4,
+      "fnv1a": 4027264062
+    },
+    {
+      "address": 270716736,
+      "length": 4,
+      "fnv1a": 1743403138
+    },
+    {
+      "address": 269891150,
+      "length": 4,
+      "fnv1a": 4077974248
+    },
+    {
+      "address": 270772580,
+      "length": 20,
+      "fnv1a": 3638380044
+    },
+    {
+      "address": 270772984,
+      "length": 4,
+      "fnv1a": 1299343647
+    },
+    {
+      "address": 272811648,
+      "length": 18,
+      "fnv1a": 304879809
+    },
+    {
+      "address": 270646538,
+      "length": 20,
+      "fnv1a": 1044291426
+    },
+    {
+      "address": 271636344,
+      "length": 44,
+      "fnv1a": 3462336030
+    },
+    {
+      "address": 273058280,
+      "length": 2364,
+      "fnv1a": 3972066067
+    },
+    {
+      "address": 273057890,
+      "length": 4,
+      "fnv1a": 1585877389
+    },
+    {
+      "address": 273076496,
+      "length": 162,
+      "fnv1a": 529209951
+    },
+    {
+      "address": 273083220,
+      "length": 20,
+      "fnv1a": 835352716
+    },
+    {
+      "address": 273083652,
+      "length": 28,
+      "fnv1a": 197603888
+    },
+    {
+      "address": 273083160,
+      "length": 20,
+      "fnv1a": 3305037026
+    },
+    {
+      "address": 273083424,
+      "length": 32,
+      "fnv1a": 3934528012
+    },
+    {
+      "address": 273083456,
+      "length": 22,
+      "fnv1a": 1075454939
+    },
+    {
+      "address": 273081968,
+      "length": 34,
+      "fnv1a": 1222287724
+    },
+    {
+      "address": 273083594,
+      "length": 32,
+      "fnv1a": 2614094696
+    },
+    {
+      "address": 273075500,
+      "length": 22,
+      "fnv1a": 3456987370
+    },
+    {
+      "address": 270736406,
+      "length": 26,
+      "fnv1a": 855294598
+    },
+    {
+      "address": 272927520,
+      "length": 30,
+      "fnv1a": 1902883871
+    },
+    {
+      "address": 272918902,
+      "length": 70,
+      "fnv1a": 2025589294
+    },
+    {
+      "address": 271655922,
+      "length": 6,
+      "fnv1a": 1950972879
+    },
+    {
+      "address": 271314450,
+      "length": 96,
+      "fnv1a": 297974570
+    },
+    {
+      "address": 270110014,
+      "length": 50,
+      "fnv1a": 3498064723
+    },
+    {
+      "address": 270171690,
+      "length": 14,
+      "fnv1a": 4123452048
+    },
+    {
+      "address": 271771734,
+      "length": 94,
+      "fnv1a": 3977376937
+    },
+    {
+      "address": 271751176,
+      "length": 50,
+      "fnv1a": 4257266532
+    },
+    {
+      "address": 271772306,
+      "length": 16,
+      "fnv1a": 2676863695
+    },
+    {
+      "address": 271636634,
+      "length": 128,
+      "fnv1a": 4200687828
+    }
+  ],
+  "legacy_native_function_checks": [
+    {
+      "address": 273391692,
+      "length": 86,
+      "fnv1a": 3911242483
+    },
+    {
+      "address": 271762064,
+      "length": 50,
+      "fnv1a": 2411919111
+    },
+    {
+      "address": 271761970,
+      "length": 94,
+      "fnv1a": 136831155
+    },
+    {
+      "address": 272818066,
+      "length": 8,
+      "fnv1a": 879925674
+    },
+    {
+      "address": 272809996,
+      "length": 20,
+      "fnv1a": 2743761420
+    },
+    {
+      "address": 271852206,
+      "length": 48,
+      "fnv1a": 3449696028
+    },
+    {
+      "address": 273391598,
+      "length": 88,
+      "fnv1a": 998459876
+    },
+    {
+      "address": 271748692,
+      "length": 280,
+      "fnv1a": 3668037150
+    },
+    {
+      "address": 271748972,
+      "length": 980,
+      "fnv1a": 2313355770
+    },
+    {
+      "address": 271878654,
+      "length": 176,
+      "fnv1a": 2070321170
+    },
+    {
+      "address": 271744202,
+      "length": 630,
+      "fnv1a": 402707434
+    },
+    {
+      "address": 272984884,
+      "length": 4,
+      "fnv1a": 4027264062
+    },
+    {
+      "address": 270716736,
+      "length": 4,
+      "fnv1a": 1743403138
+    },
+    {
+      "address": 269891150,
+      "length": 4,
+      "fnv1a": 4077974248
+    },
+    {
+      "address": 270772580,
+      "length": 20,
+      "fnv1a": 3638380044
+    },
+    {
+      "address": 269105982,
+      "length": 270,
+      "fnv1a": 2974913678
+    },
+    {
+      "address": 272920244,
+      "length": 4,
+      "fnv1a": 2160140564
+    },
+    {
+      "address": 272920248,
+      "length": 4,
+      "fnv1a": 2161229470
+    },
+    {
+      "address": 271314586,
+      "length": 16,
+      "fnv1a": 1942793475
+    },
+    {
+      "address": 271314602,
+      "length": 72,
+      "fnv1a": 3160481282
+    },
+    {
+      "address": 271314674,
+      "length": 42,
+      "fnv1a": 1625329861
+    },
+    {
+      "address": 268657576,
+      "length": 36,
+      "fnv1a": 2965253862
+    },
+    {
+      "address": 268656868,
+      "length": 36,
+      "fnv1a": 3016534670
+    },
+    {
+      "address": 274219088,
+      "length": 20,
+      "fnv1a": 3998580669
+    },
+    {
+      "address": 272810600,
+      "length": 4,
+      "fnv1a": 95176753
+    },
+    {
+      "address": 271857624,
+      "length": 56,
+      "fnv1a": 3752027811
+    },
+    {
+      "address": 271876756,
+      "length": 120,
+      "fnv1a": 2836719389
+    },
+    {
+      "address": 273387504,
+      "length": 94,
+      "fnv1a": 860320866
+    },
+    {
+      "address": 272984954,
+      "length": 4,
+      "fnv1a": 3107830392
+    },
+    {
+      "address": 272984958,
+      "length": 4,
+      "fnv1a": 1821978132
+    },
+    {
+      "address": 270449116,
+      "length": 22,
+      "fnv1a": 660363715
+    },
+    {
+      "address": 270444318,
+      "length": 70,
+      "fnv1a": 1107086041
+    },
+    {
+      "address": 272917610,
+      "length": 92,
+      "fnv1a": 1522596121
+    },
+    {
+      "address": 272918336,
+      "length": 4,
+      "fnv1a": 832818538
+    },
+    {
+      "address": 271314450,
+      "length": 96,
+      "fnv1a": 297974570
+    },
+    {
+      "address": 272917302,
+      "length": 308,
+      "fnv1a": 1077559813
+    },
+    {
+      "address": 273835128,
+      "length": 8,
+      "fnv1a": 4091612158
+    },
+    {
+      "address": 270736378,
+      "length": 28,
+      "fnv1a": 2141667083
+    },
+    {
+      "address": 272916844,
+      "length": 88,
+      "fnv1a": 2034011213
+    },
+    {
+      "address": 272811648,
+      "length": 18,
+      "fnv1a": 304879809
+    },
+    {
+      "address": 270646538,
+      "length": 20,
+      "fnv1a": 1044291426
+    },
+    {
+      "address": 272979868,
+      "length": 4,
+      "fnv1a": 3260904947
+    },
+    {
+      "address": 272979956,
+      "length": 70,
+      "fnv1a": 3022429367
+    },
+    {
+      "address": 270115224,
+      "length": 6,
+      "fnv1a": 1576766580
+    },
+    {
+      "address": 268657460,
+      "length": 36,
+      "fnv1a": 4203381625
+    },
+    {
+      "address": 271636256,
+      "length": 36,
+      "fnv1a": 527344485
+    },
+    {
+      "address": 276071684,
+      "length": 256,
+      "fnv1a": 4239478969
+    },
+    {
+      "address": 271748634,
+      "length": 58,
+      "fnv1a": 788881247
+    },
+    {
+      "address": 272927286,
+      "length": 64,
+      "fnv1a": 3821501879
+    },
+    {
+      "address": 270612614,
+      "length": 52,
+      "fnv1a": 1413729391
+    },
+    {
+      "address": 270736454,
+      "length": 18,
+      "fnv1a": 1240942302
+    },
+    {
+      "address": 270736472,
+      "length": 34,
+      "fnv1a": 2573631775
+    },
+    {
+      "address": 270612554,
+      "length": 8,
+      "fnv1a": 244710527
+    },
+    {
+      "address": 270109962,
+      "length": 52,
+      "fnv1a": 1656327670
+    },
+    {
+      "address": 270109914,
+      "length": 48,
+      "fnv1a": 3947058173
+    },
+    {
+      "address": 270171676,
+      "length": 14,
+      "fnv1a": 1101205264
+    },
+    {
+      "address": 271746984,
+      "length": 80,
+      "fnv1a": 2225044338
+    },
+    {
+      "address": 271772306,
+      "length": 16,
+      "fnv1a": 2676863695
+    },
+    {
+      "address": 272917702,
+      "length": 82,
+      "fnv1a": 3112879292
+    },
+    {
+      "address": 271635534,
+      "length": 24,
+      "fnv1a": 3491762876
+    },
+    {
+      "address": 271635632,
+      "length": 4,
+      "fnv1a": 3820954615
+    },
+    {
+      "address": 272978078,
+      "length": 6,
+      "fnv1a": 488480102
+    },
+    {
+      "address": 271747248,
+      "length": 1056,
+      "fnv1a": 375393437
+    },
+    {
+      "address": 271747062,
+      "length": 186,
+      "fnv1a": 2707223838
+    },
+    {
+      "address": 272920256,
+      "length": 14,
+      "fnv1a": 128685880
+    },
+    {
+      "address": 271746984,
+      "length": 78,
+      "fnv1a": 2164628121
+    },
+    {
+      "address": 272927520,
+      "length": 30,
+      "fnv1a": 1902883871
+    },
+    {
+      "address": 271314450,
+      "length": 96,
+      "fnv1a": 297974570
+    },
+    {
+      "address": 271890668,
+      "length": 140,
+      "fnv1a": 671648604
+    },
+    {
+      "address": 272818576,
+      "length": 42,
+      "fnv1a": 1785401372
+    },
+    {
+      "address": 272818632,
+      "length": 40,
+      "fnv1a": 369196573
+    },
+    {
+      "address": 272007280,
+      "length": 120,
+      "fnv1a": 2119329766
+    },
+    {
+      "address": 272007896,
+      "length": 4,
+      "fnv1a": 2597819595
+    },
+    {
+      "address": 272982168,
+      "length": 4,
+      "fnv1a": 1900573992
+    },
+    {
+      "address": 272984884,
+      "length": 4,
+      "fnv1a": 4027264062
+    },
+    {
+      "address": 270716736,
+      "length": 4,
+      "fnv1a": 1743403138
+    },
+    {
+      "address": 269891150,
+      "length": 4,
+      "fnv1a": 4077974248
+    },
+    {
+      "address": 270772580,
+      "length": 20,
+      "fnv1a": 3638380044
+    },
+    {
+      "address": 270772984,
+      "length": 4,
+      "fnv1a": 1299343647
+    },
+    {
+      "address": 272811648,
+      "length": 18,
+      "fnv1a": 304879809
+    },
+    {
+      "address": 270646538,
+      "length": 20,
+      "fnv1a": 1044291426
+    },
+    {
+      "address": 271636344,
+      "length": 44,
+      "fnv1a": 3462336030
+    },
+    {
+      "address": 273058280,
+      "length": 2364,
+      "fnv1a": 3972066067
+    },
+    {
+      "address": 273057890,
+      "length": 4,
+      "fnv1a": 1585877389
+    },
+    {
+      "address": 273076496,
+      "length": 162,
+      "fnv1a": 529209951
+    },
+    {
+      "address": 273083220,
+      "length": 20,
+      "fnv1a": 835352716
+    },
+    {
+      "address": 273083652,
+      "length": 28,
+      "fnv1a": 197603888
+    },
+    {
+      "address": 273083160,
+      "length": 20,
+      "fnv1a": 3305037026
+    },
+    {
+      "address": 273083424,
+      "length": 32,
+      "fnv1a": 3934528012
+    },
+    {
+      "address": 273083456,
+      "length": 22,
+      "fnv1a": 1075454939
+    },
+    {
+      "address": 273081968,
+      "length": 34,
+      "fnv1a": 1222287724
+    },
+    {
+      "address": 273083594,
+      "length": 32,
+      "fnv1a": 2614094696
+    },
+    {
+      "address": 273075500,
+      "length": 22,
+      "fnv1a": 3456987370
+    },
+    {
+      "address": 270736406,
+      "length": 26,
+      "fnv1a": 855294598
+    },
+    {
+      "address": 272927520,
+      "length": 30,
+      "fnv1a": 1902883871
+    },
+    {
+      "address": 272918902,
+      "length": 70,
+      "fnv1a": 2025589294
+    },
+    {
+      "address": 271655922,
+      "length": 6,
+      "fnv1a": 1950972879
+    },
+    {
+      "address": 271314450,
+      "length": 96,
+      "fnv1a": 297974570
+    },
+    {
+      "address": 270110014,
+      "length": 50,
+      "fnv1a": 3498064723
+    },
+    {
+      "address": 270171690,
+      "length": 14,
+      "fnv1a": 4123452048
+    },
+    {
+      "address": 271771734,
+      "length": 94,
+      "fnv1a": 3977376937
+    },
+    {
+      "address": 271751176,
+      "length": 50,
+      "fnv1a": 4257266532
+    },
+    {
+      "address": 271772306,
+      "length": 16,
+      "fnv1a": 2676863695
+    },
+    {
+      "address": 271636634,
+      "length": 128,
+      "fnv1a": 4200687828
+    }
+  ],
+  "retained_branch_checks": [
+    {
+      "name": "z5_ctl_main",
+      "size": 380,
+      "direct_branches": 16
+    },
+    {
+      "name": "disp_metadata",
+      "size": 9488,
+      "direct_branches": 727
+    },
+    {
+      "name": "release_cb",
+      "size": 26796,
+      "direct_branches": 1716
+    }
+  ],
+  "sdk_hashes": {
+    "include/z5/audio.h": "fdebac4620d2af372635e9bb297bd5ae5df46f710a3a4d2f56734b34aed1b812",
+    "include/z5/bglog.h": "4e090c5280b2ddd2edd2c9fcbf53d4295bd7356f9145262c3b83a3aee3cbc8c6",
+    "include/z5/fs.h": "58a35b66d1fe96b586efd6b2eeb0688d9117641728b7d935133d61b2a3b39844",
+    "include/z5/hook.h": "6f0377a593bf81b9eea79d93e140e048d432bb8dbcf2cbf13696511fd9f75cdd",
+    "include/z5/image.h": "480caa0d0ef9aed1c5cd0d656ccb9d9e50f5fe1b78d437a7fc1d8041bfba4e52",
+    "include/z5/log.h": "a74f407f6dd8397e2a4b3259bc6e64f9a5095d5e31747fd18ce0541a0262f799",
+    "include/z5/module.h": "971afd0f1bbec81e3255c0387962c79fdb21d18ef12cddea1a10cf0e1b6ceca3",
+    "include/z5/state.h": "4dac71489941bdecb94ec476db562475140c4da0bb6d0d375b6428dc3ea25de5",
+    "include/z5/str.h": "a929df4f8c36526076c526d04d6396c73f0de65c1b2eda092973f620fa5f21a4",
+    "include/z5/svc.h": "7fd0cd088d0d874ba6e1a7d28e0d8f7f525b6a16b226ffbf46ed6a0f5fdef2f3",
+    "include/z5/task.h": "bff641031a9425f9e45edc404c6797830308c1cff5a308f025be547250e7d65e",
+    "include/z5/time.h": "c3e53e9f686457cb00416528697e791aaf8330592b4cc80b43f0e45d626a6707",
+    "include/z5/ui.h": "0777a33c78e1d3ff714f945d13389257b4fc287e682f254f1cc5e4910f999f63",
+    "include/z5/wav.h": "22066e89a3451f926567467559c7f48ddd7f9017e7c65244197fbcf7cae1420d",
+    "include/z5/z5.h": "f222071b8854b914ba78848b138578b779a091f1b3ba622c919da1143ce16594",
+    "src/audio.c": "c43b653c80c0227e01914d82474a401b12b15c3c0251e270c20893188ae0c0e8",
+    "src/audio_arm.c": "c0ca09b1178dd58b4e799eea7ade72da96598ca762f86b1fc6801e41e54c7c29",
+    "src/fs.c": "fb2dce71eb87bda764e8517dd3fcec67c23dc2bde469a0938d0383bd3c01e236",
+    "src/image.c": "e0aa8bc01ed1de3cdae10af953db1ae0812e8e40577e367cf3aea211b5eea2b8",
+    "src/imgarm.S": "5a23fc2dff13e6f22e9865558c956d57b04dfb9523150fbc4e0b0e9f64a78a94",
+    "src/start.S": "70e20a937e1b6a844e7aa648ef5a7e1f3e12480aa7feede076a180971b85b41a",
+    "src/state.c": "b7e37d5f57e2cca24b0ca876964172f526bdb97e932124d9c8f8cb95a58bbe64",
+    "src/str.c": "76542dcf509e228b4c697190ee53d206d416125fe4db70752c0062c943fc235d",
+    "src/task.c": "9965e52f0d3c19a7f0fd58bc53bd64b74c32184d6d178458eeff192b88dde098",
+    "src/ui.c": "026380cf416505d2c1ba3ad099bd575ad5c1ebb63cd05651e4b72199bfa386d1",
+    "tools/imgcheck.py": "6fd50368aa689b1b246757e30536271dec36820488652692b2626f50299a2b88",
+    "tools/z5build.py": "225120ff70bac1f70ac5ad60390f0de1070e32a290dcf8987ae54b6b7059d7a5",
+    "tools/z5pack.py": "8cc44802cfe5cd3440f5c6456dac19b259a49220d0addff1c3a37b811297e213",
+    "z5mod.ld": "eb739b180dea2e5e78a42362240a64a43420a2adf0e86238a8d58b52790062a6"
+  },
+  "source_hashes": {
+    "src/card_module/build.py": "6761316017b4ff9853e78678dad737f89696f4e62fd9c7ff9ddb77fbedb897c7",
+    "src/card_module/custom_disp/compatibility.json": "9a438d3605a5bf245175116e423c842bd1a738e9f0b3166adc3148df2de8b03d",
+    "src/card_module/custom_disp/compose.h": "37a10e7c761cdb3e993369ca40f8618b279ee2a631243e7d5f77f7c05c6afcc3",
+    "src/card_module/custom_disp/diagnostics.h": "e6a8927c3f6fdec1b34679d5f839f22a6868222fb980417678fcdf43e0876edd",
+    "src/card_module/custom_disp/display.c": "2df661630ba28149e804d3b18e8a3ea68a257999af47a9e0fa8801f52c6c8586",
+    "src/card_module/custom_disp/histogram.h": "2ecafdae367032ea1c8c033392a3cf28f975e687a40f4a437b43fc329dfe9dd2",
+    "src/card_module/custom_disp/histogram_raster.h": "4245759d4410af8d69590429413b09337137c008cf602bfe747265a13c9100e6",
+    "src/card_module/custom_disp/level.h": "570c2a963b23bcc4f9c42c7ad8a17958b7bac8563c344f3fe1cc9ddcccc71223",
+    "src/card_module/custom_disp/output.h": "61f52fb604cbf8db43150136b4fef32858f824c0350789b310a76165f6b82926",
+    "src/card_module/custom_disp/overlay_render.h": "0439b92c5fcf3a2f7f762ff4be8780c950563dbd7be46440d2502444d9a401b5",
+    "src/card_module/custom_disp/overlay_state.h": "d21137ccaba938a84869278dc6ba97a8bccd5a8f4fa308a53b0d3f744ce68a6f",
+    "src/card_module/custom_disp/platform.json": "e4a1b24f7c154c5d80764911c1c566444fb9fa2c4210ce501fb1f718b1e99d2f",
+    "src/card_module/custom_disp/refresh.h": "bd296e3a61b0e3ca0dbc57631ec72e253e0198abfa75fb7ff29176ce995bfbd5",
+    "src/card_module/custom_disp/refresh_override.h": "42a61a1f508451af9177b9eacd79c245e45b99708a8445077481b07790281464",
+    "src/card_module/custom_disp/responsive.h": "00f11c7a8230cd846eb6c45781383a0099df53168aab6248a064c6c4065e9fac",
+    "src/card_module/custom_disp/sdk_compat.h": "5c3ab0cff2f943067d71979065b4619b991e718643f699370320dc8cf95f9210",
+    "src/card_module/custom_disp/sdk_sources.json": "6e0ea598b02450f610abe69d9edbb1f1722c00e38430aa2751ed5beb4cab1b19",
+    "src/card_module/custom_disp/smooth.h": "9adf20520a08bc3743c98a854e562499b579b43d3f067dd16fd81243d92a226d",
+    "src/card_module/custom_disp/sparse.h": "fbf8e1f65fa693b41755729c28be83cce449af60a9cbcd6991521d7ab64d47c2",
+    "src/card_module/custom_disp/target.h.in": "25f53188682a20ba150b74170fe93a22e3e93a44886b8b258f1218a7cfd130dc",
+    "src/card_module/custom_disp.h": "659bfca8eb63011c88502cd05d2a5eef574b35e5015b3241b562daac1df81a7b",
+    "src/card_module/custom_disp_install.inc": "845bc8705c44c6488a4ac64f3e72d0e00a50a787a53f3c4452d221137d30d0c9",
+    "src/card_module/custom_disp_runtime.inc": "834eed526279a0e740cd7378eb89435412853d0a797dcd229da80ee127a6b33f",
+    "src/card_module/main.c": "dcff6aef2af18efc3c6b3cb1c48e8bab9e0f695b4570a56b3b39778f0ec2cfe8",
+    "src/card_module/vui_card.inc": "f38b1b71995cfdf6aa2963b4477f25e556620699d40803887bf2d86872a43f9f",
+    "src/card_module/z5mod-sdk.patch": "d68e378f9f0c2a08e3cbccb2d0dd89279a8b0d9046e4a47e7772e1c8435a545f"
+  },
+  "compiler_version": "14.3.1",
+  "limitations": "Build and static checks only. Camera timing, portrait layout and wake need hardware verification.",
+  "verification": {
+    "host_tests": [
+      "custom_disp: synthetic masks and both accepted firmware initializers",
+      "config: legacy and extended MENU.DAT",
+      "refresh_override: all selectors and compare-and-restore",
+      "histogram_raster: 256 bins and LCD/portrait/EVF adapters",
+      "output_sync: checked-tail surface ownership, actual walk wrapper, native EVF activation/descriptor independence, shooting/busy guards, LCD descriptor mismatch rejection, sparse bounds/banks, 60Hz cadence/wrap, worker-failure versus normal sleep result, 120ms gate"
+    ],
+    "windows_packager_unit_tests": {
+      "passed": 7,
+      "python": "system Python with Tkinter"
+    },
+    "sdk_reconstructed_from_commit_and_patch": true,
+    "source_export_without_local_research_build_passed": true,
+    "source_export_current_only_size": 55128,
+    "source_export_current_only_sha256": "01f705464cf4aa7462865d0294553933af80f86523bf5efbb5f7b555ad89ff5e",
+    "firmware_patch_payload_unchanged": true,
+    "camera_verified": false,
+    "qemu_or_arm_dynamic_tests_run": false,
+    "data_archive_roundtrip_passed": true,
+    "data_archive_members": [
+      "card/SHUTTER/1.WAV",
+      "card/SHUTTER/2.WAV",
+      "card/SHUTTER/3.WAV",
+      "card/SHUTTER/4.WAV",
+      "card/SHUTTER/5.WAV",
+      "card/Z5APP.BIN",
+      "patch_data/patches.json"
+    ],
+    "obsolete_module_name_references": 0,
+    "unused_stencil_allocation_removed_bytes": 124944,
+    "hardware_feedback_baseline": {
+      "version": "L20",
+      "sha256": "711f14e101cbf5a4b547219c7d0523835f64d100dda8d95491af20cc8cfce248",
+      "scope": "user reports EVF level and histogram display restored; not a full combination acceptance test"
+    }
+  }
+}
