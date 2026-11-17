@@ -1,10 +1,10 @@
 /* Z5 card extensions: portrait UI, custom DISP, cached histogram and custom DISP level.
- * Target: C1.50 group-108 firmware; no new firmware edits are needed for L21.
+ * Target: C1.50 group-108 firmware; A39 uses the existing C1.50 release loader.
  * The stage0 loader invokes boot setup and the MY MENU status row. Callbacks
  * retained after loading live in copied Z5_IMAGE code; persistent data lives
  * in the SDK state or explicit heap allocations, not in the freed loader image.
  * See docs/CUSTOM_DISP_HANDOFF.md for ownership, drawing order and settings.
- * camera_verified: false for this exact L21 integration.
+ * camera_verified: false for this A39 integration.
  */
 #include "z5/audio.h"
 #include "z5/fs.h"
@@ -15,6 +15,43 @@
 #include "z5/ui.h"
 #include "z5/task.h"
 #include "custom_disp.h"
+#include "custom_disp/settings.h"
+
+#ifdef BULB_MENU
+/* "B门定时" in the photo shooting menu (burst_speed.inc / burst_speed_install.inc): the timed Bulb of A14/A15
+ * (computer-control switch + full 0x9207 executor sequence), time set in the menu instead of at build time. */
+#ifndef BULB_TIMER_MS
+#define BULB_TIMER_MS 0u
+#endif
+#define BULB_PCMODE
+#define BULB_FULLEXEC
+/* A18 (camera OK 2026-11-16): after "开始" the module task simulates a half press to leave the menu; the run
+ * starts BT_DELAY_MS after "开始" (A18 had 6 s, too long once the menu closes by itself). */
+#define BT_CLOSE_TASK
+#define BT_HALF_PRESS
+#ifndef BT_DELAY_MS
+#define BT_DELAY_MS 1500u
+#endif
+/* Its state lives on the heap: the SDK state block is full (0x20 + cm_t 0xAC0 + audio 0x5E0 = 0x1000), so cm_t
+ * must not grow. The pointer is kept in burst_viewall_off (unused since L56; only the A11 test reads it). */
+typedef struct {
+    u32 q[12];                      /* timed Bulb state, same layout as the 'TB12' record block */
+    u32 h, m, s, secs;              /* menu time; seconds of the armed run */
+    u32 stop, msg;                  /* end request; refusal on the start row (1 not Bulb, 2 zero time) */
+    u32 hdr, install;               /* page header; install result (1 or why not) */
+    u32 map0;                       /* start row's key map (heap): its OK destination is set per press */
+    u32 close_at;                   /* ms clock: close the menu then (after the key handling ended), 0 none */
+    u32 half_off;                   /* ms clock: release the simulated half press then, 0 none */
+    u32 pcl;                        /* PC_HIDE_CREATIVE install result (1 or why not) */
+    u32 pcl_n[3];                   /* calls of pcl_init / pcl_cb1 / pcl_cb4 */
+    u32 snap_at;                    /* A22: ms clock of the next RAM snapshot, 0 none */
+    u32 pk_hdr;                     /* BT_PICKER: header of the h:m:s picker view (copy of the date/time page) */
+    u32 im_n, im_runs;              /* PC_IMPORT: files imported by the last run; runs this power-up */
+    u32 im_hdr;                     /* PC_IMPORT: header of the "导入配方" page */
+    u32 im_log[1 + 4 * 9];          /* PC_IMPORT: 'PCIM', then per file {card id | slot << 16, data rc, store rc, busy} */
+} bt_t;
+#define BTP(c)        ((bt_t *)(c)->burst_viewall_off)
+#endif
 
 #define SEQ_BOOT      2u
 
@@ -32,7 +69,6 @@
 /* 2026-11-16: 0x1400 turned out to be image quality, not the language (JPG reads 3 = "English").
  * Until the real language setting is known the module's own rows are always Simplified Chinese. */
 #define CM_HANS       1u
-#define LANG_KEY      0x1400u
 #define LANG_ENGLISH  3u               /* read in the emulator with English UI; every
                                          * other language gets Simplified Chinese */
 #define ASCII_SET     0x10447BAAu      /* (text, slot, style)                    */
@@ -53,6 +89,7 @@
 #define FW_CLOSE      0x1033A8BAu
 #define FW_READAT     0x1020B0DEu
 #define FW_WRITE      0x102CB162u
+#define FW_SEEK       0x102CB190u
 #define MEDIA_STATE   0xC1805A10u      /* engine buffer slot (see sdk/src/audio.c) */
 
 #define SETUP_HDR     0xC18750C0u      /* runtime header of SETUP page 0x1CB     */
@@ -154,6 +191,7 @@
 #define ENTRY_SLOT    250u
 #define ENTRY_FLAGS   0x1001u
 #define ROW_FIRST_ID  0x2FFBu          /* owned rows: ids 0x2FFB.., slots 246..  */
+#define CUSTOM_MENU_FIRST_SLOT 266u    /* five DISP rows; 257..265 belong to Bulb and recipe menus */
 #define ROW_FIRST_SLOT 246u
 #define NROWS         4u
 #define R_ONOFF       0u
@@ -181,12 +219,12 @@
 #define PH_AUDIO      4u
 #define PH_MENU       5u
 #define PH_DONE       6u
-#define CFG_TRIES     3u
 #define SILENT_LEN    4800u            /* 25 ms placeholder clip                 */
 #define CHUNK         512u
 
 #define FS_OPEN_OK    0x043A0080u
 #define FS_CREATE     0x30Au
+#define FS_WRITE_EXISTING 0x00Au /* existing file, no create/truncate; seek before overwrite */
 
 /* --- persistent state (z5_state_user) ------------------------------------- */
 #define CM_MAGIC      0x554E4D43u      /* 'CMNU' */
@@ -217,10 +255,10 @@ typedef struct {
     u32 len;                /* current clip length, 0 = nothing to play      */
     u32 oks[5];             /* OK presses per handler (diagnostics)          */
     u32 stage;              /* last handler step reached (diagnostics)       */
-    u32 cfg_state;          /* MENU.DAT at start: 0 ok, 1 no open, 2 bad data */
+    u32 cfg_state;          /* MENU.DAT: 0 valid, 1 open, 2 format, 3 seek/read failure */
     u32 boot_hook;          /* release slot held a callback at the first run */
     u32 edited;             /* the user changed a value this session         */
-    u32 lang;               /* language setting read at the first run        */
+    u32 lang_reserved;      /* retained layout; menus always use Simplified Chinese */
     u32 boot_class;         /* draw class of the run that started the module */
     u32 dual;               /* histogram enabled on the level page           */
     u32 grid;               /* STYLE_ grid style                             */
@@ -335,9 +373,9 @@ typedef struct {
     u32 vui_hist_bank;
     char hist_text[48u * 2u];  /* L9: room for the existing metrics plus histogram wait H. */
     u32 vui_hist_last_publication; /* L11: packet last rasterized into the current LCD bank */
-    u32 custom_flags, custom_hdr, custom_state;
-    /* Burst speed-up (burst_speed.inc). Switches: MENU.DAT word 2 bits 4/5 = mechanical/electronic off. */
-    u32 burst_mech, burst_sil;      /* switches, default on */
+    u32 custom_flags, custom_control, custom_hdr, custom_state;
+    /* Burst speed-up (burst_speed.inc). Switches: D7 MENU.DAT word 2 bits 20/21 = mechanical/electronic off. */
+    u8 burst_mech, burst_sil;      /* switches, default on */
     u32 burst_removed, burst_tick;  /* holds this module took out of the blocking set; task passes */
     u32 burst_viewall_off;          /* times "view all in continuous mode" was switched off */
     u32 burst_task_rc;              /* 0 or why the task did not start / stopped */
@@ -354,6 +392,7 @@ typedef int (*open_fn)(void *, u32, u32);
 typedef int (*close_fn)(void *);
 typedef int (*readat_fn)(void *, void *, u32, u32);
 typedef int (*write_fn)(u32, const void *, u32, u32 *);
+typedef int (*seek_fn)(u32, u32, u32, u32 *);
 typedef void (*set_fn)(const void *, u32, u32);
 typedef void (*page_fn)(u32, u32);
 typedef void (*refresh_fn)(u32, u32, u32);
@@ -414,7 +453,7 @@ IMG_FN static void set_label(cm_t *c, u32 row)
         if (row == R_ONOFF) {
             const u16 *s = c->on ? c->hz_on : c->hz_off;
             for (i = 0; i < 2 && s[i]; i++) b[n++] = s[i];
-            if (c->cfg_state == 1u)                 /* no MENU.DAT: changes are not kept */
+            if (c->cfg_state)                 /* unread settings: changes blocked */
                 for (i = 0; i < 4 && c->hz_bad[i]; i++) b[n++] = c->hz_bad[i];
         } else if (row == R_TYPE || row == R_VOL) {
             b[n++] = (u16)('0' + value);
@@ -434,7 +473,7 @@ IMG_FN static void set_label(cm_t *c, u32 row)
         if (row == R_ONOFF) {
             const char *s = c->on ? c->en_on : c->en_off;
             for (i = 0; i < 4 && s[i]; i++) b[n++] = s[i];
-            if (c->cfg_state == 1u)
+            if (c->cfg_state)
                 for (i = 0; i < 4 && c->en_bad[i]; i++) b[n++] = c->en_bad[i];
         } else if (row == R_TYPE || row == R_VOL) {
             b[n++] = (char)('0' + value);
@@ -449,7 +488,7 @@ IMG_FN static void set_label(cm_t *c, u32 row)
     }
 }
 
-/* Follow the current language: label kind of every row, then all labels. */
+/* Keep all extension menu labels in Simplified Chinese. */
 IMG_FN static void refresh_labels(cm_t *c)
 {
     u32 hans = CM_HANS;
@@ -487,40 +526,62 @@ IMG_FN static void zero_words(u32 *p, u32 words)
 #define DG_AFAREA  0xC1819D28u         /* AF_AREA task state */
 #define DG_LAYERS  0xC1D61388u         /* GUI layer enables, LCD (0xC1D61160 + 0x228) */
 
-/* Write MENU.DAT: magic, on | type << 8 | vol << 16. */
+/* Write MENU.DAT: header, common settings, DISP flags, A19 timer, DISP routing. */
 IMG_FN static void save_cfg(cm_t *c)
 {
     u32 f[16];
-    u32 data[3];
+    u32 data[5], check[5];
     u32 out = 0;
-    c->edited = 1u;
-    /* Camera test 2026-11-08: a MENU.DAT created here never reaches the card, while
-     * overwriting one that exists does. So only ever overwrite an existing file. */
-    zero_words(f, 16);
-    FW(bind_fn, FW_BIND)(f, c->cfg_path);
-    if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) != FS_OPEN_OK) {
+    /* A failed/partial startup read must never become a default-filled save.
+     * Every settings mutator first calls cfg_ready(), before changing RAM. */
+    if (c->cfg_state) {
         c->save_err += 1u;
         return;
     }
-    FW(close_fn, FW_CLOSE)(f);
     zero_words(f, 16);
     data[0] = CFG_MAGIC;
-    data[2] = 0xD2150000u | (c->custom_flags & 15u) |
-              (c->burst_mech ? 0u : BURST_CFG_MECH_OFF) | (c->burst_sil ? 0u : BURST_CFG_SIL_OFF);
+    data[3] = 0u;
+#ifdef BULB_MENU
+    if (BTP(c)) data[3] = 0xB7000000u | (BTP(c)->h << 16) | (BTP(c)->m << 8) | BTP(c)->s;
+#endif
+    data[4] = CUSTOM_CONTROL_TAG | (c->custom_control & CUSTOM_CONTROL_MASK);
+    data[2] = CUSTOM_CFG_TAG | CUSTOM_NORMALIZE(c->custom_flags | CUSTOM_ENABLE_MASK) |
+              (c->burst_mech ? 0u : CUSTOM_CFG_MECH_OFF) | (c->burst_sil ? 0u : CUSTOM_CFG_SIL_OFF);
     data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26) | (c->vui << 27) |
               ((c->focal_on ? 0u : 1u) << 28) |  /* group 104: bit 28 = focal display off */
               ((c->bat_on ? 0u : 1u) << 29) |    /* group 116: bit 29 = battery display off */
               ((c->touch_on ? 0u : 1u) << 30);   /* group 119: bit 30 = portrait touch off */
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     c->stage = 10u;
-    if ((u32)FW(open_fn, FW_OPEN)(f, FS_CREATE, 0) != FS_OPEN_OK) {
+    if ((u32)FW(open_fn, FW_OPEN)(f, FS_WRITE_EXISTING, 0) != FS_OPEN_OK) {
+        c->save_err += 1u;
+        return;
+    }
+    /* 0x30A truncated the valid file before the write could succeed. Use the
+     * existing-file mode and seek to zero, preserving it on open/seek failure. */
+    u32 position = 0xFFFFFFFFu;
+    if (FW(seek_fn, FW_SEEK)(f[2], 0u, 0u, &position) != 1 || position != 0u) {
+        FW(close_fn, FW_CLOSE)(f);
         c->save_err += 1u;
         return;
     }
     FW(write_fn, FW_WRITE)(f[2], data, sizeof(data), &out);
     FW(close_fn, FW_CLOSE)(f);
-    if (out == sizeof(data)) c->saves += 1u;
-    else c->save_err += 1u;
+    if (out != sizeof(data)) { c->save_err += 1u; return; }
+    zero_words(f, 16);
+    FW(bind_fn, FW_BIND)(f, c->cfg_path);
+    if ((u32)FW(open_fn, FW_OPEN)(f, 0u, 0u) != FS_OPEN_OK) {
+        c->save_err += 1u;
+        return;
+    }
+    u32 length = 0u;
+    u32 ok = FW(seek_fn, FW_SEEK)(f[2], 0u, 2u, &length) == 1 &&
+        length == sizeof(check) && FW(readat_fn, FW_READAT)(f, check, 0u, sizeof(check)) == 1;
+    FW(close_fn, FW_CLOSE)(f);
+    for (u32 i = 0; ok && i < sizeof(data) / sizeof(data[0]); i++) ok = check[i] == data[i];
+    if (ok) {
+        c->saves += 1u; c->edited = 1u;
+    } else c->save_err += 1u;
 }
 
 #ifdef VUI_DIAG_FOCUS
@@ -741,34 +802,77 @@ IMG_FN static u32 load_clip(cm_t *c)
 
 /* --- menu event handlers (event map functions; arguments unused) --------- */
 
-/* Read MENU.DAT into the settings (defaults when it cannot be used). Returns and
- * records 0 ok, 1 cannot open, 2 unexpected content. Uses the file calls load_clip
- * and save_cfg already make, from the same contexts. */
-IMG_FN static u32 cfg_load(cm_t *c)
+/* Defaults are installed once at startup, never as a side effect of failed IO. */
+IMG_FN static void cfg_defaults(cm_t *c)
 {
-    u32 f[16];
-    u32 data[3];
-    u32 state = 1u;
-    zero_words(f, 16);
-    data[0] = 0; data[1] = 0; data[2] = 0;
-    c->custom_flags = 15u;
+#ifdef BULB_MENU
+    if (BTP(c)) { BTP(c)->h = 0u; BTP(c)->m = 1u; BTP(c)->s = 0u; }
+#endif
+    c->custom_flags = CUSTOM_DEFAULT_FLAGS;
+    c->custom_control = 0u;
     c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u; c->vui = 0u; c->focal_on = 1u;
     c->bat_on = 1u; c->touch_on = 1u;
     c->burst_mech = 1u; c->burst_sil = 1u;
+}
+
+IMG_FN static u32 cfg_timer_valid(u32 word)
+{
+    return word == 0u || ((word >> 24) == 0xB7u && ((word >> 16) & 0xFFu) <= 23u &&
+        ((word >> 8) & 0xFFu) <= 59u && (word & 0xFFu) <= 59u);
+}
+
+/* Transactional read: 0 valid, 1 open failure, 2 format, 3 seek/read failure.
+ * The native readat returns 1 only after the complete transfer was copied.
+ * Query exact size so a failed 12-byte read cannot masquerade as legacy 8. */
+IMG_FN static u32 cfg_load(cm_t *c)
+{
+    u32 f[16], data[5], length = 0u;
+    zero_words(data, 5u);
+    u32 state = 1u;
+    zero_words(f, 16);
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) == FS_OPEN_OK) {
-        FW(readat_fn, FW_READAT)(f, data, 0, 8u);
-        FW(readat_fn, FW_READAT)(f, data + 2, 8u, 4u);
+        state = 3u;
+        if (FW(seek_fn, FW_SEEK)(f[2], 0u, 2u, &length) == 1) {
+            if (length != 8u && length != 12u && length != 16u && length != 20u) state = 2u;
+            else if (FW(readat_fn, FW_READAT)(f, data, 0u, length) == 1) {
+                u32 tag = data[2] & 0xFFFF0000u;
+                u32 third = data[2] & 0xFF000000u;
+                u32 legacy_tag = tag == 0xD2150000u || tag == 0xD2160000u;
+                u32 legacy = length == 8u || (length == 12u && (legacy_tag || third == CUSTOM_CFG_OLD_TAG));
+                u32 timer_ok = cfg_timer_valid(data[3]);
+                u32 a19 = length == 16u && legacy_tag && timer_ok;
+                u32 control_word = length == 16u ? data[3] : data[4];
+                u32 control = control_word & CUSTOM_CONTROL_MASK;
+                u32 current = (length == 16u || (length == 20u && timer_ok)) &&
+                    third == CUSTOM_CFG_TAG && (data[2] & 0x00C00000u) == 0u &&
+                    control_word == (CUSTOM_CONTROL_TAG | control) &&
+                    CUSTOM_LOGICAL(control, 0u) <= 4u && CUSTOM_LOGICAL(control, 1u) <= 4u;
+                state = data[0] == CFG_MAGIC && (legacy || a19 || current) ? 0u : 2u;
+            }
+        }
         FW(close_fn, FW_CLOSE)(f);
-        state = data[0] == CFG_MAGIC ? 0u : 2u;
     }
-    c->cfg_state = state;
     if (!state) {
-        if ((data[2] & 0xFFFF0000u) == 0xD2150000u) {
-            c->custom_flags = data[2] & 15u;
-            c->burst_mech = !(data[2] & BURST_CFG_MECH_OFF);   /* burst speed-up switches */
+        cfg_defaults(c);
+        u32 tag = data[2] & 0xFFFF0000u;
+        if (tag == 0xD2150000u || tag == 0xD2160000u) {
+            c->custom_flags = (data[2] & 15u) | (tag == 0xD2160000u ? ((data[2] >> 2) & 16u) : 0u);
+            c->burst_mech = !(data[2] & BURST_CFG_MECH_OFF);
             c->burst_sil = !(data[2] & BURST_CFG_SIL_OFF);
         }
+        if ((data[2] & 0xFF000000u) == CUSTOM_CFG_TAG ||
+            (data[2] & 0xFF000000u) == CUSTOM_CFG_OLD_TAG) {
+            c->custom_flags = data[2] & CUSTOM_PAGES_MASK;
+            c->burst_mech = !(data[2] & CUSTOM_CFG_MECH_OFF);
+            c->burst_sil = !(data[2] & CUSTOM_CFG_SIL_OFF);
+        }
+        if (length == 20u) c->custom_control = data[4] & CUSTOM_CONTROL_MASK;
+        else if (length == 16u && (data[2] & 0xFF000000u) == CUSTOM_CFG_TAG)
+            c->custom_control = data[3] & CUSTOM_CONTROL_MASK;
+        else if (length == 12u && (tag == 0xD2160000u || (data[2] & 0xFF000000u) == CUSTOM_CFG_OLD_TAG))
+            c->custom_control = (c->custom_flags & CUSTOM_ENABLE_MASK) ? CUSTOM_CONTROL_ON : 0u;
+        c->custom_flags = CUSTOM_NORMALIZE(c->custom_flags | CUSTOM_ENABLE_MASK);
         u32 on = data[1] & 0xFFu, type = (data[1] >> 8) & 0xFFu, vol = (data[1] >> 16) & 0xFFu;
         if (on <= 1u) c->on = on;
         if (type >= 1u && type <= 5u) c->type = type;
@@ -779,9 +883,19 @@ IMG_FN static u32 cfg_load(cm_t *c)
         c->focal_on = !((data[1] >> 28) & 1u);
         c->bat_on = !((data[1] >> 29) & 1u);   /* group 116 */
         c->touch_on = !((data[1] >> 30) & 1u); /* group 119 */
+#ifdef BULB_MENU
+        if (BTP(c) && (data[3] >> 24) == 0xB7u) {
+            BTP(c)->h = (data[3] >> 16) & 0xFFu; BTP(c)->m = (data[3] >> 8) & 0xFFu; BTP(c)->s = data[3] & 0xFFu;
+        }
+#endif
     }
+    __sync_synchronize();
+    c->cfg_state = state;
     return state;
 }
+
+IMG_FN static u32 cfg_ready(cm_t *c);
+IMG_FN static void cfg_retry(cm_t *c);
 
 /* Install the release hook if the firmware has (re)filled the slot since. */
 IMG_FN static void ensure_hook(cm_t *c)
@@ -823,9 +937,7 @@ IMG_FN static u32 entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     if (!c) return 0;
     c->oks[4] += 1u;
     ensure_hook(c);
-    if (c->cfg_state && !c->edited) {          /* the start-up read failed, nothing changed yet */
-        if (cfg_load(c) == 0u) c->len = 0;     /* the saved type replaces the default clip */
-    }
+    cfg_ready(c);
     if (!c->len) c->err = load_clip(c);        /* the start-up load may have failed */
     c->reload = 0;
     refresh_labels(c);
@@ -841,7 +953,7 @@ IMG_FN static u32 onoff_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
-    if (!c) return 0;
+    if (!c || !cfg_ready(c)) return 0;
     c->oks[0] += 1u;
     c->stage = 1u;
     c->on = !c->on;
@@ -861,7 +973,7 @@ IMG_FN static u32 type_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
-    if (!c) return 0;
+    if (!c || !cfg_ready(c)) return 0;
     c->oks[1] += 1u;
     c->type = c->type >= 5u ? 1u : c->type + 1u;
     c->err = load_clip(c);
@@ -881,7 +993,7 @@ IMG_FN static u32 vol_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
-    if (!c) return 0;
+    if (!c || !cfg_ready(c)) return 0;
     c->oks[2] += 1u;
     c->vol = c->vol >= 5u ? 1u : c->vol + 1u;
     c->err = load_clip(c);
@@ -997,7 +1109,7 @@ IMG_FN static u32 zebra_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 IMG_FN static u32 zebra_set(u32 on)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         c->zebra = on;
         fx_apply(c);
         zebra_label(c);
@@ -1056,7 +1168,7 @@ IMG_FN static u32 vui_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 IMG_FN static u32 vui_set(u32 on)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         c->vui = on;
         vui_label(c);
         save_cfg(c);
@@ -1114,7 +1226,7 @@ IMG_FN static u32 focal_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 IMG_FN static u32 focal_set(u32 on)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         c->focal_on = on;
         focal_label(c);
         save_cfg(c);
@@ -1263,12 +1375,18 @@ IMG_FN static void diag_save(cm_t *c)
     c->dg_ix = c->dg_res ? 0xFEu : 0x80u;
 }
 
+#if defined(BULB_TIMER_MS) && !defined(BULB_MENU)
+IMG_FN static void bulb_arm(cm_t *c);          /* A12, burst_speed.inc */
+#endif
 IMG_FN static u32 save_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
     if (!c) return 0;
     diag_save(c);
+#if defined(BULB_TIMER_MS) && !defined(BULB_MENU)
+    bulb_arm(c);                               /* A12: in Bulb, arm the timed remote Bulb */
+#endif
     save_label(c);
     hub_open(c);
     return 0;
@@ -1304,7 +1422,7 @@ IMG_FN static u32 bat_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 IMG_FN static u32 bat_set(u32 on)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         c->bat_on = on;
         c->vui_bat_k = 0u;                     /* the stock icon comes back on its next redraw */
         bat_label(c);
@@ -1371,7 +1489,7 @@ IMG_FN static u32 touch_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 IMG_FN static u32 touch_set(u32 on)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         c->touch_on = on;
         touch_label(c);
         save_cfg(c);
@@ -1420,11 +1538,46 @@ IMG_FN static void hub_labels(cm_t *c)
 #include "burst_speed.inc"  /* image code: must stay before Z5_IMAGE_END */
 #include "vui_card.inc"   /* research/vertical-ui/vui_card.inc in the development tree */
 
+/* GUI-only recovery, after the retained image and menu state exist. No new
+ * task writes live settings while the GUI is editing them. */
+IMG_FN static u32 cfg_ready(cm_t *c)
+{
+    custom_disp_state *s = (custom_disp_state *)c->custom_state;
+    if (s && s->cfg_busy) return 0u;
+    if (!c->cfg_state) return 1u;
+    if (s && !__sync_bool_compare_and_swap(&s->cfg_busy, 0u, 1u)) return 0u;
+    u32 state = cfg_load(c);
+    if (!state) {
+        c->err = load_clip(c);
+        c->reload = 0u;
+        if (c->fx) fx_apply(c);
+        custom_apply(c);
+        refresh_labels(c);
+        hub_labels(c);
+    }
+    if (s) {
+        s->cfg_ms = *(volatile u32 *)CM_MS_CLOCK;
+        __sync_synchronize();
+        s->cfg_busy = 0u;
+    }
+    return !state;
+}
+
+IMG_FN static void cfg_retry(cm_t *c)
+{
+    if (!c->cfg_state || c->phase != PH_DONE || !c->custom_state) return;
+    custom_disp_state *s = (custom_disp_state *)c->custom_state;
+    u32 now = *(volatile u32 *)CM_MS_CLOCK;
+    if (s->cfg_busy || now - s->cfg_ms < 500u) return;
+    s->cfg_ms = now;
+    cfg_ready(c);
+}
+
 /* Grid rows: choose the style, then let the stock "On" handler turn the grid on. */
 IMG_FN static u32 grid_pick(u32 style, u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         c->grid = style;
         fx_apply(c);
         save_cfg(c);
@@ -1853,6 +2006,9 @@ static u32 install_menu(cm_t *c)
     if (vui_ok && install_touch_page(c, title, first_map) != 1u) c->touch_hdr = 0u;   /* group 119 */
     if (install_custom_page(c, title, first_map) != 1u) return 90u;
     if (install_burst_page(c, title, first_map) != 1u) c->burst_hdr = 0u;   /* burst speed-up switches */
+#ifdef BULB_MENU
+    if (BTP(c)) BTP(c)->install = install_bt(c, title, first_map);   /* B门定时 row in the photo shooting menu */
+#endif
     if (install_hub(c, title, first_map) != 1u) c->hub_hdr = 0u;                   /* group 116 */
 
     /* Labels before anything can show them. */
@@ -1954,9 +2110,16 @@ static void first_run(cm_t *c)
 {
     u32 cur = *(volatile u32 *)SLOT_C;
     init_strings(c);
-    for (u32 i = 0; i < CFG_TRIES && cfg_load(c) == 1u; i++) { }
+#ifdef BULB_MENU
+    {
+        u32 *b = (u32 *)z5_alloc(sizeof(bt_t), 0);
+        if (b) for (u32 i = 0; i < sizeof(bt_t) / 4u; i++) b[i] = 0u;
+        c->burst_viewall_off = (u32)b;
+    }
+#endif
+    cfg_defaults(c);
+    cfg_load(c); /* Later GUI callbacks retry with elapsed time, not a tight loop. */
     c->boot_hook = cur >= CODE_LO && cur < CODE_HI;
-    c->lang = FW(read_fn, SETTING_READ)(LANG_KEY);
     c->phase = PH_DUAL;
     enable_dual_display(c);
     c->hans = CM_HANS;
@@ -1998,6 +2161,7 @@ static void first_run(cm_t *c)
     }
 #endif
     c->custom_disp_rc = custom_disp_init(&c->custom_disp, img_addr(c, vui_hist_before_level), &c->vui_hist_sample_calls, &c->custom_flags);
+    if (!c->custom_disp_rc) ((void (*)(void *))img_addr(c, custom_apply))(c);
 }
 
 /* The module's block as this anchor describes it, read without writing anything;

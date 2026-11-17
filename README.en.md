@@ -21,23 +21,24 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Focal length | Shown for every CPU lens (stock: power-zoom lenses only); can be turned off | Yes |
 | Battery percent | Remaining charge shown in the battery icon; can be turned off | Yes |
 | Extensions menu | All switches in one row, "Extensions", at the end of the Setup menu | Yes |
-| DISP2 Custom (L21) | Independent level, histogram and detailed-info switches on the existing detailed shooting page; keeps simple-page basics and battery when details are off | L20 LCD/EVF reported working; L21 cleanup awaits camera recheck |
+| Custom DISP | Per-page level, histogram and details with separate LCD and EVF page memory | User reported A39 worked |
+| Timed Bulb | Set hours, minutes and seconds in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | A19 tested on camera. User reported A39 worked. |
 | Test records | One-press record of a problem (`Z5LOG` folder) for feedback | Yes |
-| Burst speed-up (test) | Mechanical 233 → ~195 ms/frame (camera-tested with FX and DX lenses). **Silent: no clear gain yet** (~380 ms/frame vs 400 stock; under investigation). **AF-S only: in AF-C focus also stays at the first frame, not for tracking.** Setup menu row "连拍提速" below the extension row, two switches (mechanical / electronic, default on); please switch "view all in continuous mode" off yourself. See [docs/BURST_SPEED.md](docs/BURST_SPEED.md) (Chinese) | Mechanical: combined build camera-tested; silent: not effective yet |
+| Burst speed-up (test) | Mechanical 233 → ~195 ms/frame (camera-tested with FX and DX lenses). **Silent: no clear gain yet** (~380 ms/frame vs 400 stock; under investigation). **AF-S only: in AF-C focus also stays at the first frame, not for tracking.** Setup menu row "连拍提速" below the extension row, two switches (mechanical / electronic, default on); please switch "view all in continuous mode" off yourself. See [docs/BURST_SPEED.md](docs/BURST_SPEED.md) (Chinese) | Older upstream build: mechanical tested, silent ineffective; this combination awaits camera testing |
 
 The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
 
-**This fork ships the L21 custom DISP test module**, ported onto the group-119 portrait module and the unchanged group-108 firmware. LCD and EVF now share the rendering scheduler and sparse cache publication, with 60 Hz refresh requests and a minimum 120 ms histogram acquisition interval. The exact combined build has not been verified on a camera. See the [rendering and handoff notes](docs/CUSTOM_DISP_HANDOFF.md) and [module build instructions](docs/CARD_MODULE_BUILD.md) (Chinese). Known issue: after waking from standby the battery and focal length only appear after one more half-press. In portrait, the i-menu sub pages, third-level pages and touch were **tuned only for the author's own 12 custom i-menu items** (Picture Control, ISO, flash mode, silent photography, HDR, AF-area mode, white balance, Active D-Lighting, metering, image area, vibration reduction, focus mode); other items may or may not work. The item list and the full development log are in the [portrait UI notes](docs/PORTRAIT_UI.md) (in Chinese, updated 2026-11-13). Please save a test record when something goes wrong.
+**A39** combines the A19 timed Bulb menu with Custom DISP from PR #6. Extension menus display in Simplified Chinese. Enable Custom DISP under Setup Menu → Extensions → Custom DISP. Each of the four pages has its own level, histogram and detail settings. The LCD keeps a display-off position, and the EVF cycles the four visible pages.
 
-The features live in a module on the memory card. The firmware gains only small entry points and checks. Without the module, the grid, highlight display and histogram-with-level paths behave as stock. Changes are limited to the MAIN module and do not touch the boot area.
-
-**Language:** the menus were tested on camera in Simplified Chinese. English labels are built in and appear when the camera language is English, but they have not been tested on a camera.
+The user reported that A39 worked in camera testing. Individual display scenarios and video were not reported separately. See the [portrait notes](docs/PORTRAIT_UI.md) and [Custom DISP handoff](docs/CUSTOM_DISP_HANDOFF.md).
 
 ## Windows tool (no installation)
 
-Upstream Windows executables do not automatically include this fork's L21 module. Use this checkout's `patch.py`, import a data package made from this fork, or rebuild the executable; see the [build notes](docs/CARD_MODULE_BUILD.md). The original tool is available from [Releases](https://github.com/WonderLantern/wonder-lantern-z5/releases). Run it and choose the official firmware you downloaded yourself. It builds the files on your computer, and the output folder includes usage notes (in Chinese) and the shutter sound converter. The first run needs an internet connection to download and verify the decoder. The program is unsigned, so Windows may show a security warning. The usage and recovery steps below still apply. Do not redistribute the generated firmware.
+Download the Windows tool from the [A39 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a39-20261117). It generates the firmware paired with A19 and the A39 card module from the official C 1.50 file. Existing tools can import Z5-update-a39-20261117.zip. The output includes Chinese instructions and the shutter sound converter.
 
 ## Usage
+
+**Already using the firmware paired with A19?** Back up the existing module and settings, then replace only Z5APP.BIN at the root of the card. Keep MENU.DAT and power-cycle the camera. To roll back, restore both backups. Custom DISP defaults to off when migrating from A19.
 
 ### 1. Prepare
 
@@ -109,12 +110,17 @@ The last row of the Setup menu, "Extensions" (扩展功能 in Chinese), holds:
 | Portrait touch | Touch in portrait; when off, touches in portrait are ignored, landscape is unaffected |
 | Focal length | Focal length for every CPU lens |
 | Battery % | Charge in percent inside the battery icon, red at 20 % and below |
-| DISP2 Custom | Existing detailed page: master, level, histogram and detailed-info switches; all default on |
-| Save log | Saves a test record; the row shows the file number ("01"), or "full" after 20 |
+| Custom DISP | One master for DISP0–DISP3; configure level, histogram and details per page; LCD/EVF remember their pages separately |
+| Timed Bulb | Set hours, minutes and seconds in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | A19 tested on camera. User reported A39 worked. |
+| Save log | Saves a test record; the row shows the file number ("01"), cycling over the oldest after all 20 fill |
 
 - **Framing grid:** Custom Setting d8, with On (4×4), Off, 3×3, or 2×2 (centre cross).
 - **Histogram with level:** press DISP to reach the virtual horizon page. It appears about 1 second after power-on or wake, and "Apply settings to live view" must be on.
 - **Status:** the last row of MY MENU shows the module status. `OK ...` means it is working (`正常 ...` in Chinese).
+
+Select **Extensions → Custom DISP → DISP0..DISP3 → Level → Native** for the L37 experiment. Native pose/setup is active again; visiting the stock level page first is no longer required. L37 addresses a suspected stale-dirty callback during LCD/EVF switching, but the L30 hard hang is not confirmed fixed on hardware. TypeA remains available.
+
+With the master on, DISP cycles logical pages while the native page stays DISP0. Details on uses original DISP0 masks; details off projects DISP1 masks onto DISP0, preserving basics and battery. Accepted page changes save logical LCD/EVF identities to the existing settings file, and startup restores them after a valid read. Turning the master off restores native page selection. All logical pages use the existing scoped native-level or TypeA path and private cached histogram. The complete combination still needs camera validation.
 
 ### 7. Reporting a problem
 

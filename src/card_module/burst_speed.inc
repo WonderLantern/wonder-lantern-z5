@@ -38,6 +38,9 @@
 #ifndef BURST_DO_HOLD
 #define BURST_DO_HOLD       1u             /* take 0x56/0x3c/0x3d/0x59/0x3f out of the blocking set (L41) */
 #endif
+#ifndef BURST_EXTRA_BITS
+#define BURST_EXTRA_BITS    0u             /* flag bits set whatever the mode (A7 test: 4 = M900, key 0x11A3 reads on) */
+#endif
 #ifndef BURST_FLAG_BITS
 #define BURST_FLAG_BITS     3u             /* P + 0x14 = 0xBF5A1C00 | bits: bit0 immediate go, bit1 no live-view return */
 #endif
@@ -78,10 +81,369 @@ IMG_FN static void burst_step(cm_t *c)
         }
     }
 #endif
-    burst_words(c, active ? BURST_FLAG_BITS : 0u);
+    burst_words(c, (active ? BURST_FLAG_BITS : 0u) | BURST_EXTRA_BITS);
     /* L56: no camera-setting access from this task. Writing 0x112C here (L53 every 0.5 s, L54 once)
      * hangs the camera at power-on (emulator: start never completes; camera: shutter locked). */
 }
+
+
+#ifdef BULB_MENU
+#define BT_RUN_MS(c) (BTP(c)->stop ? 0u : BTP(c)->secs * 1000u)
+#else
+#define BT_RUN_MS(c) BULB_TIMER_MS
+#endif
+#ifdef BULB_TIMER_MS
+/* A12 (M900 search, 2026-11-16): timed Bulb through the camera's own remote-capture path (the USB 0x9207 / 0x920C
+ * internals, camera-tested over USB: start -> ~10 s open -> end). Armed by "保存测试记录" in Bulb (setting 0x020E = 2);
+ * BT_DELAY_MS later the task calls 0x10219DDE(0xC29C46D8, [0xC18CA1CC]) (remote release start, request 0x46) and
+ * BULB_TIMER_MS after that 0x1021A32C(&0) (remote end). State block in the record buffer at 0xDC0 ('TB12'):
+ * [1] phase 0 idle / 1 armed / 2 open / 3 done, [2] time (arm target, then start ms), [3] start result,
+ * [4] end result, [5] / [6] USB capture state 0xC18A84E4 / exposure-open word 0xC18A7EE4 500 ms after the start
+ * (0x100 | value), [7] end ms, [8] the same two 1 s after the end (0x100 | state | open << 4), [9] reason if skipped. */
+#ifndef BT_DELAY_MS
+#define BT_DELAY_MS    6000u
+#endif
+#define BT_START       0x10219DDFu
+#define BT_END         0x1021A32Du
+#define BT_SESSION     0xC29C46D8u
+#define BT_PARAM       0xC18CA1CCu
+#define BT_MAGIC       0x32314254u          /* 'TB12' */
+IMG_FN static u32 bt_mode(void)
+{
+    u32 p = *(const volatile u32 *)(0x115C286Cu + 66u * 16u + 8u);   /* setting 0x020E: 0 normal, 2 Bulb, 3 Time */
+    return (p >= RAM_LO && p < RAM_HI) ? *(volatile u32 *)p : 0xFFu;
+}
+
+IMG_FN static void bulb_arm(cm_t *c)
+{
+    if (!c->dg_buf || bt_mode() != 2u) return;
+    volatile u32 *q = (volatile u32 *)(c->dg_buf + 0xDC0u);
+    for (u32 i = 1u; i < 12u; i++) q[i] = 0u;
+    q[2] = *(volatile u32 *)CM_MS_CLOCK + BT_DELAY_MS;
+    q[0] = BT_MAGIC;
+    q[1] = 1u;
+}
+
+#ifdef BULB_PCMODE
+/* A13: the camera only accepts the remote start in computer-control mode (USB test: 0x90C2(1) first). This copies
+ * the 0x90C2 executor 0x103564FA without the USB reply: property 0x2400 = current mode; if different: (mode 0:
+ * 0x1031B874 ? 0x10331DF2, 0x1031B834 ? 0x10219D84), clear flag 0x20000 (0x103563A4), busy byte 0xC18CA1D4 = 1,
+ * request 0x040F0007 {mode, 0, callback 0x103564C3} (0x1032FC26), wait for 0x20000 (0x10356412, no timeout), then
+ * poll property 0x1B0C == 1 (300 x 10 ms). Returns 0x10000 | mode if already set, else busy byte | polls << 8. */
+#define PCM_PROP       ((u32 (*)(u32))0x10361813u)
+IMG_FN static u32 pc_mode(u32 mode)
+{
+    u32 s[3], i;
+    if ((PCM_PROP(0x2400u) & 0xFFu) == mode) return 0x10000u | mode;
+    if (!mode) {
+        if (((u32 (*)(void))0x1031B875u)()) ((void (*)(void))0x10331DF3u)();
+        if (((u32 (*)(void))0x1031B835u)()) ((void (*)(void))0x10219D85u)();
+    }
+    s[0] = mode; s[1] = 0u; s[2] = 0x103564C3u;
+    ((void (*)(u32))0x103563A5u)(0x20000u);
+    *(volatile u8 *)0xC18CA1D4u = 1u;
+    ((void (*)(u32, u32 *))0x1032FC27u)(0x040F0007u, s);
+    ((void (*)(u32, u32))0x10356413u)(0x20000u, 0u);
+    for (i = 0u; i < 300u; i++) {
+        if ((PCM_PROP(0x1B0Cu) & 0xFFu) == 1u) break;
+        ((void (*)(u32))0x10232937u)(10u);
+    }
+    return *(volatile u8 *)0xC18CA1D4u | (i << 8);
+}
+#endif
+
+#ifdef BULB_FULLEXEC
+/* A14: run the USB 0x9207 executor 0x10317724 step by step without its USB reply (0x1044912E): a fake request
+ * (opcode at +6 = 0x9207, +8 = 0, params +0xC = 0xFFFFFFFF, +0x10 = 0) -> 0x10317622(&req, 0xC29C46D8) fills the
+ * capture struct, 0x103565C0(1), 0x1030872E(req +8), start 0x10219DDE(0xC29C46D8, [0xC18CA1CC]), then as the
+ * executor: 0x1031752A(result, 2) == 0x2001 ? (0x1031B780(1), 0x1031B77A(struct +8 ? 2 : 1)) : 0x1030872E(0);
+ * 0x10356602(). Returns the 0x10219DDE result | PTP code << 16. */
+IMG_FN static u32 bulb_exec(void)
+{
+    u32 req[8], r, code;
+    for (u32 i = 0u; i < 8u; i++) req[i] = 0u;
+    ((volatile u16 *)req)[3] = 0x9207u;
+    req[3] = 0xFFFFFFFFu;
+    ((void (*)(u32 *, u32))0x10317623u)(req, BT_SESSION);
+    ((void (*)(u32))0x103565C1u)(1u);
+    ((void (*)(u32))0x1030872Fu)(req[2]);
+    r = ((u32 (*)(u32, u32))BT_START)(BT_SESSION, *(volatile u32 *)BT_PARAM);
+    code = ((u32 (*)(u32, u32))0x1031752Bu)(r, 2u) & 0xFFFFu;
+    if (code == 0x2001u) {
+        ((void (*)(u32))0x1031B781u)(1u);
+        ((void (*)(u32))0x1031B77Bu)(((volatile u32 *)BT_SESSION)[2] ? 2u : 1u);
+    } else {
+        ((void (*)(u32))0x1030872Fu)(0u);
+    }
+    ((void (*)(void))0x10356603u)();
+    return (r & 0xFFFFu) | (code << 16);
+}
+#endif
+
+#ifdef BT_HALF_PRESS
+/* Simulated half press through the camera's own switch input (as the emulator presses keys, vui-probe key_input.py):
+ * 0x101ED79E returns the current switch state (0xC1F99450, 0x9C bytes); 0x101ED678 copies a 52-byte state
+ * {group words at +4/+0x18/+0x2C/+0x40, 4 zero words, 6 encoder halves at +0x64 step 8, words at +0x94/+0x98}
+ * to 0xC1F995C4 and signals the switch handler. Group 0 bit 31 = half press. */
+#ifndef BT_HALF_MS
+#define BT_HALF_MS     300u
+#endif
+IMG_FN static void bt_half(u32 down)
+{
+    u32 b[13], k;
+    u32 s = ((u32 (*)(void))0x101ED79Fu)();
+    if (s < RAM_LO || s >= RAM_HI) return;
+    b[0] = *(volatile u32 *)(s + 4u); b[1] = *(volatile u32 *)(s + 0x18u);
+    b[2] = *(volatile u32 *)(s + 0x2Cu); b[3] = *(volatile u32 *)(s + 0x40u);
+    b[4] = 0u; b[5] = 0u; b[6] = 0u; b[7] = 0u;
+    for (k = 0; k < 6u; k++) ((u16 *)&b[8])[k] = *(volatile u16 *)(s + 0x64u + k * 8u);
+    b[11] = *(volatile u32 *)(s + 0x94u); b[12] = *(volatile u32 *)(s + 0x98u);
+    if (down) b[0] |= 0x80000000u; else b[0] &= ~0x80000000u;
+    ((void (*)(u32 *))0x101ED679u)(b);
+}
+#endif
+
+
+IMG_FN static void bulb_step(cm_t *c)
+{
+#ifdef BULB_MENU
+    if (!BTP(c)) return;
+    volatile u32 *q = BTP(c)->q;               /* armed from the menu, mirrored into the record by burst_task */
+    if (BTP(c)->close_at && (s32)(*(volatile u32 *)CM_MS_CLOCK - BTP(c)->close_at) >= 0) {
+        BTP(c)->close_at = 0u;                 /* "开始" pressed: leave the menu */
+#ifdef BT_HALF_PRESS
+        bt_half(1u);                           /* a simulated half press, released BT_HALF_MS later */
+        BTP(c)->half_off = (*(volatile u32 *)CM_MS_CLOCK + BT_HALF_MS) | 1u;
+#else
+        ((void (*)(u32, u32, u32))0x104B544Fu)(0xC182DC14u, 1u, 0u);
+#endif
+    }
+#ifdef BT_HALF_PRESS
+    if (BTP(c)->half_off && (s32)(*(volatile u32 *)CM_MS_CLOCK - BTP(c)->half_off) >= 0) {
+        BTP(c)->half_off = 0u;
+        bt_half(0u);
+    }
+#endif
+#else
+    if (!c->dg_buf) return;
+    volatile u32 *q = (volatile u32 *)(c->dg_buf + 0xDC0u);
+#endif
+    u32 now = *(volatile u32 *)CM_MS_CLOCK;
+    if (q[0] != BT_MAGIC) return;
+    if (q[1] == 1u && (s32)(now - q[2]) >= 0) {
+        if (bt_mode() != 2u) { q[9] = 0xBAD00000u | bt_mode(); q[1] = 3u; return; }
+#ifdef BULB_PCMODE
+        q[10] = pc_mode(1u);                   /* 0xDE8: switch to computer control first */
+        now = *(volatile u32 *)CM_MS_CLOCK;
+#endif
+        q[2] = now;
+        q[1] = 2u;
+#ifdef BULB_FULLEXEC
+        q[3] = bulb_exec();
+#else
+        q[3] = ((u32 (*)(u32, u32))BT_START)(BT_SESSION, *(volatile u32 *)BT_PARAM);
+#endif
+    } else if (q[1] == 2u) {
+        if (!q[5] && now - q[2] >= 500u) {
+            q[5] = 0x100u | *(volatile u8 *)0xC18A84E4u;
+            q[6] = 0x100u | *(volatile u32 *)0xC18A7EE4u;
+        }
+        if (!q[9] && now - q[2] >= 35000u)     /* A15: past the old 30 s limit, still open? 0x35000000 | state | open << 4 */
+            q[9] = 0x35000000u | *(volatile u8 *)0xC18A84E4u | (*(volatile u32 *)0xC18A7EE4u << 4);
+        if (now - q[2] >= BT_RUN_MS(c)) {
+            u32 z = 0u;
+#ifdef BULB_MENU
+            BTP(c)->stop = 0u;
+#endif
+            q[4] = ((u32 (*)(u32 *))BT_END)(&z);
+            q[7] = now;
+            q[1] = 3u;
+#ifdef BULB_PCMODE
+            q[11] = pc_mode(0u);               /* 0xDEC: back from computer control */
+#endif
+        }
+    } else if (q[1] == 3u && q[7] && !q[8] && now - q[7] >= 1000u) {
+        q[8] = 0x100u | *(volatile u8 *)0xC18A84E4u | (*(volatile u32 *)0xC18A7EE4u << 4);
+    }
+}
+#endif
+
+#ifdef BULB_MENU
+/* "B门定时" page (photo shooting menu row -> 4 rows): start / cancel, hours, minutes, seconds.
+ * Right or OK adds one, left takes one (wraps 0..9 h, 0..59 min / s). Start arms the run BT_DELAY_MS later
+ * (time to leave the menu with a half press); pressed again it cancels (before the start) or ends now.
+ * Only in Bulb (0x020E = 2); otherwise the row says so. Labels always Simplified Chinese (AGENTS.md rule 8). */
+#define BT_SLOT_ENTRY  257u             /* photo shooting menu row "B门定时：h:mm:ss" */
+#define BT_SLOT_ROW    258u             /* 258..261: start, hours, minutes, seconds */
+#define BT_ID_ENTRY    0x2FC0u          /* ids not present in the stock ROM row tables */
+#define BT_ID_ROW      0x2FC1u
+#ifndef BT_CLOSE_MS
+#define BT_CLOSE_MS    200u
+#endif
+#ifndef BT_EXIT_DEST
+#define BT_EXIT_DEST   STAY             /* start row after a successful start: STAY or "back N" (0x406 + N) out of the menu */
+#endif
+
+/* The menu route (0x1047897A) reads the entry's destination after the handler ran, so the handler picks it:
+ * leave the menu when the run was armed, stay (and show why) otherwise. */
+IMG_FN static void bt_dest(cm_t *c, u32 dest)
+{
+    u32 *m = (u32 *)BTP(c)->map0;
+    if (!m) return;
+    for (u32 i = 0; i < 40u && m[i * 4u] != EV_END; i++) {
+        u32 ev = m[i * 4u];
+        if (ev == 0x24Au || ev == 0x24Fu || ev == 0x263u || ev == 0x270u) m[i * 4u + 3u] = dest;
+    }
+}
+
+IMG_FN static void bt_two(u16 *b, u32 *n, u32 v)
+{
+    u32 t = 0u;
+    while (v >= 10u) { v -= 10u; t++; }
+    hz_put(b, n, '0' + t); hz_put(b, n, '0' + v);
+}
+
+IMG_FN static void bt_time(cm_t *c, u16 *b, u32 *n)
+{
+    if (BTP(c)->h >= 10u) bt_two(b, n, BTP(c)->h); else hz_put(b, n, '0' + BTP(c)->h);
+    hz_put(b, n, ':'); bt_two(b, n, BTP(c)->m); hz_put(b, n, ':'); bt_two(b, n, BTP(c)->s);
+}
+
+IMG_FN static void bt_name(u16 *b, u32 *n)      /* B门定时 */
+{
+    hz_put(b, n, 'B'); hz_put(b, n, 0x95E8u); hz_put(b, n, 0x5B9Au); hz_put(b, n, 0x65F6u);
+}
+
+IMG_FN static void bt_set(u16 *b, u32 n, u32 slot)
+{
+    b[n] = 0;
+    FW(set_fn, UTF16_SET)(b, slot, HANS_STYLE);
+    *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+}
+
+
+IMG_FN static void bt_labels(cm_t *c)
+{
+    u16 b[24];
+    u32 n = 0, ph = BTP(c)->q[1];
+    bt_name(b, &n); hz_put(b, &n, 0xFF1Au); bt_time(c, b, &n);
+    bt_set(b, n, BT_SLOT_ENTRY);
+    n = 0;
+    if (ph == 1u) {                            /* 等待开始（OK取消） */
+        hz_put(b, &n, 0x7B49u); hz_put(b, &n, 0x5F85u); hz_put(b, &n, 0x5F00u); hz_put(b, &n, 0x59CBu);
+        hz_put(b, &n, 0xFF08u); hz_put(b, &n, 'O'); hz_put(b, &n, 'K'); hz_put(b, &n, 0x53D6u); hz_put(b, &n, 0x6D88u);
+        hz_put(b, &n, 0xFF09u);
+    } else if (ph == 2u) {                     /* 曝光中（OK结束） */
+        hz_put(b, &n, 0x66DDu); hz_put(b, &n, 0x5149u); hz_put(b, &n, 0x4E2Du);
+        hz_put(b, &n, 0xFF08u); hz_put(b, &n, 'O'); hz_put(b, &n, 'K'); hz_put(b, &n, 0x7ED3u); hz_put(b, &n, 0x675Fu);
+        hz_put(b, &n, 0xFF09u);
+    } else if (BTP(c)->msg == 1u) {              /* 请先设为B门 */
+        hz_put(b, &n, 0x8BF7u); hz_put(b, &n, 0x5148u); hz_put(b, &n, 0x8BBEu); hz_put(b, &n, 0x4E3Au);
+        hz_put(b, &n, 'B'); hz_put(b, &n, 0x95E8u);
+    } else if (BTP(c)->msg == 2u) {              /* 请先设定时间 */
+        hz_put(b, &n, 0x8BF7u); hz_put(b, &n, 0x5148u); hz_put(b, &n, 0x8BBEu); hz_put(b, &n, 0x5B9Au);
+        hz_put(b, &n, 0x65F6u); hz_put(b, &n, 0x95F4u);
+    } else {                                   /* 开始：h:mm:ss */
+        hz_put(b, &n, 0x5F00u); hz_put(b, &n, 0x59CBu); hz_put(b, &n, 0xFF1Au); bt_time(c, b, &n);
+    }
+    bt_set(b, n, BT_SLOT_ROW);
+    n = 0; hz_put(b, &n, 0x5C0Fu); hz_put(b, &n, 0x65F6u); hz_put(b, &n, 0xFF1Au); hz_put(b, &n, '0' + BTP(c)->h);
+    bt_set(b, n, BT_SLOT_ROW + 1u);            /* 小时：h */
+    n = 0; hz_put(b, &n, 0x5206u); hz_put(b, &n, 0x949Fu); hz_put(b, &n, 0xFF1Au); bt_two(b, &n, BTP(c)->m);
+    bt_set(b, n, BT_SLOT_ROW + 2u);            /* 分钟：mm */
+    n = 0; hz_put(b, &n, 0x79D2u); hz_put(b, &n, 0xFF1Au); bt_two(b, &n, BTP(c)->s);
+    bt_set(b, n, BT_SLOT_ROW + 3u);            /* 秒：ss */
+}
+
+IMG_FN static void bt_show(cm_t *c, u32 refresh)
+{
+    u16 b[8];
+    u32 n = 0;
+    bt_labels(c);
+    bt_name(b, &n);
+    bt_set(b, n, SLOT_TITLE_V);
+    c->title_slot = SLOT_TITLE_V;
+    (void)refresh;
+    ((volatile u32 *)PAGE0)[10] = BTP(c)->hdr;
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);
+}
+
+IMG_FN static u32 bt_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !BTP(c) || !BTP(c)->hdr) return 0;
+    BTP(c)->msg = 0u;
+    bt_show(c, 0u);
+    return 0;
+}
+
+IMG_FN static void bt_adjust(u32 field, u32 up)
+{
+    cm_t *c = cm_get();
+    if (!c || !BTP(c) || !cfg_ready(c)) return;
+    if (BTP(c)->q[1] != 1u && BTP(c)->q[1] != 2u) {   /* fixed while armed or open */
+        u32 *v = field == 0u ? &BTP(c)->h : field == 1u ? &BTP(c)->m : &BTP(c)->s;
+        u32 max = field == 0u ? 23u : 59u;
+        *v = up ? (*v >= max ? 0u : *v + 1u) : (*v ? *v - 1u : max);
+        BTP(c)->msg = 0u;
+        save_cfg(c);
+    }
+    bt_show(c, 1u);
+}
+
+IMG_FN static u32 bt_h_up(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(0u, 1u); return 0; }
+IMG_FN static u32 bt_h_dn(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(0u, 0u); return 0; }
+IMG_FN static u32 bt_m_up(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(1u, 1u); return 0; }
+IMG_FN static u32 bt_m_dn(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(1u, 0u); return 0; }
+IMG_FN static u32 bt_s_up(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(2u, 1u); return 0; }
+IMG_FN static u32 bt_s_dn(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(2u, 0u); return 0; }
+
+
+IMG_FN static u32 bt_start_ok(u32 a0, u32 a1, u32 a2, u32 a3)
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !BTP(c)) return 0;
+    volatile u32 *q = BTP(c)->q;
+    if (q[1] == 1u) {
+        q[1] = 0u;                             /* cancel before the start */
+    } else if (q[1] == 2u) {
+        BTP(c)->stop = 1u;                       /* end now (next task pass) */
+    } else if (!cfg_ready(c)) {
+        return 0;
+    } else if (bt_mode() != 2u) {
+        BTP(c)->msg = 1u;
+    } else if (!(BTP(c)->h | BTP(c)->m | BTP(c)->s)) {
+        BTP(c)->msg = 2u;
+    } else {
+        for (u32 i = 1u; i < 12u; i++) q[i] = 0u;
+        BTP(c)->secs = BTP(c)->h * 3600u + BTP(c)->m * 60u + BTP(c)->s;
+        BTP(c)->stop = 0u;
+        BTP(c)->msg = 0u;
+        q[2] = *(volatile u32 *)CM_MS_CLOCK + BT_DELAY_MS;
+        q[0] = BT_MAGIC;
+        q[1] = 1u;
+        /* Close the menu as a half press does (emulator trace 2026-11-16: event 0x240 -> 0x104787E0 posts message 1
+         * to the menu state machine 0xC182DC14 through 0x104B544E). The page is not reopened. */
+        bt_labels(c);
+        bt_dest(c, STAY);
+#if   defined(BT_CLOSE_TASK)
+        BTP(c)->close_at = (*(volatile u32 *)CM_MS_CLOCK + BT_CLOSE_MS) | 1u;   /* test: the task closes it */
+        bt_show(c, 1u);
+#else
+        bt_show(c, 1u);                        /* stay: the computer-control switch itself leaves the menu (A16) */
+#endif
+        return 0;
+    }
+    bt_dest(c, STAY);
+    bt_show(c, 1u);
+    return 0;
+}
+#endif
+
+
+
 
 IMG_FN static void burst_task(u32 unused)
 {
@@ -89,6 +451,12 @@ IMG_FN static void burst_task(u32 unused)
     for (;;) {
         cm_t *c = cm_get();
         if (c) { burst_step(c); c->burst_tick += 1u; }
+#ifdef BULB_TIMER_MS
+        if (c) bulb_step(c);
+#endif
+#ifdef BULB_MENU
+        if (c && c->dg_buf && BTP(c)) for (u32 i = 0u; i < 12u; i++) ((volatile u32 *)(c->dg_buf + 0xDC0u))[i] = BTP(c)->q[i];
+#endif
         s32 rc = BURST_SLEEP(50u);
         if (rc != 0 && rc != BURST_TIMEOUT) {
             if (c) c->burst_task_rc = 0xE0000000u | ((u32)rc & 0xFFFFFFu);
@@ -193,7 +561,7 @@ IMG_FN static u32 burst_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 IMG_FN static u32 burst_toggle(u32 silent)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         if (silent) c->burst_sil = !c->burst_sil;
         else c->burst_mech = !c->burst_mech;
         save_cfg(c);

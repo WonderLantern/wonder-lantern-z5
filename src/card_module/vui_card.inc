@@ -912,13 +912,14 @@ IMG_FN static void vui_hist(cm_t *c, u32 kind, u32 ori, u32 active, u32 ui)
     volatile u32 *mask = (volatile u32 *)VUI_HIST_MASKS;
     u32 i, ms, peak, page = *(volatile u8 *)VUI_DISP_PAGE, want;
     s32_v hx, hy;
-    if (active && ori && !c->vui_hm_saved) {
+    u32 customized = custom_current_flags(c) & 1u;
+    if (!customized && active && ori && !c->vui_hm_saved) {
         /* Bit 3 of the first mask is what the histogram-on-level-page gate (firmware, group 28 on) tests before
            sampling on DISP page 3. Keeping only that bit keeps the counts fresh there. */
         for (i = 0; i < 9u; i++) { c->vui_hm[i] = mask[i]; mask[i] = 0u; }
         if (c->vui_hm[0] & 8u) mask[0] = 0x08000000u;   /* bit 27: the gate only (firmware group 54) */
         c->vui_hm_saved = 1u;
-    } else if ((!active || !ori) && c->vui_hm_saved) {
+    } else if ((customized || !active || !ori) && c->vui_hm_saved) {
         for (i = 0; i < 9u; i++) mask[i] = c->vui_hm[i];
         c->vui_hm_saved = 0u;
     }
@@ -929,10 +930,11 @@ IMG_FN static void vui_hist(cm_t *c, u32 kind, u32 ori, u32 active, u32 ui)
     want = active && ui == 0u && !c->vui_strip && (page == 0u || (ori &&
            (page == 2u || (page == 3u && c->vui_hm_saved && (c->vui_hm[0] & 8u)))));
 #endif
-    if (page == 0u && (c->custom_flags & 5u) != 5u) want = 0u;
+    if (customized) want = active && ui == 0u && !c->vui_strip && (custom_current_flags(c) & 5u) == 5u;
+    else if (page == 0u) want = 0u;
     if (c->vui_zoom || *(volatile u32 *)CM_MS_CLOCK - c->vui_zoom_ms < VUI_ZOOM_HOLD_MS) want = 0u;
-    hx = !ori ? VUI_HLX : (page == 0u || page == 3u) ? VUI_HX3 : VUI_HX;
-    hy = !ori ? VUI_HLY : (page == 0u || page == 3u) ? VUI_HY3 : VUI_HY;
+    hx = !ori ? VUI_HLX : (customized || page == 0u || page == 3u) ? VUI_HX3 : VUI_HX;
+    hy = !ori ? VUI_HLY : (customized || page == 0u || page == 3u) ? VUI_HY3 : VUI_HY;
     if (c->vui_hist_on && (!want || ori != c->vui_hist_ori || hx != c->vui_hist_x || hy != c->vui_hist_y)) {
         vui_prim(c, VUI_CLEAR_FN, c->vui_hist_ori, c->vui_hist_x, c->vui_hist_y, VUI_HWY(c->vui_hist_y), VUI_HHY(c->vui_hist_y), 0u);
         c->vui_hist_on = 0u;
@@ -1083,8 +1085,18 @@ IMG_FN static void vui_hist_before_level(u32 native_bank, u32 surface, const u32
 {
     cm_t *c = cm_get();
     if (!c || c->vui_drawing || c->custom_disp_rc) return;
-    if (!native_bank && !surface) { custom_apply(c); return; }
-    if ((c->custom_flags & 5u) != 5u) {
+    if (!native_bank && !surface) {
+        cfg_retry(c);
+        custom_apply(c);
+        custom_disp_state *settings = (custom_disp_state *)c->custom_state;
+        u32 page = custom_logical_page(c) + 1u + (custom_output() << 8u);
+        if (settings && settings->hist_page != page) {
+            settings->hist_page = page;
+            c->vui_hist_dirty = 1u; c->vui_hist_last_publication = 0u;
+        }
+        return;
+    }
+    if ((custom_current_flags(c) & 5u) != 5u) {
         if (!surface && c->vui_hist_on) vui_hist(c, VUI_K_CLEAR, c->vui_hist_ori, 0u, 0u);
         return;
     }
@@ -1099,7 +1111,7 @@ IMG_FN static void vui_hist_before_level(u32 native_bank, u32 surface, const u32
     }
     u32 ori = c->vui ? raw_ori : 0u;
     if (*(volatile u8 *)VUI_APP != 3u || *(volatile u8 *)VUI_UI != 0u ||
-        *(volatile u8 *)VUI_DISP_PAGE != 0u || *(volatile u8 *)VUI_TARGET != VUI_TARGET_OSD ||
+        !(custom_current_flags(c) & 1u) || *(volatile u8 *)VUI_TARGET != VUI_TARGET_OSD ||
         vui_video(c) || c->vui_evf) return;
     if (!surface) {
         vui_hist(c, VUI_K_CLEAR, ori, 1u, 0u);
@@ -1699,7 +1711,7 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
     /* The experimental detailed-page histogram is independent of the portrait-layout switch.
        Track native erases even with that layout disabled; drawing remains in the level callback. */
     if (c->vui_hist_bank && *(volatile u8 *)VUI_TARGET == VUI_TARGET_OSD) {
-        if (*(volatile u8 *)VUI_DISP_PAGE != 0u || *(volatile u8 *)VUI_APP != 3u ||
+        if (!(custom_current_flags(c) & 1u) || *(volatile u8 *)VUI_APP != 3u ||
             *(volatile u8 *)VUI_UI != 0u) {
             if (c->vui_hist_on) vui_hist(c, VUI_K_CLEAR, c->vui_hist_ori, 0u, *(volatile u8 *)VUI_UI);
             c->vui_hist_bank = 0u;
@@ -1842,7 +1854,7 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
     if (kind != VUI_K_SETTER && *(volatile u8 *)VUI_TARGET != VUI_TARGET_OSD) return;
     if (kind != VUI_K_SETTER) {
         u32 hist_active = active || (ori == 0u && !c->custom_disp_rc &&
-                                    *(volatile u8 *)VUI_DISP_PAGE == 0u &&
+                                    (custom_current_flags(c) & 1u) &&
                                     !vui_video(c) && !c->vui_evf &&
                                     app == 3u && (ui == 0u || ui == 3u));
         vui_hist(c, kind, ori, hist_active && app == 3u, ui);
@@ -2072,6 +2084,6 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
 #ifdef VUI_DIAG_FOCUS
     if (dge) vui_dg_out(dge, kind, r);
 #endif
-    if (kind == VUI_K_CLEAR && c->vui_hist_due && *(volatile u8 *)VUI_DISP_PAGE != 0u)
+    if (kind == VUI_K_CLEAR && c->vui_hist_due && !(custom_current_flags(c) & 1u))
         vui_hist_draw(c, (s32_v *)r[0]);
 }

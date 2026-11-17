@@ -150,13 +150,14 @@ level = (HEADER / 'level.h').read_text()
 prepare = level[level.index('static void level_prepare'):level.index('/* Publish only ranges')]
 adapter = render[render.index('static u32 overlay_source_descriptor_matches'):render.index('Z5_IMAGE(custom_disp_image) static u32 overlay_source_refuse')]
 CODE += r'''
-static u32 snapshot_words[256], primary, selector, page_object, ui_mode, native_busy, flags=15;
+static u32 snapshot_words[256], primary, selector, page_object, ui_mode, native_busy, flags=15, native_page;
 static u8 *snapshot=(u8 *)snapshot_words;
 #define Z5_OVERLAY_SNAPSHOT snapshot
 #define Z5_CUSTOM_DISP_PRIMARY_DISPLAY primary
 #define Z5_CUSTOM_DISP_SHOOTING_PAGE() page_object
 #define Z5_PROBE_SELECTOR selector
-#define Z5_CUSTOM_DISP_TARGET_DISP 0u
+#define Z5_NATIVE_DISP_PAGE native_page
+#define CUSTOM_PAGE_COUNT 4u
 #define Z5_FULL_BUSY_WORD native_busy
 #define Z5_OVERLAY_CONDITION(n) native_busy
 #define Z5_OVERLAY_BUSY() native_busy
@@ -185,10 +186,14 @@ static void verify_adapters(void) {
   page_object=1;ui_mode=0;overlay_update(9);assert(states[output].active);
   native_busy=1;assert(overlay_mask_reason()==4&&!disp_shooting());
   overlay_update(9);assert(!states[output].active);native_busy=0;
-  snapshot[0x18e]=1;assert(overlay_mask_reason()==2&&!disp_shooting());snapshot[0x18e]=0;
+  native_page=0;snapshot[0x18e]=0;assert(!overlay_mask_reason()&&disp_shooting());
+  for(native_page=1;native_page<5;native_page++) {
+   snapshot[0x18e]=native_page;assert(overlay_mask_reason()==2&&!disp_shooting());
+  }
+  native_page=0;snapshot[0x18e]=0;
   selector=0;assert(overlay_mask_reason()==2&&!disp_shooting());selector=1;
   snapshot[0x40]=1;assert(overlay_mask_reason()==2&&!disp_shooting());snapshot[0x40]=0;
-  flags=0;assert(!disp_shooting());flags=15;
+  flags=0;assert(overlay_mask_reason()==2&&!disp_shooting());flags=15;
  }
  u32 d[20]={0};d[0]=d[1]=d[0x48/4]=1;d[2]=(480u<<16)|720u;d[0x28/4]=0x12340000;
  assert(overlay_source_descriptor_matches(0,d,0x12340000,720,480));
