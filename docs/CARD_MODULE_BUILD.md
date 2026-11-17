@@ -1,6 +1,6 @@
 # 卡模块构建与 fork 发布
 
-普通用户使用根目录的预编译 `card/Z5APP.BIN`，不需要 SDK。已有第 108 组固件只替换插件并完全断电重启即可。以下步骤供维护者重建源码使用；构建器只读取 MAIN 文件，不生成或刷写固件。
+普通用户使用根目录的预编译 `card/Z5APP.BIN`，不需要 SDK。自定义 DISP 在已有第 108 组固件上只替换插件并完全断电重启即可；上游连拍功能需要带其入口的新版固件。当前 patches.json 保留上游 b8ffd1c 的固件 edits/appends/输出摘要，本 fork 不另改固件补丁。以下步骤供维护者重建源码使用；构建器只读取 MAIN 文件，不生成或刷写固件。
 
 ## 依赖
 
@@ -25,7 +25,7 @@ patch --batch -p1 -d third_party/z5mod-sdk < src/card_module/z5mod-sdk.patch
 
 补丁只包含本模块实际需要的六个 SDK 文件修改，修复状态锚点、音频和 UI 等兼容点；构建前逐一校验 [sdk_sources.json](../src/card_module/custom_disp/sdk_sources.json) 中的文件摘要。不要跳过指纹检查或盲目改成新 SDK 的哈希；应先审核 ABI 和服务调用。
 
-如需从自己的更新文件提取 MAIN，可先按主 README 运行 `patch.py` 得到本地更新文件，再用其固定版本解码器的 `container.load()` / `container.main_module()` 读出 MAIN。这里只接受具有上述摘要的输入，不分发解码后的模块、更新文件或内存转储。
+如需从自己的更新文件提取 MAIN，可先按主 README 运行 `patch.py` 得到本地更新文件，再用其固定版本解码器的 `container.load()` / `container.main_module()` 读出 MAIN。上游带连拍入口的最终更新包摘要为 bf821031…，不等同于上述构建用基础 MAIN；请保留基础 MAIN 供源码构建。这里只接受具有上述摘要的输入，不分发解码后的模块、更新文件或内存转储。
 
 ## 两种构建
 
@@ -59,6 +59,9 @@ python src/card_module/build.py \
 ```sh
 python3 -B tests/card_module/verify_custom_disp.py
 python3 -B tests/card_module/verify_config.py
+python3 -B tests/card_module/verify_custom_menu.py
+python3 -B tests/card_module/verify_disp_routing.py
+python3 -B tests/card_module/verify_native_level.py
 python3 -B tests/card_module/verify_refresh_override.py
 python3 -B tests/card_module/verify_histogram_raster.py
 python3 -B tests/card_module/verify_output_sync.py
@@ -77,6 +80,8 @@ python3 -B tests/card_module/verify_custom_disp.py \
 ```sh
 python3 -B -m unittest discover -s tools/windows_packager -p 'test_*.py'
 ```
+
+L39 设置检查额外覆盖精确 8／12／16 字节读取、总开关和两端逻辑页记忆、旧格式迁移、打开／定位／短读失败保留配置、500ms GUI 延迟重试、有效基底恢复后才允许编辑、不截断保存及长度／内容回读。路由检查编译实际 C，验证原厂按键门控、绘制前映射、两端循环及恢复；仍需相机冷启动确认介质持久性和原厂运行时行为。
 
 宿主逻辑通过不代表真机帧率、触控、传感器或待机唤醒通过。当前验证范围见 [CUSTOM_DISP_HANDOFF.md](CUSTOM_DISP_HANDOFF.md)。
 

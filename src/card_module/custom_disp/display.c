@@ -7,13 +7,14 @@
 #include "z5/image.h"
 #include "custom_disp_target.h"
 #include "../custom_disp.h"
+#include "settings.h"
 
-#define CUSTOM_DISP_MAGIC 0x3551A610u
-#define CUSTOM_DISP_REVISION 0x112D000Au
+#define CUSTOM_DISP_MAGIC 0x3551B010u
+#define CUSTOM_DISP_REVISION 0x112D0018u
 #define WIDGET_ID 0x7ffdu
 #define PACKET_BYTES 1056u
 #define BUFFER_BYTES (3u * PACKET_BYTES)
-/* Private relocated metadata, 31 words. No external ABI reads this block.
+/* Private relocated metadata, 32 words. No external ABI reads this block.
  *  0 original, 1 page busy, 2 worker heartbeat, 3 conflict, 4 active,
  *  5 last output, 6 LCD tail widget, 7 registered outputs, 8 paint callback,
  *  9 worker callback, 10 packets, 11 reader index, 12 publication,
@@ -21,7 +22,7 @@
  * 17 last attempt tick, 18 painter busy, 19 page calls, 20 worker failure,
  * 21 last sleep result, 22 level states, 23 EVF tail widget,
  * 24/25 leading widgets, 26 leading callback, 27 output states,
- * 28 histogram diagnostics, 29 k override, 30 settings flags. */
+ * 28 histogram diagnostics, 29 k override, 30 settings flags, 31 native-level ownership. */
 Z5_IMAGE(custom_disp_image) static volatile u32 *disp_metadata(void);
 
 #include "output.h"
@@ -52,23 +53,32 @@ Z5_IMAGE(custom_disp_image) static u32 disp_pre_widget(u32 output)
     return disp_metadata()[24u + output];
 }
 
+Z5_IMAGE(custom_disp_image) static u32 disp_control(void)
+{ return ((volatile const u32 *)disp_metadata()[30])[1]; }
+
+Z5_IMAGE(custom_disp_image) static u32 disp_logical_page(void)
+{ return CUSTOM_LOGICAL(disp_control(), disp_output()); }
+
 Z5_IMAGE(custom_disp_image) static u32 disp_flags(void)
-{ return *(volatile u32 *)disp_metadata()[30]; }
+{
+    u32 control = disp_control();
+    return CUSTOM_ACTIVE_FLAGS(*(volatile u32 *)disp_metadata()[30], control, disp_output());
+}
 
 Z5_IMAGE(custom_disp_image) static int disp_shooting(void)
 {
     if (!(disp_flags() & 1u)) return 0;
     if (!disp_output() && Z5_GUI_UI_MODE() != 0u) return 0;
     volatile const u8 *s = (volatile const u8 *)Z5_OVERLAY_SNAPSHOT;
-    if (!((Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 4u && s[0x18e] == Z5_CUSTOM_DISP_TARGET_DISP) ||
-          (Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 1u && s[0x18e] == Z5_CUSTOM_DISP_TARGET_DISP)) ||
+    if (!((Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 4u && s[0x18e] == 0u) ||
+          (Z5_CUSTOM_DISP_PRIMARY_DISPLAY == 1u && s[0x18e] == 0u)) ||
         Z5_PROBE_SELECTOR != 1u ||
         s[0x40] || s[0x41] || s[0x196] ||
         (s[0x197] != 0u && s[0x197] != 3u) ||
         *(volatile const u32 *)(s + 0x2e8) > 1u ||
         *(volatile const u32 *)(s + 0x2f4) ||
         *(volatile const u16 *)(s + 0x358) > 2u || Z5_FULL_BUSY_WORD) return 0;
-    return 1;
+    return s[0x18e] == Z5_NATIVE_DISP_PAGE;
 }
 
 Z5_IMAGE(custom_disp_image) static int disp_view(void)
@@ -175,6 +185,7 @@ Z5_IMAGE(custom_disp_image) static void disp_worker(u32 unused)
 #include "overlay_state.h"
 
 #include "level.h"
+#include "native_level.h"
 #include "refresh.h"
 #include "diagnostics.h"
 
@@ -264,6 +275,11 @@ static u32 disp_prepare_dispatch(u32 object, u32 a1, u32 entry_sp, u32 entry_lr)
     if (!disp_pass_matches(output) || object != disp_pre_widget(output) ||
         *(volatile const u32 *)(object + 0x4cu) != m[26] || m[18]) return 1u;
     overlay_state *s = overlay_data();
+    if (overlay_data()->page_identity != disp_logical_page() + 1u) {
+        overlay_data()->page_identity = disp_logical_page() + 1u;
+        overlay_data()->histogram_surface = 0u;
+        ((level_state *)m[22] + disp_output())->force = 1u;
+    }
     s->pre_passes++;
     u32 site = overlay_native_walk_site(entry_sp, entry_lr);
     if (site == Z5_WALK_FIRST_RETURN) {
@@ -274,24 +290,31 @@ static u32 disp_prepare_dispatch(u32 object, u32 a1, u32 entry_sp, u32 entry_lr)
     } else if (!overlay_native_later_walk(site)) s->walk_tracking = 0u;
     u32 start = Z5_FULL_TICK;
     overlay_source_prepare(object);
+    if (site == Z5_WALK_FIRST_RETURN || overlay_native_later_walk(site)) native_level_prepare();
     if (s->walk_tracking) s->walk_own_ms += Z5_FULL_TICK - start;
     *(volatile u32 *)(disp_widget(output) + 0x44u) = 1u;
     return 1u;
 }
 
+Z5_IMAGE(custom_disp_image) static u32 disp_register_leading(u32 output)
+{
+    volatile u32 *m = disp_metadata();
+    u32 canvas = disp_canvas(output), pre = disp_pre_widget(output);
+    u32 found = Z5_HBASE_FIND(WIDGET_ID - 1u, canvas);
+    if (!found) {
+        if (!Z5_HBASE_PREPEND(canvas + 0x9cu, pre)) return 0;
+        found = Z5_HBASE_FIND(WIDGET_ID - 1u, canvas);
+    }
+    return found == pre && *(volatile const u32 *)(pre + 0x4cu) == m[26];
+}
+
 Z5_IMAGE(custom_disp_image) static u32 disp_register(u32 output)
 {
     volatile u32 *m = disp_metadata();
-    u32 canvas = disp_canvas(output), pre = disp_pre_widget(output), post = disp_widget(output);
-    u32 found;
-    {
-        found = Z5_HBASE_FIND(WIDGET_ID - 1u, canvas);
-        if (!found) {
-            if (!Z5_HBASE_PREPEND(canvas + 0x9cu, pre)) return 0;
-            found = Z5_HBASE_FIND(WIDGET_ID - 1u, canvas);
-        }
-        if (found != pre || *(volatile const u32 *)(pre + 0x4cu) != m[26]) return 0;
-    }
+    u32 canvas = disp_canvas(output), post = disp_widget(output), found;
+    /* Handler has returned; neither list is being traversed. Install both
+     * leading guards before a future LCD/EVF transition can start walking. */
+    if (!disp_register_leading(0u) || !disp_register_leading(1u)) return 0;
     found = Z5_HBASE_FIND(WIDGET_ID, canvas);
     if (!found) { Z5_HBASE_ADD(canvas, post); found = Z5_HBASE_FIND(WIDGET_ID, canvas); }
     if (found != post || *(volatile const u32 *)(post + 0x4cu) != m[8]) return 0;
@@ -314,6 +337,7 @@ Z5_IMAGE(custom_disp_image) static u32 disp_register(u32 output)
 Z5_IMAGE(custom_disp_image) static void disp_remove(void)
 {
     volatile u32 *m = disp_metadata();
+    native_level_forget();
     for (u32 output = 0; output < 2u; output++) {
         u32 canvas = disp_canvas(output), pre = disp_pre_widget(output), post = disp_widget(output);
         if (Z5_HBASE_FIND(WIDGET_ID - 1u, canvas) == pre &&
@@ -341,6 +365,7 @@ static u32 disp_page(u32 event, u32 a1, u32 a2, u32 a3)
     u32 (*original)(u32,u32,u32,u32) = (u32 (*)(u32,u32,u32,u32))m[0];
     if (m[1]) return original(event,a1,a2,a3);
     m[1] = 1;
+    native_level_release();
     if (overlay_data()->before_level) ((void (*)(u32,u32,const u32 *,u16 *))overlay_data()->before_level)(0,0,0,0);
     disp_refresh_interval(1u);
     /* Native handlers may render a temporary UI before updating the APPLV
@@ -357,9 +382,11 @@ static u32 disp_page(u32 event, u32 a1, u32 a2, u32 a3)
         if (Z5_HBASE_DIRTY <= 1u) Z5_HBASE_DIRTY = 1;
     }
     if (m[4]) disp_dirty();
+    if (event == 9u) native_level_begin();
     u32 diagnostic = (primary == 1u || primary == 4u) && event == 9u && overlay_data()->active && !overlay_reason();
     if (diagnostic) overlay_diag_count(1u);
     u32 result = original(event,a1,a2,a3);
+    native_level_release();
     disp_refresh_interval(0u);
     if (overlay_data()->before_level) ((void (*)(u32,u32,const u32 *,u16 *))overlay_data()->before_level)(0,0,0,0);
     m[19]++;
@@ -401,6 +428,7 @@ typedef struct {
     overlay_state outputs[2];
     u32 hist_diagnostics, custom_flags;
     refresh_override refresh;
+    native_level_state native_level;
 } disp_state;
 
 
@@ -465,6 +493,7 @@ static int install(disp_state *s)
     m[28] = s->hist_diagnostics;
     m[29] = (u32)&s->refresh;
     m[30] = s->custom_flags;
+    m[31] = (u32)&s->native_level;
     for (u32 output = 0; output < 2u; output++) {
         s->outputs[output].reason = 7u;
         level_state *l = s->level + output;
@@ -505,7 +534,7 @@ static int install(disp_state *s)
 int custom_disp_init(void **owner, u32 before_level, u32 *hist_diagnostics, u32 *custom_flags)
 {
     if (((u32)custom_flags & 3u) || (u32)custom_flags < Z5_OVERLAY_RAM_LOW ||
-        (u32)custom_flags > Z5_OVERLAY_RAM_HIGH - 4u) return -6;
+        (u32)custom_flags > Z5_OVERLAY_RAM_HIGH - 8u) return -6;
     if (!owner || !target_match()) return -5;
     if (before_level && (!(before_level & 1u) || before_level < Z5_OVERLAY_RAM_LOW ||
                          before_level >= Z5_OVERLAY_RAM_HIGH)) return -6;
@@ -555,7 +584,7 @@ u32 custom_disp_format(void *owner, char *text, u32 cap)
 {
     u32 reason = custom_disp_status(owner);
     if (reason >= 252u) {
-        u32 n = z5_puts(text, cap, 0, "L21 Q");
+        u32 n = z5_puts(text, cap, 0, "L39 Q");
         return z5_puthex(text, cap, n, reason, 2);
     }
     disp_state *state = (disp_state *)owner;
@@ -564,7 +593,7 @@ u32 custom_disp_format(void *owner, char *text, u32 cap)
     const volatile u32 *m = (const volatile u32 *)state->metadata;
     u32 output = m[5] < 2u ? m[5] : disp_output();
     const overlay_state *s = state->outputs + output;
-    u32 n = z5_puts(text, cap, 0, output ? "L21E" : "L21L");
+    u32 n = z5_puts(text, cap, 0, output ? "L39E" : "L39L");
     n = custom_disp_metric(text, cap, n, "R", s->diag_rates[0]);
     n = custom_disp_metric(text, cap, n, " U", s->diag_rates[1]);
     n = custom_disp_metric(text, cap, n, " C", s->diag_rates[2]);

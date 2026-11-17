@@ -35,11 +35,13 @@
 ## 卡模块实现约束
 
 - 这是独立运行的 ARM C 代码，不是桌面程序。沿用现有 `u32/u16/u8`、`Z5_FN` 和 `Z5_IMAGE` 用法；避免引入 libc 或意外的 `__aeabi_*` 链接依赖，变量除法参考现有 `level_div()`。
+- 设置读写沿用 L38 事务式读取：完整有效配置（8/12 字节旧格式或 16 字节 D8+CD50）才应用，失败不重置 RAM；未恢复配置不允许编辑／保存。GUI 延迟补读间隔至少 500ms，成功即停止；覆盖已有 MENU.DAT 不先截断，保存后核对长度与内容，不能以即时回读宣称冷启动持久性已验证。
 - 加载器会释放原始模块映像。常驻回调及其引用必须位于保留代码段、持久状态或显式堆区；不能保留原始映像中的临时函数、字符串或数据指针。
 - 保持固件读取的 ABI 和 SDK 状态容量断言有效，特别是 `cm_t.vui_fn` 的偏移。私有状态布局改变时同步更新状态修订号，避免复用不兼容的常驻状态。
 - 原厂地址、调用链、SDK 和固件指纹需要有静态依据。修改 `platform.json`、`target.h.in` 或兼容性配置后通过构建器重新校验；不要为了让构建或 AE 错误消失而直接放宽指纹检查。生成的目标头在构建目录中，不手改生成文件。
-- 自定义显示配置已有详细信息页：原厂内部详细页为 `DISP0`、简单页为 `DISP1`；菜单名“DISP2 自定义”不是内部页码。关闭详细信息时投影简单页显示许可，保留基础信息与电池，并比较后恢复原值。
-- LCD/EVF 共用刷新调度、图形同步、尾部绘制和稀疏缓存发布；目前目标是 60Hz 请求、直方图取数开始间隔至少 120ms。请求率、回调率和物理显示 fps 分别说明。
+- L39 自定义 DISP 只有一个总开关；四个逻辑页独立配置水平仪、直方图和详细信息。启用时实际页统一为 DISP0，详细关投影未修改的 DISP1 许可，并额外隐藏白平衡组 38，保留基础与电池；LCD 保留原厂 DISP4 关闭显示，EVF 跳过。`custom_disp/route.inc` 包装 RAM 普通拍摄按键回调，保留原厂前后处理及 DISP 检查，绘制前完成页号映射；非 DISP 原样转发。不要每帧临时写真实页号再恢复。两端逻辑页分别记忆，接受切页后保存；关闭总开关比较交还实际页与按键回调。MENU.DAT 保存 16 字节 D8+CD50，兼容 8/12 字节旧格式，不覆盖个人设置。新增字段／状态修订及相邻 flags/control 断言需同步维护。
+- LCD/EVF 共用刷新调度、图形同步、尾部绘制和稀疏缓存发布；L37 沿用 L21 绘制路径，定时请求改为远端原有的 16／17ms（60Hz），保留 L21 原厂更新位 4 与原厂尾部绘制/提交；直方图取数开始间隔至少 120ms。请求率、回调率和物理显示 fps 分别说明。
+- L37 沿用此前恢复的原版 pose/show 接法：在 GUI 前置回调配置当前输出，回调结束先清特殊控制器 dirty，再比较恢复模式／绑定，不在隐藏时重标脏。两端前置控件在原厂处理器返回后预注册。L32 仅权限方案实机不显示；L30 EVF 硬卡根因未证实，L37 待实机确认。
 - EVF 有效接入依赖其原厂当前 bank、尺寸和映射，不能套用 LCD 专用页面对象、UI-mode 和提交 descriptor 限制。保留两端必要的尺寸、位置和线宽适配；不要恢复已删除的独立 EVF 绘制回退。
 - 刷新任务只通知 GUI；取 ISP 统计只在独立工作任务中进行，GUI 固定已完成的私有统计包。像素写入在 GUI 路径等待图形同步并复查输出/bank 后进行；恢复旧笔画在原厂绘制之前，保留原厂后来写入的像素。
 - 不在原厂控件遍历过程中移动链表节点。避免重新引入整屏缓存、逐帧强制重画原厂整页或每次维护整个 EVF 位图；保留当前稀疏像素恢复和局部缓存发布机制。
@@ -62,6 +64,9 @@ python3 -B src/card_module/build.py \
 ```sh
 python3 -B tests/card_module/verify_custom_disp.py
 python3 -B tests/card_module/verify_config.py
+python3 -B tests/card_module/verify_custom_menu.py
+python3 -B tests/card_module/verify_disp_routing.py
+python3 -B tests/card_module/verify_native_level.py
 python3 -B tests/card_module/verify_refresh_override.py
 python3 -B tests/card_module/verify_histogram_raster.py
 python3 -B tests/card_module/verify_output_sync.py

@@ -193,7 +193,7 @@ IMG_FN static u32 burst_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 IMG_FN static u32 burst_toggle(u32 silent)
 {
     cm_t *c = cm_get();
-    if (c) {
+    if (c && cfg_ready(c)) {
         if (silent) c->burst_sil = !c->burst_sil;
         else c->burst_mech = !c->burst_mech;
         save_cfg(c);

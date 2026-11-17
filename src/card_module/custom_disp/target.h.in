@@ -17,13 +17,12 @@
 #define Z5_OVERLAY_CONDITION Z5_FN(u32 (*)(u32), 0x1042C00C)
 #define Z5_OVERLAY_CHECK_FUNCTIONS() @FUNCTIONS@
 #define Z5_OVERLAY_CHECK_LITERALS() @LITERALS@
-#define Z5_FULL_META_BYTES 124u
-#define Z5_FULL_META_BYTES_TEXT "124"
+#define Z5_FULL_META_BYTES 128u
+#define Z5_FULL_META_BYTES_TEXT "128"
 #define Z5_FULL_TICK (*(volatile const u32 *)0xC18EB388u)
 #define Z5_FULL_BUSY_WORD (*(volatile const u32 *)0xC18217C0u)
 #define Z5_LEVEL_CACHE_RANGE Z5_FN(void (*)(u32,u32), 0x10213886)
 #define Z5_LEVEL_INFO_TABLE ((volatile const u32 *)0x10748504u)
-#define Z5_CUSTOM_DISP_TARGET_DISP 0u
 #define Z5_HBASE_READ Z5_FN(u32 (*)(void *), 0x10456B34)
 #define Z5_HBASE_ADD Z5_FN(u32 (*)(u32,u32), 0x10446EB4)
 #define Z5_HBASE_FIND Z5_FN(u32 (*)(u32,u32), 0x10446EB8)
@@ -64,3 +63,12 @@
 
 #define Z5_GUI_UI_MODE Z5_FN(u32 (*)(void), @UI_MODE_GETTER@)
 
+
+/* Native level: static widget setup, getter, show and pose paths are checked. */
+#define Z5_NATIVE_LEVEL_WIDGET Z5_FN(u32 (*)(u32), 0x104B8FC6)
+#define Z5_NATIVE_LEVEL_MODE (*(volatile u8 *)0xC18282C8u)
+#define Z5_NATIVE_DISP_PAGE (*(volatile const u8 *)0xC2028442u)
+#define Z5_NATIVE_LEVEL_SHOW Z5_FN(void (*)(void), 0x1032C290)
+#define Z5_NATIVE_LEVEL_POSE Z5_FN(void (*)(void), 0x104BA04C)
+#define Z5_NATIVE_LEVEL_CLEAR Z5_FN(void (*)(void), 0x1032C2C2)
+#define Z5_NATIVE_LEVEL_INVALIDATE Z5_FN(void (*)(void), 0x103422AE)

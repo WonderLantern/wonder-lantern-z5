@@ -5,7 +5,7 @@ typedef struct {
     volatile u32 ready, paints, source_reason, source_busy, source_gate;
     u32 drawing_image, drawing_bank;
     u32 histogram_surface, histogram_sequence, histogram_tick;
-    u32 histogram_width, histogram_height, histogram_left, histogram_top;
+    u32 histogram_width, histogram_height, histogram_left, histogram_top, page_identity;
     u32 late_frames, tail_moves, pre_passes;
     u32 before_level;  /* retained card-module callback; no firmware patch or copied transient code */
     u32 level_next, level_fraction, level_armed;
@@ -29,7 +29,7 @@ Z5_IMAGE(custom_disp_image) static u32 overlay_mask_reason(void)
      * the checked shooting snapshot before the shared scheduler was added. */
     if ((!disp_output() && !Z5_CUSTOM_DISP_SHOOTING_PAGE()) || (Z5_CUSTOM_DISP_PRIMARY_DISPLAY != 1u && Z5_CUSTOM_DISP_PRIMARY_DISPLAY != 4u) ||
         Z5_PROBE_SELECTOR != 1u ||
-        s[0x18e] != Z5_CUSTOM_DISP_TARGET_DISP || s[0x40] || s[0x41] || s[0x196] ||
+        s[0x18e] != 0u || s[0x18e] != Z5_NATIVE_DISP_PAGE || !(disp_flags() & 1u) || s[0x40] || s[0x41] || s[0x196] ||
         (s[0x197] != 0u && s[0x197] != 3u) ||
         *(volatile const u32 *)(s + 0x2e8) > 1u ||
         *(volatile const u32 *)(s + 0x2f4) ||

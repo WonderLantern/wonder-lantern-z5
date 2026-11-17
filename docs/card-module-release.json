@@ -2,6 +2,9 @@
   "camera_verified": false,
   "dynamic_tests_run": false,
   "firmware_modified": false,
+  "upstream_commit": "b8ffd1c",
+  "release_firmware_sha256": "bf821031e6d0b7d5f8762eba7178db94adda90f91c8d078985039f4f1cad558e",
+  "variant": "L39-logical-disp-menu-wb-fix",
   "compatibility": {
     "firmware_group": 108,
     "card_base_group": 119,
@@ -16,7 +19,10 @@
       "experiment_vui_sha256": "79e946f4da4e5c7dea0a9f8c4fd9171cf4eaf946713d21785e88d0afac17c36d",
       "module": "portrait group 119 + L18 custom DISP"
     },
-    "sdk_base_commit": "8cf0fb425a4988abdb9442f33a2773c7a242dc23"
+    "sdk_base_commit": "8cf0fb425a4988abdb9442f33a2773c7a242dc23",
+    "release_firmware_sha256": {
+      "bf821031e6d0b7d5f8762eba7178db94adda90f91c8d078985039f4f1cad558e": "group 108 + burst speed-up entries 0x10192F96, 0x10206E6C, 0x1020857A (+ veneers, append); none overlaps the module probe/function windows (audited 2026-11-15); the module is still built from the group-108 MAIN"
+    }
   },
   "firmware_sha256": "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
   "source_cleanup": {
@@ -35,8 +41,8 @@
     ],
     "removed_unused_stencil_bytes": 124944,
     "removed_evf_metadata_words": 6,
-    "metadata_words": 31,
-    "state_revision": "0x112D000A"
+    "metadata_words": 32,
+    "state_revision": "0x112D0018"
   },
   "compatible_firmware_sha256": [
     "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
@@ -45,19 +51,60 @@
   "lcd_walk_policy": "skip checked first walk; paint second and conditional later walks",
   "lcd_walk_identity": "callback-entry SP +28 wrapper LR, +44 controller LR; exact native code checks",
   "lcd_final_submission_hook": false,
-  "lcd_diagnostics": "L21: same R/U/C/F W/D/K/N metrics on last photo output (L21L/L21E); Q also reports page/activation refusal; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)",
-  "output_sha256": "afed83a92b0b92d53448630f6d1ba69ca6257440b7951af65d58cd09677fa70e",
-  "output_size": 64184,
+  "lcd_diagnostics": "L39: same R/U/C/F W/D/K/N metrics on last photo output (L39L/L39E); Q also reports page/activation refusal; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)",
+  "output_sha256": "c3c05d4e7d9948ada8c0383ed59bedb7b60729cbf31f509b8c2a003499a3dad8",
+  "output_size": 76176,
   "custom_disp_settings": {
-    "menu": "Extensions > DISP2 Custom",
-    "flags": [
-      "enabled",
-      "level",
-      "histogram",
-      "detailed_info"
+    "menu": "Extensions > Custom DISP > DISP0..DISP3",
+    "menu_text_slots": [
+      257,
+      258,
+      259,
+      260,
+      261
     ],
-    "default_flags": 15,
-    "persistence": "MENU.DAT optional tagged third word",
+    "setup_entry_text_slot": 250,
+    "flags": [
+      "reserved_enable",
+      "typea_level",
+      "histogram",
+      "detailed_info",
+      "native_level"
+    ],
+    "master_switch": true,
+    "logical_pages": true,
+    "remembered_pages_per_output": true,
+    "native_base": 0,
+    "default_flags": 562223,
+    "page_count": 4,
+    "bits_per_page": 5,
+    "page_names": [
+      "detailed",
+      "simple",
+      "histogram",
+      "level"
+    ],
+    "level_choices": [
+      "off",
+      "native",
+      "TypeA"
+    ],
+    "native_level": {
+      "enabled": true,
+      "outputs": [
+        "LCD",
+        "EVF"
+      ],
+      "policy": "All logical pages use native DISP0; scoped native pose/setup once per APPLV callback; Off/TypeA disarms all four dirty-only children; both leading guards installed outside traversal",
+      "pose": "0x104BA04C",
+      "show": "0x1032C290",
+      "parent_rebinding": true,
+      "mode_writes": true,
+      "native_callback_replacement": false,
+      "bitmap_cache": false,
+      "native_disp_identity_unchanged": false
+    },
+    "persistence": "16-byte MENU.DAT: D8 preferences and burst-off bits20/21, CD50 master/LCD/EVF logical-page memory; read 8/12-byte legacy transactionally",
     "visibility_groups": [
       0,
       1,
@@ -124,22 +171,66 @@
       62,
       63
     ],
-    "native_base_when_info_off": "DISP1 simple-page mask projected to DISP0 per mode nibble",
-    "projected_disp_mask": "0x111111",
+    "native_base_when_info_off": "DISP1 masks projected to native DISP0, additionally hide white-balance group38; DISP0 masks when details on",
+    "projected_disp_mask": "native DISP0 bit 0x111111 only; choose preferences by logical page",
     "outputs": [
       "LCD",
       "EVF"
     ]
   },
-  "target_disp": 0,
-  "lcd_native_ui": "original-detailed-page",
+  "logical_disp_routing": {
+    "key_slot": "0xC18289F4",
+    "original_key": "0x10304109",
+    "entry": "retained cm custom_key_dispatch",
+    "native_input_prefix_and_suffix": true,
+    "native_disp_eligibility": "0x10341AAA once; transient native simple selection remapped before GUI",
+    "native_base": 0,
+    "lcd_cycle": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "evf_cycle": [
+      0,
+      1,
+      2,
+      3
+    ],
+    "disp4": "native display-off 0x1042DE0A on LCD; EVF skips it",
+    "persistence": "verified MENU.DAT write on accepted logical change; no per-frame or shutdown-only save",
+    "native_non_disp_page_change": "adopt into logical memory; native wake is not forced back off",
+    "disabled": "compare owned values and transfer logical page back; restore RAM key callback"
+  },
+  "settings_io": {
+    "format": "8/12-byte legacy or 16-byte D8+CD50; exact size, control range and complete read required",
+    "transactional_read": true,
+    "failed_read_preserves_ram": true,
+    "gui_retry_interval_ms": 500,
+    "retry_scope": "APPLV GUI before callback after boot setup; stop IO on successful load; menu entry/mutations also retry",
+    "unread_settings_mutations_blocked": true,
+    "boot_writes": false,
+    "write": "existing-file 0x0A, seek 0, write 16 bytes, close, reopen and compare all words; no create/truncate",
+    "save_success": "full write plus matching reread; physical power-loss durability requires camera validation",
+    "seek_entry": "0x102CB190",
+    "readat_entry": "0x1020B0DE",
+    "hardware_verified": false
+  },
+  "target_disp": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "lcd_native_ui": "per-page detailed/simple projection",
   "native_refresh_override": {
     "k": 1,
     "minimum_interval_ms": 0,
     "table": "0xC18E74B0",
     "entries": 16,
     "stride": 8,
-    "scope": "active detailed photo page, LCD or EVF, normal UI",
+    "scope": "enabled native photo DISP page, LCD or EVF, normal UI",
     "owner": "APPLV page wrapper; override for native callback only, restore immediately on return",
     "restore": "compare-and-restore owned entries; preserve paired word and changed native values",
     "saved_state_bytes": 68
@@ -178,10 +269,14 @@
   "production_diagnostic_recorder": true,
   "own_histogram": {
     "landscape_disp_pages": [
-      0
+      0,
+      1,
+      2,
+      3
     ],
     "portrait_disp_pages": [
       0,
+      1,
       2,
       3
     ],
@@ -201,7 +296,7 @@
       192,
       96
     ],
-    "sampling": "shared disp_worker/disp_collect, 120ms attempt-start gate and 20ms poll; native 0x10456B34 only on independent worker",
+    "sampling": "shared disp_worker/disp_collect, 120ms attempt-start gate and 20ms poll; custom native DISP0 avoids native DISP2 sampling branch",
     "sampling_failure": "keep last published private statistics packet",
     "evf_histogram_box_size": [
       192,
@@ -219,10 +314,7 @@
     "gui_updates": "on new completed packet or dirty/bank/geometry repair; unchanged packet safety repair at 150ms",
     "dirty_repair_bypasses_sampling_throttle": false,
     "dirty_repair_bypasses_draw_throttle": true,
-    "landscape_stock_pages_untouched": [
-      2,
-      3
-    ],
+    "stock_pages_untouched_when_custom_disabled": true,
     "portrait_throttle_ms": 120,
     "full_screen_cache": false,
     "full_repaint_on_bank_change": true
@@ -231,10 +323,11 @@
     "VUI_DIAG_FOCUS"
   ],
   "layout": {
-    "cm_size": 2716,
+    "cm_size": 2752,
     "vui_fn_offset": 4,
     "custom_disp_offset": 2576,
-    "sdk_state_size": 4096
+    "sdk_state_size": 4096,
+    "custom_menu_state_size": 3852
   },
   "native_function_checks": [
     {
@@ -558,6 +651,41 @@
       "fnv1a": 2707223838
     },
     {
+      "address": 271745394,
+      "length": 192,
+      "fnv1a": 2728983237
+    },
+    {
+      "address": 273387444,
+      "length": 56,
+      "fnv1a": 454857868
+    },
+    {
+      "address": 273387598,
+      "length": 142,
+      "fnv1a": 308770762
+    },
+    {
+      "address": 273387740,
+      "length": 4380,
+      "fnv1a": 295254442
+    },
+    {
+      "address": 273682504,
+      "length": 134,
+      "fnv1a": 3944430426
+    },
+    {
+      "address": 272921388,
+      "length": 62,
+      "fnv1a": 1802107630
+    },
+    {
+      "address": 271853982,
+      "length": 26,
+      "fnv1a": 2553255059
+    },
+    {
       "address": 272920256,
       "length": 14,
       "fnv1a": 128685880
@@ -646,6 +774,231 @@
       "address": 271636344,
       "length": 44,
       "fnv1a": 3462336030
+    },
+    {
+      "address": 271762114,
+      "length": 40,
+      "fnv1a": 4264757694
+    },
+    {
+      "address": 273389696,
+      "length": 84,
+      "fnv1a": 3041651467
+    },
+    {
+      "address": 273387740,
+      "length": 70,
+      "fnv1a": 3873563890
+    },
+    {
+      "address": 273389330,
+      "length": 366,
+      "fnv1a": 1864738033
+    },
+    {
+      "address": 271852206,
+      "length": 48,
+      "fnv1a": 3449696028
+    },
+    {
+      "address": 271762244,
+      "length": 4,
+      "fnv1a": 2660632808
+    },
+    {
+      "address": 273390216,
+      "length": 20,
+      "fnv1a": 2679212230
+    },
+    {
+      "address": 271853224,
+      "length": 16,
+      "fnv1a": 3343094346
+    },
+    {
+      "address": 270577886,
+      "length": 104,
+      "fnv1a": 1473175271
+    },
+    {
+      "address": 270578916,
+      "length": 8,
+      "fnv1a": 1121663323
+    },
+    {
+      "address": 271364496,
+      "length": 46,
+      "fnv1a": 354064486
+    },
+    {
+      "address": 271821230,
+      "length": 28,
+      "fnv1a": 1545580020
+    },
+    {
+      "address": 271821216,
+      "length": 14,
+      "fnv1a": 3588651886
+    },
+    {
+      "address": 271820842,
+      "length": 4,
+      "fnv1a": 1912791873
+    },
+    {
+      "address": 271820846,
+      "length": 72,
+      "fnv1a": 1367628340
+    },
+    {
+      "address": 271820986,
+      "length": 60,
+      "fnv1a": 274231193
+    },
+    {
+      "address": 271364450,
+      "length": 46,
+      "fnv1a": 3525974134
+    },
+    {
+      "address": 271820694,
+      "length": 34,
+      "fnv1a": 583774834
+    },
+    {
+      "address": 271364446,
+      "length": 4,
+      "fnv1a": 736376965
+    },
+    {
+      "address": 271597832,
+      "length": 152,
+      "fnv1a": 1847564458
+    },
+    {
+      "address": 271597132,
+      "length": 460,
+      "fnv1a": 720087820
+    },
+    {
+      "address": 271850080,
+      "length": 238,
+      "fnv1a": 3210562972
+    },
+    {
+      "address": 271890546,
+      "length": 122,
+      "fnv1a": 3868215376
+    },
+    {
+      "address": 272817674,
+      "length": 10,
+      "fnv1a": 3015947448
+    },
+    {
+      "address": 271654720,
+      "length": 18,
+      "fnv1a": 786955405
+    },
+    {
+      "address": 271655842,
+      "length": 12,
+      "fnv1a": 3929986535
+    },
+    {
+      "address": 272138880,
+      "length": 16,
+      "fnv1a": 191412273
+    },
+    {
+      "address": 272138952,
+      "length": 24,
+      "fnv1a": 337003598
+    },
+    {
+      "address": 272982180,
+      "length": 4,
+      "fnv1a": 1883037044
+    },
+    {
+      "address": 272007510,
+      "length": 4,
+      "fnv1a": 3756473253
+    },
+    {
+      "address": 271610244,
+      "length": 4,
+      "fnv1a": 2425060682
+    },
+    {
+      "address": 271610422,
+      "length": 4,
+      "fnv1a": 2425060682
+    },
+    {
+      "address": 271610448,
+      "length": 4,
+      "fnv1a": 2425060682
+    },
+    {
+      "address": 271540054,
+      "length": 4,
+      "fnv1a": 2622275785
+    },
+    {
+      "address": 271540038,
+      "length": 4,
+      "fnv1a": 3390595437
+    },
+    {
+      "address": 271878632,
+      "length": 4,
+      "fnv1a": 1426083480
+    },
+    {
+      "address": 272815610,
+      "length": 4,
+      "fnv1a": 3257035611
+    },
+    {
+      "address": 272811940,
+      "length": 4,
+      "fnv1a": 4250778770
+    },
+    {
+      "address": 272979370,
+      "length": 4,
+      "fnv1a": 1698168
+    },
+    {
+      "address": 272979730,
+      "length": 4,
+      "fnv1a": 510095888
+    },
+    {
+      "address": 272979312,
+      "length": 4,
+      "fnv1a": 3134644696
+    },
+    {
+      "address": 276071836,
+      "length": 4,
+      "fnv1a": 798538947
+    },
+    {
+      "address": 302294280,
+      "length": 48,
+      "fnv1a": 2869535975
+    },
+    {
+      "address": 271766462,
+      "length": 68,
+      "fnv1a": 2019301892
+    },
+    {
+      "address": 302303668,
+      "length": 44,
+      "fnv1a": 1828651030
     },
     {
       "address": 273058280,
@@ -1080,6 +1433,41 @@
       "fnv1a": 2707223838
     },
     {
+      "address": 271745394,
+      "length": 192,
+      "fnv1a": 2728983237
+    },
+    {
+      "address": 273387444,
+      "length": 56,
+      "fnv1a": 454857868
+    },
+    {
+      "address": 273387598,
+      "length": 142,
+      "fnv1a": 308770762
+    },
+    {
+      "address": 273387740,
+      "length": 4380,
+      "fnv1a": 295254442
+    },
+    {
+      "address": 273682504,
+      "length": 134,
+      "fnv1a": 3944430426
+    },
+    {
+      "address": 272921388,
+      "length": 62,
+      "fnv1a": 1802107630
+    },
+    {
+      "address": 271853982,
+      "length": 26,
+      "fnv1a": 2553255059
+    },
+    {
       "address": 272920256,
       "length": 14,
       "fnv1a": 128685880
@@ -1168,6 +1556,231 @@
       "address": 271636344,
       "length": 44,
       "fnv1a": 3462336030
+    },
+    {
+      "address": 271762114,
+      "length": 40,
+      "fnv1a": 4264757694
+    },
+    {
+      "address": 273389696,
+      "length": 84,
+      "fnv1a": 3041651467
+    },
+    {
+      "address": 273387740,
+      "length": 70,
+      "fnv1a": 3873563890
+    },
+    {
+      "address": 273389330,
+      "length": 366,
+      "fnv1a": 1864738033
+    },
+    {
+      "address": 271852206,
+      "length": 48,
+      "fnv1a": 3449696028
+    },
+    {
+      "address": 271762244,
+      "length": 4,
+      "fnv1a": 2660632808
+    },
+    {
+      "address": 273390216,
+      "length": 20,
+      "fnv1a": 2679212230
+    },
+    {
+      "address": 271853224,
+      "length": 16,
+      "fnv1a": 3343094346
+    },
+    {
+      "address": 270577886,
+      "length": 104,
+      "fnv1a": 1473175271
+    },
+    {
+      "address": 270578916,
+      "length": 8,
+      "fnv1a": 1121663323
+    },
+    {
+      "address": 271364496,
+      "length": 46,
+      "fnv1a": 354064486
+    },
+    {
+      "address": 271821230,
+      "length": 28,
+      "fnv1a": 1545580020
+    },
+    {
+      "address": 271821216,
+      "length": 14,
+      "fnv1a": 3588651886
+    },
+    {
+      "address": 271820842,
+      "length": 4,
+      "fnv1a": 1912791873
+    },
+    {
+      "address": 271820846,
+      "length": 72,
+      "fnv1a": 1367628340
+    },
+    {
+      "address": 271820986,
+      "length": 60,
+      "fnv1a": 274231193
+    },
+    {
+      "address": 271364450,
+      "length": 46,
+      "fnv1a": 3525974134
+    },
+    {
+      "address": 271820694,
+      "length": 34,
+      "fnv1a": 583774834
+    },
+    {
+      "address": 271364446,
+      "length": 4,
+      "fnv1a": 736376965
+    },
+    {
+      "address": 271597832,
+      "length": 152,
+      "fnv1a": 1847564458
+    },
+    {
+      "address": 271597132,
+      "length": 460,
+      "fnv1a": 720087820
+    },
+    {
+      "address": 271850080,
+      "length": 238,
+      "fnv1a": 3210562972
+    },
+    {
+      "address": 271890546,
+      "length": 122,
+      "fnv1a": 3868215376
+    },
+    {
+      "address": 272817674,
+      "length": 10,
+      "fnv1a": 3015947448
+    },
+    {
+      "address": 271654720,
+      "length": 18,
+      "fnv1a": 786955405
+    },
+    {
+      "address": 271655842,
+      "length": 12,
+      "fnv1a": 3929986535
+    },
+    {
+      "address": 272138880,
+      "length": 16,
+      "fnv1a": 191412273
+    },
+    {
+      "address": 272138952,
+      "length": 24,
+      "fnv1a": 337003598
+    },
+    {
+      "address": 272982180,
+      "length": 4,
+      "fnv1a": 1883037044
+    },
+    {
+      "address": 272007510,
+      "length": 4,
+      "fnv1a": 3756473253
+    },
+    {
+      "address": 271610244,
+      "length": 4,
+      "fnv1a": 2425060682
+    },
+    {
+      "address": 271610422,
+      "length": 4,
+      "fnv1a": 2425060682
+    },
+    {
+      "address": 271610448,
+      "length": 4,
+      "fnv1a": 2425060682
+    },
+    {
+      "address": 271540054,
+      "length": 4,
+      "fnv1a": 2622275785
+    },
+    {
+      "address": 271540038,
+      "length": 4,
+      "fnv1a": 3390595437
+    },
+    {
+      "address": 271878632,
+      "length": 4,
+      "fnv1a": 1426083480
+    },
+    {
+      "address": 272815610,
+      "length": 4,
+      "fnv1a": 3257035611
+    },
+    {
+      "address": 272811940,
+      "length": 4,
+      "fnv1a": 4250778770
+    },
+    {
+      "address": 272979370,
+      "length": 4,
+      "fnv1a": 1698168
+    },
+    {
+      "address": 272979730,
+      "length": 4,
+      "fnv1a": 510095888
+    },
+    {
+      "address": 272979312,
+      "length": 4,
+      "fnv1a": 3134644696
+    },
+    {
+      "address": 276071836,
+      "length": 4,
+      "fnv1a": 798538947
+    },
+    {
+      "address": 302294280,
+      "length": 48,
+      "fnv1a": 2869535975
+    },
+    {
+      "address": 271766462,
+      "length": 68,
+      "fnv1a": 2019301892
+    },
+    {
+      "address": 302303668,
+      "length": 44,
+      "fnv1a": 1828651030
     },
     {
       "address": 273058280,
@@ -1288,13 +1901,13 @@
     },
     {
       "name": "disp_metadata",
-      "size": 9488,
-      "direct_branches": 727
+      "size": 11204,
+      "direct_branches": 894
     },
     {
       "name": "release_cb",
-      "size": 26796,
-      "direct_branches": 1716
+      "size": 31788,
+      "direct_branches": 2043
     }
   ],
   "sdk_hashes": {
@@ -1329,91 +1942,135 @@
     "z5mod.ld": "eb739b180dea2e5e78a42362240a64a43420a2adf0e86238a8d58b52790062a6"
   },
   "source_hashes": {
-    "src/card_module/build.py": "66969e07de5fbac1a2ad397df7a7785866cfcb5d27d395d0560b2ae2a34145fd",
-    "src/card_module/custom_disp/compatibility.json": "79be08a0bdb0be656390b978d256c8695f71f7d21b417e65f72b3ab9d14a49c1",
-    "src/card_module/custom_disp/compose.h": "0c16b43d0150cc01eb99d5c415200aa97632761f4d5eb138f2d32ff5dd1523fa",
-    "src/card_module/custom_disp/diagnostics.h": "759628e254de2c4d958437b99d86c5c2fde12a752c5ac904854ec30be54be1c6",
-    "src/card_module/custom_disp/display.c": "980aafd48adcf2b7ae88ed0d687f047e9412281fefe9b1f5b83ddf7c4e902fc0",
-    "src/card_module/custom_disp/histogram.h": "70fbbd9d482f97aebd14667aa1add50701a9c853da3538f171d51606e57222e9",
-    "src/card_module/custom_disp/histogram_raster.h": "43ff489e69a8f37e603acfaa1d96b4c1d9b7195c2fe08d2fdbd27fc6cde8fd0f",
-    "src/card_module/custom_disp/level.h": "6aabafcc316ca178947294742e756c7e1ef29b38632dfec274985de880d1a66c",
-    "src/card_module/custom_disp/output.h": "1c60ce68f4c180f5618f242767da8682e6d33ef386901c83e88312034fd3609c",
-    "src/card_module/custom_disp/overlay_render.h": "6111823849d33a36a90010872e315d0c98fb7a44b70f22999c0e7734b487914a",
-    "src/card_module/custom_disp/overlay_state.h": "7cf4c99a7d3e7dd374336ad4577955b895892accc2fb96e847084009e327d90d",
-    "src/card_module/custom_disp/platform.json": "17afcea6168cc88d269827ee410f2e1f4b1b7aeb7e7e61fad616c1656defcd5a",
-    "src/card_module/custom_disp/refresh.h": "f27d1a8444294a84db912d2efb562d455d8e5a5977ab7bd38507b49e555e31ad",
-    "src/card_module/custom_disp/refresh_override.h": "8b2aace43d61f33c37416745b0d415658e484c4b29eae0a3ee6763e918777ee9",
-    "src/card_module/custom_disp/responsive.h": "407514203795314e91b9e80dc3420a7a3759fac53830773cbb7ab0800b868d8a",
-    "src/card_module/custom_disp/sdk_compat.h": "3383ca9eabb703db3ac0212c3b992689d2e324ea5d6eefcd90cc74dccf9c744f",
-    "src/card_module/custom_disp/sdk_sources.json": "99233f9618c0a3ffeb5dbade25eedccd936f23ca9662ea5cb135a96f67ef8049",
-    "src/card_module/custom_disp/smooth.h": "4b315522cc8f6fbf6a27c1a82276b99ac4a689164dd091b7ec00bab7184de7df",
-    "src/card_module/custom_disp/sparse.h": "615637ee49c2b3f3f8c4ea1998c5c2735d3569082145f6f56c1e2de57df09959",
-    "src/card_module/custom_disp/target.h.in": "8c528f6db4ac12fe74ade08946bc5bc00540c69e5365dd8b88546344edaaa263",
-    "src/card_module/custom_disp.h": "7f1f2d92d6c3bcf6242b29d29c71964655d3b9e882e11d364649ae861982eff8",
-    "src/card_module/custom_disp_install.inc": "11427d804dd5fc26c73e49652a96c5e799f3c7e7f22a9d6a5b93fa04ddde8c4d",
-    "src/card_module/custom_disp_runtime.inc": "f80f8904f46cdfb228ede822a649c40d60fcff7213a4ea2a99f99d41167e9a00",
-    "src/card_module/main.c": "ffdf267b8acbf4093f231b24ec89cc58d46b11fb22468d5e6d3b89d5a77aa075",
-    "src/card_module/vui_card.inc": "12a44cc1f94e7ae3b5ce4314f424f7266dd2f151efbddf3507f4235c3b9afc4e",
-    "src/card_module/z5mod-sdk.patch": "3ff80018dde9c025e07f1c6b03e5bf915f87b342388d31395c7d046ca1b65e4c",
-    "src/card_module/burst_speed.inc": "0ea74622ff166f8070a4a3ebfe011a869eae8f17bf058bbce41c226704a0b69c",
-    "src/card_module/burst_speed_install.inc": "33b337f39d249709241aad7a13fc2e008afbad525a24c2bea187062766d6187b"
+    "src/card_module/build.py": "bd6d02f58a6962cb52ef99b330538bfb7ff1b8e37878208c40660355e4a5e04d",
+    "src/card_module/burst_speed.inc": "fcce2aa9e7ed9ab19f5556f6abac861559242231f2f29c53d8aee85e37b3d1ee",
+    "src/card_module/burst_speed_install.inc": "8348ac172e15262dee063a142550dc5f02868ad74282598e27baa7abec6abe47",
+    "src/card_module/custom_disp/compatibility.json": "47b68a36c2edba6931ab5de6af8673e5d18c476cc5a383b1f48e49c0c90b89df",
+    "src/card_module/custom_disp/compose.h": "37a10e7c761cdb3e993369ca40f8618b279ee2a631243e7d5f77f7c05c6afcc3",
+    "src/card_module/custom_disp/diagnostics.h": "e6a8927c3f6fdec1b34679d5f839f22a6868222fb980417678fcdf43e0876edd",
+    "src/card_module/custom_disp/display.c": "d28058047fbcd380f9d733bc25ab43b8ce5b2c7e9c69cd1b2d98431824fc3d7b",
+    "src/card_module/custom_disp/histogram.h": "2ecafdae367032ea1c8c033392a3cf28f975e687a40f4a437b43fc329dfe9dd2",
+    "src/card_module/custom_disp/histogram_raster.h": "4245759d4410af8d69590429413b09337137c008cf602bfe747265a13c9100e6",
+    "src/card_module/custom_disp/level.h": "570c2a963b23bcc4f9c42c7ad8a17958b7bac8563c344f3fe1cc9ddcccc71223",
+    "src/card_module/custom_disp/native_level.h": "66e14d7faac5ba429bdf0f309fc7c08914f935f04a0b4a80b991782abb1665fc",
+    "src/card_module/custom_disp/output.h": "61f52fb604cbf8db43150136b4fef32858f824c0350789b310a76165f6b82926",
+    "src/card_module/custom_disp/overlay_render.h": "5c440b1dd5ce833bee9f319e0a87a601bb5929fe736580e0ba8647adff02b2fc",
+    "src/card_module/custom_disp/overlay_state.h": "4e6818455aaf399bf03e3e6a389fbdee33c2f3f67a5142ea638eb6aaa781cddb",
+    "src/card_module/custom_disp/platform.json": "45bc34d9749af0814e82f5af78e6cd11bccd5453fd8d862e5fd8dee98458c130",
+    "src/card_module/custom_disp/refresh.h": "bd296e3a61b0e3ca0dbc57631ec72e253e0198abfa75fb7ff29176ce995bfbd5",
+    "src/card_module/custom_disp/refresh_override.h": "42a61a1f508451af9177b9eacd79c245e45b99708a8445077481b07790281464",
+    "src/card_module/custom_disp/responsive.h": "00f11c7a8230cd846eb6c45781383a0099df53168aab6248a064c6c4065e9fac",
+    "src/card_module/custom_disp/route.inc": "46f6a799ad6c2529a2171effd7fb7d2219f4cd3a05889ee7fff69bd53f4e807f",
+    "src/card_module/custom_disp/sdk_compat.h": "5c3ab0cff2f943067d71979065b4619b991e718643f699370320dc8cf95f9210",
+    "src/card_module/custom_disp/sdk_sources.json": "6e0ea598b02450f610abe69d9edbb1f1722c00e38430aa2751ed5beb4cab1b19",
+    "src/card_module/custom_disp/settings.h": "041580f632a0686b55b9d58192fbeb74411671c623d593fba265309bc3ca722d",
+    "src/card_module/custom_disp/smooth.h": "9adf20520a08bc3743c98a854e562499b579b43d3f067dd16fd81243d92a226d",
+    "src/card_module/custom_disp/sparse.h": "fbf8e1f65fa693b41755729c28be83cce449af60a9cbcd6991521d7ab64d47c2",
+    "src/card_module/custom_disp/target.h.in": "53bfe79d6774c8af9d77d8d06dfac39e0e499c70d104f1e91969b3c765a1864a",
+    "src/card_module/custom_disp.h": "dc9da9d32e617c8d18049ea8e495b76e229cdceab5e651e8874493df5567a8b3",
+    "src/card_module/custom_disp_install.inc": "3de846ba55e5f572a0df76ae2f939ca4b40a36c3f9d7642d09fbf8967587acbc",
+    "src/card_module/custom_disp_runtime.inc": "5374a7c2289000489f26dee5692c5b390ed4109fcf1252656693447aff269751",
+    "src/card_module/main.c": "f5a8f31b9d02da8a9bb210faf9e9c95c886fc26d8c0d26da1f5eab860243d615",
+    "src/card_module/vui_card.inc": "a306acf641908ccfea72477b33d0cbbaba2fc41ef1fb497cfae2098f8509a137",
+    "src/card_module/z5mod-sdk.patch": "d68e378f9f0c2a08e3cbccb2d0dd89279a8b0d9046e4a47e7772e1c8435a545f"
   },
   "compiler_version": "14.3.1",
-  "limitations": "Build, Unicorn and static checks only; emulator-checked (boot, menu, switch page); not yet camera-checked as a combined build. Build and static checks only. Camera timing, portrait layout and wake need hardware verification.",
+  "limitations": "Build and static checks only. Camera timing, portrait layout and wake need hardware verification.",
   "verification": {
-    "host_tests": [
-      "custom_disp: synthetic masks and both accepted firmware initializers",
-      "config: legacy and extended MENU.DAT",
-      "refresh_override: all selectors and compare-and-restore",
-      "histogram_raster: 256 bins and LCD/portrait/EVF adapters",
-      "output_sync: checked-tail surface ownership, actual walk wrapper, native EVF activation/descriptor independence, shooting/busy guards, LCD descriptor mismatch rejection, sparse bounds/banks, 60Hz cadence/wrap, worker-failure versus normal sleep result, 120ms gate"
-    ],
+    "host_tests": {
+      "passed": 8,
+      "checks": [
+        "verify_custom_disp.py (both MAIN initializers)",
+        "verify_config.py",
+        "verify_custom_menu.py",
+        "verify_disp_routing.py",
+        "verify_native_level.py",
+        "verify_refresh_override.py",
+        "verify_histogram_raster.py",
+        "verify_output_sync.py"
+      ]
+    },
     "windows_packager_unit_tests": {
       "passed": 7,
-      "python": "system Python with Tkinter"
+      "python": "/usr/bin/python3 (Tkinter available)"
     },
-    "sdk_reconstructed_from_commit_and_patch": true,
-    "source_export_without_local_research_build_passed": true,
-    "source_export_current_only_size": 55128,
-    "source_export_current_only_sha256": "01f705464cf4aa7462865d0294553933af80f86523bf5efbb5f7b555ad89ff5e",
+    "host_validation_scope": "Actual retained C helpers with mocked native properties/input/GUI; settings format and output/cycle transitions. No Nikon GUI/ISP/ARM execution or camera timing tested.",
     "firmware_patch_payload_unchanged": true,
+    "firmware_patch_payload_reference": "upstream b8ffd1c; all patch_data keys except card_module_sha256 unchanged",
+    "dual_firmware_fingerprint_cross_build_passed": true,
+    "crc_retained_image_branch_abi_checks_passed": true,
     "camera_verified": false,
     "qemu_or_arm_dynamic_tests_run": false,
-    "data_archive_roundtrip_passed": true,
-    "data_archive_members": [
-      "card/SHUTTER/1.WAV",
-      "card/SHUTTER/2.WAV",
-      "card/SHUTTER/3.WAV",
-      "card/SHUTTER/4.WAV",
-      "card/SHUTTER/5.WAV",
-      "card/Z5APP.BIN",
-      "patch_data/patches.json"
+    "settings_migration": {
+      "file_size": 16,
+      "write_tags": [
+        "0xD8000000",
+        "0xCD500000"
+      ],
+      "legacy_sizes": [
+        8,
+        12
+      ],
+      "page_preferences": "20 bits, five/page; per-page enable bits canonical 1",
+      "master": "control bit0",
+      "remembered_pages": "LCD bits4..6, EVF bits8..10; each 0..4; EVF skips display-off",
+      "runtime_active_persisted": false,
+      "legacy_global_master": "any old page enable bit",
+      "legacy_page_memory": "both start at 0",
+      "personal_menu_dat_overwritten": false
+    },
+    "hardware_validation_pending": [
+      "LCD/EVF logical cycles and native display-off/wake",
+      "global toggle and temporary UI/video/playback restoration",
+      "cold start recovers both logical page identities and preferences",
+      "LCD DISP2 histogram bars/flicker and LCD/EVF portrait/bank transitions",
+      "native-level EVF appearance and earlier hard hang remain unverified",
+      "Custom DISP root/page/level half-press exit and return to SETUP preserves Extensions label",
+      "Detailed-info off hides white balance on LCD/EVF; on/disable restores it"
     ],
-    "obsolete_module_name_references": 0,
-    "unused_stencil_allocation_removed_bytes": 124944,
-    "hardware_feedback_baseline": {
-      "version": "L20",
-      "sha256": "711f14e101cbf5a4b547219c7d0523835f64d100dda8d95491af20cc8cfce248",
-      "scope": "user reports EVF level and histogram display restored; not a full combination acceptance test"
+    "performance": "60Hz request target (16/17ms), histogram acquisition start interval >=120ms; no measured physical fps or speedup claim",
+    "known_prior_feedback": "L38 LCD landscape custom DISP2 histogram slow/empty/flickering; L39 removes native DISP2-specific route but root cause and improvement need camera confirmation",
+    "menu_label_fix": {
+      "cause": "fifth root row used slot250 shared with the Extensions setup row",
+      "custom_slots": [
+        257,
+        258,
+        259,
+        260,
+        261
+      ],
+      "production_slot_regression": true,
+      "languages": [
+        "Simplified Chinese",
+        "English"
+      ],
+      "exit_without_back_host_test": true,
+      "camera_verified": false
+    },
+    "white_balance_fix": {
+      "group": 38,
+      "native_simple_also_visible": true,
+      "extra_hide_only_when_details_off": true,
+      "both_main_initializers_checked": true,
+      "four_logical_pages_both_outputs_host_test": true,
+      "camera_verified": false
+    },
+    "data_archive": {
+      "path": "build/l39-menu-wb-fix.zip",
+      "version": "l39-menu-wb-fix",
+      "sha256": "a7c41b560453f66e1df468d3394dfbe89c4ef63bfb41409a70157cb458ba3e9c",
+      "size": 470353,
+      "members": [
+        "manifest.json",
+        "card/SHUTTER/4.WAV",
+        "card/SHUTTER/1.WAV",
+        "patch_data/patches.json",
+        "card/Z5APP.BIN",
+        "card/SHUTTER/5.WAV",
+        "card/SHUTTER/2.WAV",
+        "card/SHUTTER/3.WAV"
+      ],
+      "import_and_verify_passed": true
     }
-  },
-  "firmware_with_burst_entries_sha256": "bf821031e6d0b7d5f8762eba7178db94adda90f91c8d078985039f4f1cad558e",
-  "burst_speed": {
-    "setup_row": "连拍提速 (slot 254, id 0x2FCA); switches 机械/电子 (slots 255/256, ids 0x2FCB/0x2FCC), default on, MENU.DAT word 2 bits 4/5 = off",
-    "firmware_flag_word": "P+0x14 = 0xBF5A1C00 | bit0 immediate go | bit1 no live-view return; interval P+0x18/0x1C mech 7 silent 5",
-    "holds_removed": [
-      86,
-      60,
-      61,
-      89,
-      63
-    ],
-    "view_all_setting": "not touched by the module (any write hung the camera/emulator, 2026-11-16); users switch it off",
-    "camera_verified": "combined build afed83a9 + bf821031 on camera 2026-11-16: boots, mechanical ~195 ms (FX and DX); silent ~380 ms, not yet effective",
-    "af_note": "AF-S only; focus and exposure stay at the first frame",
-    "fix_2026_11_16": "04bb0f3c hung at power-on (setting write from the task); 72bda745 removes it; emulator: boots, opens the 连拍提速 page, toggles and saves",
-    "labels": "always Simplified Chinese (2026-11-16): 0x1400 is image quality, not the language",
-    "record_block": "test records hold the burst state at offset 0xDA0 (6 words, magic 0x5342 in the top half)",
-    "record_cycle": "20 files in the Z5LOG folder; when all hold records the oldest is overwritten (sequence number at header 0xBC, 2026-11-16)"
   }
 }

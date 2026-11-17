@@ -4,7 +4,7 @@
  "stock_package_sha256": "efc0ce70dcafdd96c64e95d8d50f6b7f0509fc0c2840b28d12b6f9e4877ee776",
  "stock_main_sha256": "1d9742a951ea8a8ebe695fa9bb1f29a3be73e16dfe4a8372d997e903bbc58e98",
  "output_sha256": "bf821031e6d0b7d5f8762eba7178db94adda90f91c8d078985039f4f1cad558e",
- "card_module_sha256": "afed83a92b0b92d53448630f6d1ba69ca6257440b7951af65d58cd09677fa70e",
+ "card_module_sha256": "c3c05d4e7d9948ada8c0383ed59bedb7b60729cbf31f509b8c2a003499a3dad8",
  "z5mod": {
   "commit": "7321c663d4f8abf69c0f88b6b1cb6706c3e101f2",
   "files": {
