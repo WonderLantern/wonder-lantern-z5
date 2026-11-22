@@ -10,6 +10,7 @@ import binascii
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import re
 import struct
@@ -261,7 +262,7 @@ def main():
                        '-I', str(HERE), '-include', str(HERE / 'custom_disp/sdk_compat.h'),
                        '-Wl,--no-fix-cortex-a8']
     # Fixed A39 profile: A19 list-mode Bulb, with the group-119 recorder.
-    definitions = ['-DVUI_DIAG_FOCUS', '-DBULB_MENU']
+    definitions = ['-DVUI_DIAG_FOCUS', '-DBULB_MENU'] + os.environ.get('Z5_EXTRA', '').split()   # Z5_EXTRA: test builds (FILM)
     builder.build(HERE / 'main.c', args.output, defs=definitions)
     elf = out / 'obj/main.elf'
     subprocess.run([sys.executable, str(sdk / 'tools/imgcheck.py'), str(elf)], check=True)

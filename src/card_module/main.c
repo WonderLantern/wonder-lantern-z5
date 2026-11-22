@@ -523,6 +523,23 @@ IMG_FN static void zero_words(u32 *p, u32 words)
 #define DG_WL_OFF  (DG_SIZE - 0x3000u)  /* group 95: wide watch log, 512 x 16 bytes, count at 0xDF4 */
 #define DG_KR_OFF  (DG_WL_OFF - 0x2000u)  /* group 106: key/touch ring, 128 x 64 bytes, count at 0xDF0 */
 #define DG_EV_CAP  ((DG_KR_OFF - DG_EV_OFF) / DG_EV_SIZE)
+#ifdef JPEG_A42
+#if !defined(JPEG_LOG) || defined(JPEG_MARK) || defined(DIAG_SETTINGS_DUMP) || defined(DIAG_RAM_DUMP) || defined(VUI_DIAG_RAMDUMP)
+#error JPEG_A42 requires JPEG_LOG and its own diagnostic layout
+#endif
+#undef DG_EV_CAP
+#define DG_EV_CAP ((0x33000u - DG_EV_OFF) / DG_EV_SIZE)
+#endif
+#ifdef JPEG_A44
+#include "a44_strength.inc"
+#define A44_LOG(c) ((volatile u32 *)((c)->dg_buf + 0x33000u))
+#define A44_MODE 9u
+#define A44_LEVEL 11u
+#ifdef LIGHTROOM_GRAIN
+#define A47_LIGHTROOM 14u
+#define A47_CFG_BIT (1u << 13)
+#endif
+#endif
 #define DG_AFAREA  0xC1819D28u         /* AF_AREA task state */
 #define DG_LAYERS  0xC1D61388u         /* GUI layer enables, LCD (0xC1D61160 + 0x228) */
 
@@ -551,6 +568,14 @@ IMG_FN static void save_cfg(cm_t *c)
               ((c->focal_on ? 0u : 1u) << 28) |  /* group 104: bit 28 = focal display off */
               ((c->bat_on ? 0u : 1u) << 29) |    /* group 116: bit 29 = battery display off */
               ((c->touch_on ? 0u : 1u) << 30);   /* group 119: bit 30 = portrait touch off */
+#ifdef JPEG_A44
+    if (c->dg_buf)                             /* FILM (A52): see cfg_load */
+        data[1] |= 0x80u | (A44_LOG(c)[A44_MODE] << 1) | (a44_strength(A44_LOG(c)[A44_LEVEL]) << 3)
+#ifdef LIGHTROOM_GRAIN
+                   | (A44_LOG(c)[A47_LIGHTROOM] ? 0x40u : 0u)
+#endif
+                   ;
+#endif
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     c->stage = 10u;
     if ((u32)FW(open_fn, FW_OPEN)(f, FS_WRITE_EXISTING, 0) != FS_OPEN_OK) {
@@ -812,7 +837,11 @@ IMG_FN static void cfg_defaults(cm_t *c)
     c->custom_control = 0u;
     c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u; c->vui = 0u; c->focal_on = 1u;
     c->bat_on = 1u; c->touch_on = 1u;
+#ifdef BURST_BOOT_OFF
+    c->burst_mech = 0u; c->burst_sil = 0u;     /* A50: speed-up off at every power-on */
+#else
     c->burst_mech = 1u; c->burst_sil = 1u;
+#endif
 }
 
 IMG_FN static u32 cfg_timer_valid(u32 word)
@@ -858,14 +887,18 @@ IMG_FN static u32 cfg_load(cm_t *c)
         u32 tag = data[2] & 0xFFFF0000u;
         if (tag == 0xD2150000u || tag == 0xD2160000u) {
             c->custom_flags = (data[2] & 15u) | (tag == 0xD2160000u ? ((data[2] >> 2) & 16u) : 0u);
+#ifndef BURST_BOOT_OFF
             c->burst_mech = !(data[2] & BURST_CFG_MECH_OFF);
             c->burst_sil = !(data[2] & BURST_CFG_SIL_OFF);
+#endif
         }
         if ((data[2] & 0xFF000000u) == CUSTOM_CFG_TAG ||
             (data[2] & 0xFF000000u) == CUSTOM_CFG_OLD_TAG) {
             c->custom_flags = data[2] & CUSTOM_PAGES_MASK;
+#ifndef BURST_BOOT_OFF
             c->burst_mech = !(data[2] & CUSTOM_CFG_MECH_OFF);
             c->burst_sil = !(data[2] & CUSTOM_CFG_SIL_OFF);
+#endif
         }
         if (length == 20u) c->custom_control = data[4] & CUSTOM_CONTROL_MASK;
         else if (length == 16u && (data[2] & 0xFF000000u) == CUSTOM_CFG_TAG)
@@ -873,7 +906,26 @@ IMG_FN static u32 cfg_load(cm_t *c)
         else if (length == 12u && (tag == 0xD2160000u || (data[2] & 0xFF000000u) == CUSTOM_CFG_OLD_TAG))
             c->custom_control = (c->custom_flags & CUSTOM_ENABLE_MASK) ? CUSTOM_CONTROL_ON : 0u;
         c->custom_flags = CUSTOM_NORMALIZE(c->custom_flags | CUSTOM_ENABLE_MASK);
+#ifdef JPEG_A44
+        /* FILM (A52): word 1 bit 7 marks bits 1-2 style, 3-5 strength, 6 NEF write; the shutter-sound switch
+         * keeps bit 0. Files from A44-A51 (tag 0xD215) kept them in word 2 bits 8-9, 10-12 and 13. */
+        if (c->dg_buf) {
+            u32 g = 0u;
+            if (data[1] & 0x80u)
+                g = data[1] & 0x7Eu;
+            else if (tag == 0xD2150000u)
+                g = (((data[2] >> 8) & 3u) << 1) | (((data[2] >> 10) & 7u) << 3) | (((data[2] >> 13) & 1u) << 6);
+            u32 mode = (g >> 1) & 3u;
+            A44_LOG(c)[A44_MODE] = mode < 3u ? mode : 0u;
+            A44_LOG(c)[A44_LEVEL] = a44_strength((g >> 3) & 7u);
+#ifdef LIGHTROOM_GRAIN
+            A44_LOG(c)[A47_LIGHTROOM] = (g >> 6) & 1u;
+#endif
+        }
+        u32 on = data[1] & ((data[1] & 0x80u) ? 1u : 0xFFu), type = (data[1] >> 8) & 0xFFu, vol = (data[1] >> 16) & 0xFFu;
+#else
         u32 on = data[1] & 0xFFu, type = (data[1] >> 8) & 0xFFu, vol = (data[1] >> 16) & 0xFFu;
+#endif
         if (on <= 1u) c->on = on;
         if (type >= 1u && type <= 5u) c->type = type;
         if (vol >= 1u && vol <= 5u) c->vol = vol;
@@ -1388,7 +1440,13 @@ IMG_FN static u32 save_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     bulb_arm(c);                               /* A12: in Bulb, arm the timed remote Bulb */
 #endif
     save_label(c);
+#if defined(JPEG_A44) && defined(SETUP_SAVE_REOPEN)
+    FW(page_fn, OPEN_PAGE)(2u, 0x1CBu); /* Rebuild the cached rows of the stock SETUP page. */
+#elif defined(JPEG_A44)
+    FW(refresh_fn, REFRESH)(REFRESH_ARG, 3u, 7u);
+#else
     hub_open(c);
+#endif
     return 0;
 }
 #endif
@@ -1515,6 +1573,9 @@ IMG_FN static u32 sound_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 }
 
 /* Group 116: every hub label, and the hub rows' label kind for the current language. */
+#ifdef JPEG_A44
+#include "a44_menu.inc"
+#endif
 IMG_FN static void hub_labels(cm_t *c)
 {
     u32 k, kind = c->hans ? F_UTF16 : F_ASCII;
@@ -1529,6 +1590,9 @@ IMG_FN static void hub_labels(cm_t *c)
     if (c->bat_hdr) bat_label(c);
     if (c->custom_hdr) custom_label(c);
     if (c->touch_hdr) touch_label(c);          /* group 119 */
+#ifdef JPEG_A44
+    a44_label(c);
+#endif
     if (c->burst_row) burst_label(c);          /* burst speed-up setup row */
 #ifdef VUI_DIAG_FOCUS
     save_label(c);
@@ -1628,7 +1692,29 @@ static void init_strings(cm_t *c)
     copy_str(c->dg_path, sizeof(c->dg_path), "A:\\SHUTTER\\DIAG.BIN");   /* group 116: diag_save names DIAGnn.BIN */
     if (!c->dg_buf) {                          /* 64 KiB ring for the draw-call recorder */
         u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(DG_SIZE, 0);
-        if (b) { u32 i; for (i = 0; i < DG_SIZE / 4u; i++) b[i] = 0u; c->dg_buf = (u32)b; }
+        if (b) {
+            for (u32 i = 0; i < DG_SIZE / 4u; ++i) b[i] = 0u;
+#if defined(JPEG_A44)
+            u8 *data = FW(alloc_fn, FW_ALLOC)(2u * A44_DATA_BYTES, 0);
+            u8 *work = data ? FW(alloc_fn, FW_ALLOC)(A44_WORK_BYTES, 0) : 0;
+            if (work) {
+                a44_prepare(data, work, 1u);
+                a44_prepare(data + A44_DATA_BYTES, work, 2u);
+                FW(free_fn, FW_FREE)(work);
+                b[0x33018u / 4u] = (u32)data;
+                b[0x3301Cu / 4u] = (u32)(data + A44_DATA_BYTES);
+            } else if (data) FW(free_fn, FW_FREE)(data);
+#elif defined(JPEG_A43)
+            u8 *data = FW(alloc_fn, FW_ALLOC)(A43_DATA_BYTES, 0);
+            short *tmp = data ? FW(alloc_fn, FW_ALLOC)(A43_TEMP_BYTES, 0) : 0;
+            if (tmp) {
+                a43_prepare(data, tmp);
+                FW(free_fn, FW_FREE)(tmp);
+                b[0x33018u / 4u] = (u32)data;
+            } else if (data) FW(free_fn, FW_FREE)(data);
+#endif
+            c->dg_buf = (u32)b;
+        }
     }
     if (!c->dg_wbuf) {                         /* group 95: wide watch copies and counts */
         u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(0xE00u, 0);   /* group 101: 680 words + 680 counts */
@@ -1852,6 +1938,9 @@ static u32 install_touch_page(cm_t *c, u32 *title, u32 first_map)
 
 #include "custom_disp_install.inc"
 #include "burst_speed_install.inc"
+#ifdef JPEG_A44
+#include "a44_menu_install.inc"
+#endif
 
 /* Group 116: the hub view: one row per feature, each opening its view. Rows shaped like the owned page's. */
 static u32 install_hub(cm_t *c, u32 *title, u32 first_map)
@@ -1866,7 +1955,11 @@ static u32 install_hub(cm_t *c, u32 *title, u32 first_map)
     if (c->bat_hdr) { slots[n] = SLOT_B_ENTRY; ids[n] = ID_B_ENTRY; fns[n++] = img_addr(c, bat_entry_ok); }
     if (c->custom_hdr) { slots[n] = 253u; ids[n] = 0x2FD0u; fns[n++] = img_addr(c, custom_entry_ok); }
     /* Feature rows go above this line: the save row is always the last one. */
-#ifdef VUI_DIAG_FOCUS
+#if defined(JPEG_A44)
+    if (c->dg_buf && A44_LOG(c)[8]) {
+        slots[n] = A44_ENTRY_SLOT; ids[n] = A44_ENTRY_ID; fns[n++] = img_addr(c, a44_entry);
+    }
+#elif defined(VUI_DIAG_FOCUS)
     slots[n] = SLOT_SAVE; ids[n] = ID_SAVE; fns[n++] = img_addr(c, save_ok);
 #endif
     if (n < 3u) return 70u;                    /* the layout list starts at 3 rows */
@@ -1912,6 +2005,9 @@ static u32 install_menu(cm_t *c)
     /* SETUP: 41 stock rows + row 42 (copy of row 41 with our slot, flags, id). */
     u32 vui_ok = c->fx && *(volatile u16 *)VUI_SITE != 0xE92Du;
     u32 extra = 2u;                            /* group 116: "扩展功能" (features on its hub); "连拍提速" */
+#ifdef JPEG_A44
+    extra += 1u; /* Save diagnostics follows the other two extension rows. */
+#endif
     u32 *rows = (u32 *)z5_alloc((STOCK_ROWS + extra) * ROW_SIZE, 0);
     u32 *disp = (u32 *)z5_alloc((STOCK_ROWS + extra) * 4u, 0);
     if (!rows || !disp) return 13u;
@@ -1934,6 +2030,18 @@ static u32 install_menu(cm_t *c)
         if (!disp[STOCK_ROWS + 1u]) return 27u;
         c->burst_row = (u32)b;
     }
+#ifdef JPEG_A44
+    {
+        u32 *save = entry + 2u * ROW_WORDS;
+        copy_words(save, entry, ROW_WORDS);
+        save[0] = SLOT_SAVE;
+        save[6] = ID_SAVE;
+        disp[STOCK_ROWS + 2u] =
+            build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, save_ok), STAY);
+        if (!disp[STOCK_ROWS + 2u]) return 28u;
+        save_label(c);
+    }
+#endif
     if (0) {                                   /* group 116: these rows are on the hub now */
         u32 *z = entry + ROW_WORDS;
         copy_words(z, entry, ROW_WORDS);
@@ -2008,6 +2116,9 @@ static u32 install_menu(cm_t *c)
     if (install_burst_page(c, title, first_map) != 1u) c->burst_hdr = 0u;   /* burst speed-up switches */
 #ifdef BULB_MENU
     if (BTP(c)) BTP(c)->install = install_bt(c, title, first_map);   /* B门定时 row in the photo shooting menu */
+#endif
+#ifdef JPEG_A44
+    a44_install_menu(c, title, first_map);
 #endif
     if (install_hub(c, title, first_map) != 1u) c->hub_hdr = 0u;                   /* group 116 */
 

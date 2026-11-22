@@ -1636,12 +1636,215 @@ IMG_FN static void vui_drag_paste(cm_t *c, u32 ori, const u8 *s)
     }
 }
 
+#if defined(JPEG_LOG) && defined(VUI_DIAG_FOCUS)
+/* A39 (film grain, readout only, 2026-11-22): the firmware gate at the JPEG encode entry 0x1009F33A calls here
+ * with kind 17 from the five capture-context call sites (research/film-grain/z5_grain_fw.py) while the module
+ * sets bit 5 of P + 0x14 (-DBURST_EXTRA_BITS=0x20u). r = saved {r0, r1, r2, r3, r4, r5, r12, lr}: r0 = encode
+ * argument block (its word 0 = plane descriptor), r4 = capture context. Nothing is written to the image.
+ * Record block at 0x33000: 'JPGL', calls, entry size, capacity; entries from 0x33040, 96 bytes each:
+ *   [0] ms  [1] lr (call site + 5)  [2] argument block  [3] descriptor  [4..11] descriptor bytes 0x00-0x1F
+ *   [12] context  [13] [context + 0x4C4] (capture info)  [14] argument word 1  [15] argument word 2
+ *   [16..19] 16 luma bytes at the image centre  [20..23] 16 chroma bytes at the centre row (format 2: row / 2)
+ * The centre samples are read without cache maintenance (they may be stale); they are only for orientation. */
+#define VUI_K_JPEG   17u
+#define JL_OFF       0x33000u
+#define JL_ENTRY     96u
+#define JL_CAP       32u             /* power of two: no division helper in the module */
+#define JL_IN(a)     ((u32)(a) >= RAM_LO && (u32)(a) < RAM_HI)
+#ifdef JPEG_MARK
+/* A40 (2026-11-22): small test write. A39 showed the planes at 0xF4..0xFA (main) and 0xCE..0xCF (previews), above
+ * RAM_HI, all format 1 (4:2:2: C stride = width, C rows = Y rows). For every call: a neutral grey square
+ * (Y = Cb = Cr = 128, side = width / 40, at least 8, even) at the top-left, with the firmware's own line
+ * maintenance (as the Z30 date stamp): invalidate every touched row of both planes, write, clean them.
+ * For the main image (call site S1) also a timed full-luma pass that reads and writes back every word unchanged
+ * (row by row: invalidate, read/write, clean) - the memory and cache cost of a luma-only grain without its maths.
+ * Record entry fields [16..23] become: [16] ms before, [17] ms after the square, [18] ms after the full pass (main
+ * only), [19] luma word at (0, 0) read back after the clean, [20] chroma word at (0, 0), [21] rows passed (or
+ * 0xBAD = descriptor refused), [22] / [23] the firmware's region policy for the Y / C base (1 = maintained). */
+#define JM_INV       ((u32 (*)(u32, u32))0x10213853u)    /* invalidate(ptr, len), lines of 64 bytes, len <= 0x45000 */
+#define JM_CLEAN     ((u32 (*)(u32, u32))0x10213817u)    /* clean(ptr, len) */
+#define JM_POL       ((u32 (*)(u32))0x10231C47u)         /* region policy: 1 = line maintenance applies */
+#define JM_S1        0x100AE756u
+#define PL_IN(a)     ((u32)(a) >= RAM_LO && (u32)(a) < 0xFE000000u)
+IMG_FN static void jpeg_mark(u32 *q, const volatile u8 *b, u32 main)
+{
+    u32 ys = b[2] | (u32)b[3] << 8, cs = b[4] | (u32)b[5] << 8, w = b[0xA] | (u32)b[0xB] << 8, hh = b[0xC] | (u32)b[0xD] << 8;
+    u32 yb = ((const volatile u32 *)b)[5], cb = ((const volatile u32 *)b)[6], s, y, x;
+    if (b[0] != 1u || w < 16u || hh < 16u || w > 8192u || hh > 8192u || ys < w || cs < w ||
+        !PL_IN(yb) || !PL_IN(yb + ys * hh) || !PL_IN(cb) || !PL_IN(cb + cs * hh)) { q[21] = 0xBADu; return; }
+    q[22] = JM_POL(yb); q[23] = JM_POL(cb);
+    s = (w / 40u) & ~1u;
+    if (s < 8u) s = 8u;
+    q[16] = *(volatile u32 *)CM_MS_CLOCK;
+    for (y = 0; y < s; y++) { JM_INV(yb + y * ys, s); JM_INV(cb + y * cs, s); }
+    for (y = 0; y < s; y++)
+        for (x = 0; x < s; x++) { ((volatile u8 *)(yb + y * ys))[x] = 128u; ((volatile u8 *)(cb + y * cs))[x] = 128u; }
+    for (y = 0; y < s; y++) { JM_CLEAN(yb + y * ys, s); JM_CLEAN(cb + y * cs, s); }
+    q[19] = *(volatile u32 *)yb; q[20] = *(volatile u32 *)cb;
+    q[17] = *(volatile u32 *)CM_MS_CLOCK;
+    if (main && w >= 1000u) {
+        for (y = 0; y < hh; y++) {
+            volatile u32 *p = (volatile u32 *)(yb + y * ys);
+            JM_INV((u32)p, w);
+            for (x = 0; x < w / 4u; x++) { u32 v = p[x]; p[x] = v; }
+            JM_CLEAN((u32)p, w);
+        }
+        q[21] = hh;
+        q[18] = *(volatile u32 *)CM_MS_CLOCK;
+    }
+}
+#endif
+#ifdef JPEG_A42
+#include "jpeg_translation.inc"
+#include "jpeg_a42.inc"
+#endif
+#ifdef LIGHTROOM_GRAIN
+IMG_FN static void a47_record(cm_t *c, u32 seed, u32 width, u32 height,
+                             u32 mode, u32 level, u32 enabled)
+{
+    volatile u32 *log = (volatile u32 *)(c->dg_buf + 0x34000u);
+    u32 next = log[1];
+    volatile u32 *entry = log + 4u + (next & 255u) * 3u;
+    entry[0] = seed;
+    entry[1] = width | (height << 16);
+    entry[2] = mode | (level << 8) | (enabled << 16);
+    log[0] = 0x3147524Cu; /* LRG1 */
+    log[2] = 256u;
+    log[3] = 12u;
+    log[1] = next + 1u;
+}
+#endif
+#ifdef A48_CRD
+#include "a48_crd.inc"
+#endif
+IMG_FN static void jpeg_log(cm_t *c, u32 *r)
+{
+    u32 *h, *q, a = r[0], d, i;
+    if (!c->dg_buf) return;
+    h = (u32 *)(c->dg_buf + JL_OFF);
+    q = (u32 *)(c->dg_buf + JL_OFF + 0x40u + (h[1] & (JL_CAP - 1u)) * JL_ENTRY);
+    for (i = 0; i < JL_ENTRY / 4u; i++) q[i] = 0u;
+    q[0] = *(volatile u32 *)CM_MS_CLOCK; q[1] = r[7]; q[2] = a; q[12] = r[4];
+    if (JL_IN(r[4]) && !(r[4] & 3u)) q[13] = *(volatile u32 *)(r[4] + 0x4C4u);
+    if (JL_IN(a) && !(a & 3u)) {
+        d = *(volatile u32 *)a; q[3] = d; q[14] = ((volatile u32 *)a)[1]; q[15] = ((volatile u32 *)a)[2];
+        if (JL_IN(d) && !(d & 3u)) {
+            const volatile u8 *b = (const volatile u8 *)d;
+            u32 ys = b[2] | (u32)b[3] << 8, cs = b[4] | (u32)b[5] << 8, w = b[0xA] | (u32)b[0xB] << 8, hh = b[0xC] | (u32)b[0xD] << 8;
+            u32 yb = ((const volatile u32 *)d)[5], cb = ((const volatile u32 *)d)[6], row = hh / 2u, x = (w / 2u) & ~15u;
+            for (i = 0; i < 8u; i++) q[4u + i] = ((const volatile u32 *)d)[i];
+#if defined(JPEG_A42)
+            u32 seed = q[0] ^ d ^ (h[1] * 0x9E3779B1u);
+#if defined(JPEG_A44)
+            if (r[7] == A42_S1
+#ifdef LIGHTROOM_GRAIN
+                || (r[7] == A42_S2 && *(const volatile u32 *)A42_JPEG_KIND == 1u)
+#endif
+            ) {
+                h[10] = A44_LOG(c)[A44_MODE];
+                h[12] = a44_strength(A44_LOG(c)[A44_LEVEL]);
+#ifdef JPEG_A50
+#ifdef A51_KERNEL2
+                h[13] = 2u;
+#else
+                h[13] = h[15] <= 2u ? h[15] : 0u;
+                h[15] = h[13] == 2u ? 0u : h[13] + 1u;
+#endif
+#endif
+            }
+            u32 mode = h[10];
+            u32 level = h[12];
+#ifdef LIGHTROOM_GRAIN
+            u32 develop_grain = A44_LOG(c)[A47_LIGHTROOM];
+#endif
+            if (mode == 1u || mode == 2u)
+#ifdef JPEG_A50
+                jpeg_a42(q, b, r[7], seed, (const u8 *)h[5u + mode], level, h[13]);
+#else
+                jpeg_a42(q, b, r[7], seed, (const u8 *)h[5u + mode], level);
+#endif
+            else {
+                q[16] = 7u;
+                q[23] = *(const volatile u32 *)A42_JPEG_KIND;
+            }
+            q[23] = (q[23] & 255u) | (mode << 8) | (level << 16);
+#ifdef JPEG_A50
+            q[23] |= h[13] << 24;
+#endif
+#ifdef LIGHTROOM_GRAIN
+            if (q[16] == A42_DONE &&
+                ((r[7] == A42_S1 && (q[23] & 255u) == 0u) ||
+                 (r[7] == A42_S2 && (q[23] & 255u) == 1u)))
+                a47_record(c, seed | 1u, w, hh, mode, level, develop_grain);
+#ifdef A48_CRD
+            {
+                /* Record one entry per NEF capture: S1 of RAW+JPEG, S2 of RAW only, FILM on or off. */
+                u32 quality = *(const volatile u32 *)A42_JPEG_KIND;
+                if ((r[7] == A42_S1 && quality == 0u) || (r[7] == A42_S2 && quality == 1u))
+                    a48_push(c, r[7], quality, seed | 1u, mode, level,
+                             develop_grain && (mode == 1u || mode == 2u), q[16], r[4]);
+            }
+#endif
+#endif
+#elif defined(JPEG_A43)
+            jpeg_a42(q, b, r[7], seed, (const u8 *)h[6]);
+#else
+            jpeg_a42(q, b, r[7], seed);
+#endif
+            (void)ys; (void)cs; (void)w; (void)hh; (void)yb; (void)cb; (void)row; (void)x;
+#elif defined(JPEG_MARK)
+            jpeg_mark(q, b, r[7] == JM_S1 + 5u);
+            (void)ys; (void)cs; (void)w; (void)hh; (void)yb; (void)cb; (void)row; (void)x;
+#else
+            if (w >= 32u && hh >= 2u && ys >= w && JL_IN(yb) && JL_IN(yb + ys * hh))
+                for (i = 0; i < 4u; i++) q[16u + i] = *(const volatile u32 *)(yb + row * ys + x + 4u * i);
+            if (b[0] == 2u) row /= 2u;
+            if (w >= 32u && cs >= w && JL_IN(cb) && JL_IN(cb + cs * (row + 1u)))
+                for (i = 0; i < 4u; i++) q[20u + i] = *(const volatile u32 *)(cb + row * cs + x + 4u * i);
+#endif
+        }
+    }
+    h[0] = 0x4C47504Au; h[2] = JL_ENTRY; h[3] = JL_CAP;   /* 'JPGL' */
+#if defined(LIGHTROOM_GRAIN)
+#ifdef A48_CRD
+#ifdef JPEG_A50
+#ifdef A51_KERNEL2
+    h[4] = 0x3135414Au; /* JA51 */
+#else
+    h[4] = 0x3035414Au; /* JA50 */
+#endif
+#else
+    h[4] = 0x3934414Au; /* JA49 */
+#endif
+#else
+    h[4] = 0x3734414Au; /* JA47 */
+#endif
+#elif defined(JPEG_A45)
+    h[4] = 0x3534414Au; /* JA45 */
+#elif defined(JPEG_A44)
+    h[4] = 0x3434414Au; /* JA44 */
+#elif defined(JPEG_A43)
+    h[4] = 0x3334414Au; /* JA43 */
+    h[5] = JPEG_A43;
+#elif defined(JPEG_A42)
+    h[4] = 0x3234414Au; /* JA42 */
+#endif
+    h[1] += 1u;
+}
+#endif
+
 IMG_FN static void vui_hook(u32 kind, u32 *r)
 {
     cm_t *c = cm_get();
     u32 ori, ui, app, active, now, sub, setting;
 #ifdef VUI_DIAG_FOCUS
     u8 *dge = 0;
+#endif
+#if defined(JPEG_LOG) && defined(VUI_DIAG_FOCUS)
+    if (kind == VUI_K_JPEG) { if (c) jpeg_log(c, r); return; }
+#ifdef A48_CRD
+    if (kind == VUI_K_CRD) { if (c) a48_crd(c, r); return; }   /* NEF metadata task: crd block */
+#endif   /* encode task: record and leave at once */
 #endif
     if (c && VUI_IS_TOUCH(kind)) {             /* group 109: touch first, on the touch task: map, record, return */
         u8 *ev = (u8 *)r[0];
