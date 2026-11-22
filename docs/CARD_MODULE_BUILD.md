@@ -85,6 +85,16 @@ A39 设置检查额外覆盖精确 8／12／16／20 字节读取、总开关和�
 
 宿主逻辑通过不代表真机帧率、触控、传感器或待机唤醒通过。当前验证范围见 [CUSTOM_DISP_HANDOFF.md](CUSTOM_DISP_HANDOFF.md)。
 
+## A52：胶片颗粒
+
+A52 在同一源码上用环境变量 `Z5_EXTRA` 追加定义（不设时等同 A39，构建结果与 A39 模块 `5ff920e0…` 逐字节相同）：
+
+```sh
+Z5_EXTRA='-DJPEG_LOG -DBURST_EXTRA_BITS=0x60u -DJPEG_A42 -DJPEG_A43=1 -DJPEG_A44 -DJPEG_A45 -DSETUP_SAVE_REOPEN -DLIGHTROOM_GRAIN -DA48_CRD -DJPEG_A50 -DBURST_BOOT_OFF -DA51_KERNEL2' python src/card_module/build.py --sdk third_party/z5mod-sdk/sdk --firmware /path/to/current-main.BIN   --legacy-firmware /path/to/legacy-main.BIN -o build/a52/Z5APP.BIN
+```
+
+结果 `b3ed50ebf369d332015b521fa231ef392920ef60e1c0853d3a0700f966f4132a`（GCC 13.3.1）。A52 配套固件 `a3704c6f…` 在 A39 配套固件上增加 MTP 列表加速、JPEG 编码入口闸门和 NEF `crd:` 闸门，钩子源码见 `src/firmware_hooks/z5_mtp_fw.py`、`z5_grain_fw.py`、`z5_crd_fw.py`；用户用 `patch.py` 从原厂文件生成。FILM 设置的主机测试：`tests/card_module/verify_film_config.py`。实现说明见 [FILM_GRAIN.md](FILM_GRAIN.md)。
+
 ## 更新发布文件
 
 1. 把审核过的构建产物复制到根目录 `card/Z5APP.BIN`。
@@ -98,7 +108,7 @@ python3 tools/windows_packager/make_update.py \
   --output build/a39-20261117.zip
 ```
 
-该 ZIP 是数据包，包含插件、补丁数据和五个默认音效，不含生成后的尼康固件。A39 发布页提供已更新的 Windows 程序和可供早期工具导入的数据包。
+该 ZIP 是数据包，包含插件、补丁数据和五个默认音效，不含生成后的尼康固件。各版本发布页提供已更新的 Windows 程序和可供早期工具导入的数据包。
 
 ## 提交边界
 

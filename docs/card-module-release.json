@@ -1,13 +1,25 @@
 {
-  "camera_verified": true,
+  "camera_verified": false,
   "dynamic_tests_run": false,
   "firmware_modified": false,
   "upstream_commit": "b8ffd1c",
-  "release_firmware_sha256": "bf821031e6d0b7d5f8762eba7178db94adda90f91c8d078985039f4f1cad558e",
-  "variant": "A39-A19-list-bulb-L39-custom-disp",
+  "release_firmware_sha256": "a3704c6f7f7891b5d691985b6148af43d7bf4d58a35d862659661b1bd9a6c754",
+  "variant": "A52-film-grain-on-A39",
   "compiler_definitions": [
     "-DVUI_DIAG_FOCUS",
-    "-DBULB_MENU"
+    "-DBULB_MENU",
+    "-DJPEG_LOG",
+    "-DBURST_EXTRA_BITS=0x60u",
+    "-DJPEG_A42",
+    "-DJPEG_A43=1",
+    "-DJPEG_A44",
+    "-DJPEG_A45",
+    "-DSETUP_SAVE_REOPEN",
+    "-DLIGHTROOM_GRAIN",
+    "-DA48_CRD",
+    "-DJPEG_A50",
+    "-DBURST_BOOT_OFF",
+    "-DA51_KERNEL2"
   ],
   "compatibility": {
     "firmware_group": 108,
@@ -56,8 +68,8 @@
   "lcd_walk_identity": "callback-entry SP +28 wrapper LR, +44 controller LR; exact native code checks",
   "lcd_final_submission_hook": false,
   "lcd_diagnostics": "L39: same R/U/C/F W/D/K/N metrics on last photo output (L39L/L39E); Q also reports page/activation refusal; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)",
-  "output_sha256": "5ff920e0fc80ba4210dd90bfb9cc68a08bbb15ad8a1dab224aea2f862c8af67b",
-  "output_size": 79356,
+  "output_sha256": "b3ed50ebf369d332015b521fa231ef392920ef60e1c0853d3a0700f966f4132a",
+  "output_size": 85684,
   "custom_disp_settings": {
     "menu": "Extensions > Custom DISP > DISP0..DISP3",
     "menu_text_slots": [
@@ -1910,8 +1922,8 @@
     },
     {
       "name": "release_cb",
-      "size": 34238,
-      "direct_branches": 2224
+      "size": 38654,
+      "direct_branches": 2407
     }
   ],
   "sdk_hashes": {
@@ -1946,45 +1958,54 @@
     "z5mod.ld": "eb739b180dea2e5e78a42362240a64a43420a2adf0e86238a8d58b52790062a6"
   },
   "source_hashes": {
-    "src/card_module/build.py": "d6a0c4686cea806b4b7ee02d14a1e4da8b4abeb95a8d8c9552388115b462355b",
-    "src/card_module/burst_speed.inc": "184f0965a1f88b79a7125aabec0721535f54c6732778daa5d1f26738c0d07b06",
-    "src/card_module/burst_speed_install.inc": "e4433ec8a1c534f7abde890bd9fbac74b12188e6cf4d1409372197fe8c3fdb90",
-    "src/card_module/custom_disp/compatibility.json": "47b68a36c2edba6931ab5de6af8673e5d18c476cc5a383b1f48e49c0c90b89df",
-    "src/card_module/custom_disp/compose.h": "37a10e7c761cdb3e993369ca40f8618b279ee2a631243e7d5f77f7c05c6afcc3",
-    "src/card_module/custom_disp/diagnostics.h": "e6a8927c3f6fdec1b34679d5f839f22a6868222fb980417678fcdf43e0876edd",
-    "src/card_module/custom_disp/display.c": "d28058047fbcd380f9d733bc25ab43b8ce5b2c7e9c69cd1b2d98431824fc3d7b",
-    "src/card_module/custom_disp/histogram.h": "2ecafdae367032ea1c8c033392a3cf28f975e687a40f4a437b43fc329dfe9dd2",
-    "src/card_module/custom_disp/histogram_raster.h": "4245759d4410af8d69590429413b09337137c008cf602bfe747265a13c9100e6",
-    "src/card_module/custom_disp/level.h": "570c2a963b23bcc4f9c42c7ad8a17958b7bac8563c344f3fe1cc9ddcccc71223",
-    "src/card_module/custom_disp/native_level.h": "66e14d7faac5ba429bdf0f309fc7c08914f935f04a0b4a80b991782abb1665fc",
-    "src/card_module/custom_disp/output.h": "61f52fb604cbf8db43150136b4fef32858f824c0350789b310a76165f6b82926",
-    "src/card_module/custom_disp/overlay_render.h": "5c440b1dd5ce833bee9f319e0a87a601bb5929fe736580e0ba8647adff02b2fc",
-    "src/card_module/custom_disp/overlay_state.h": "4e6818455aaf399bf03e3e6a389fbdee33c2f3f67a5142ea638eb6aaa781cddb",
-    "src/card_module/custom_disp/platform.json": "45bc34d9749af0814e82f5af78e6cd11bccd5453fd8d862e5fd8dee98458c130",
-    "src/card_module/custom_disp/refresh.h": "bd296e3a61b0e3ca0dbc57631ec72e253e0198abfa75fb7ff29176ce995bfbd5",
-    "src/card_module/custom_disp/refresh_override.h": "42a61a1f508451af9177b9eacd79c245e45b99708a8445077481b07790281464",
-    "src/card_module/custom_disp/responsive.h": "00f11c7a8230cd846eb6c45781383a0099df53168aab6248a064c6c4065e9fac",
-    "src/card_module/custom_disp/route.inc": "46f6a799ad6c2529a2171effd7fb7d2219f4cd3a05889ee7fff69bd53f4e807f",
-    "src/card_module/custom_disp/sdk_compat.h": "5c3ab0cff2f943067d71979065b4619b991e718643f699370320dc8cf95f9210",
-    "src/card_module/custom_disp/sdk_sources.json": "6e0ea598b02450f610abe69d9edbb1f1722c00e38430aa2751ed5beb4cab1b19",
-    "src/card_module/custom_disp/settings.h": "041580f632a0686b55b9d58192fbeb74411671c623d593fba265309bc3ca722d",
-    "src/card_module/custom_disp/smooth.h": "9adf20520a08bc3743c98a854e562499b579b43d3f067dd16fd81243d92a226d",
-    "src/card_module/custom_disp/sparse.h": "fbf8e1f65fa693b41755729c28be83cce449af60a9cbcd6991521d7ab64d47c2",
-    "src/card_module/custom_disp/target.h.in": "53bfe79d6774c8af9d77d8d06dfac39e0e499c70d104f1e91969b3c765a1864a",
-    "src/card_module/custom_disp.h": "dc9da9d32e617c8d18049ea8e495b76e229cdceab5e651e8874493df5567a8b3",
-    "src/card_module/custom_disp_install.inc": "3de846ba55e5f572a0df76ae2f939ca4b40a36c3f9d7642d09fbf8967587acbc",
-    "src/card_module/custom_disp_runtime.inc": "5374a7c2289000489f26dee5692c5b390ed4109fcf1252656693447aff269751",
-    "src/card_module/main.c": "540ce532566877274ed74cdae6994106b5b3f4055facc8f4f8408bded65a3c7e",
-    "src/card_module/vui_card.inc": "a306acf641908ccfea72477b33d0cbbaba2fc41ef1fb497cfae2098f8509a137",
-    "src/card_module/z5mod-sdk.patch": "d68e378f9f0c2a08e3cbccb2d0dd89279a8b0d9046e4a47e7772e1c8435a545f"
+    "src/card_module/build.py": "88729a63f1ffcf1488ca77aa012f8b50dece9ecf4bfcb87dcae573bb6dddc019",
+    "src/card_module/burst_speed.inc": "211aebbaad1068220a1aaf6aed8e5caf6fba884ac0d03330cd3c2f08085d9822",
+    "src/card_module/burst_speed_install.inc": "949658c033155907b9e2bf6c77d635974bbc931e55d821414d97a0c8747d483e",
+    "src/card_module/custom_disp/compatibility.json": "79be08a0bdb0be656390b978d256c8695f71f7d21b417e65f72b3ab9d14a49c1",
+    "src/card_module/custom_disp/compose.h": "0c16b43d0150cc01eb99d5c415200aa97632761f4d5eb138f2d32ff5dd1523fa",
+    "src/card_module/custom_disp/diagnostics.h": "759628e254de2c4d958437b99d86c5c2fde12a752c5ac904854ec30be54be1c6",
+    "src/card_module/custom_disp/display.c": "9a1c56ddab95932ec38c778b1894ffc32bde4887aee2a491d1170855e57add29",
+    "src/card_module/custom_disp/histogram.h": "70fbbd9d482f97aebd14667aa1add50701a9c853da3538f171d51606e57222e9",
+    "src/card_module/custom_disp/histogram_raster.h": "43ff489e69a8f37e603acfaa1d96b4c1d9b7195c2fe08d2fdbd27fc6cde8fd0f",
+    "src/card_module/custom_disp/level.h": "6aabafcc316ca178947294742e756c7e1ef29b38632dfec274985de880d1a66c",
+    "src/card_module/custom_disp/native_level.h": "484c22bbfc4dea2ea91f1c508017b6005b274f492b601e517d3b6405f486eba5",
+    "src/card_module/custom_disp/output.h": "1c60ce68f4c180f5618f242767da8682e6d33ef386901c83e88312034fd3609c",
+    "src/card_module/custom_disp/overlay_render.h": "4506b39c6544e2c6fe0ba1e809c34396a3a5604fa000920827155e95ac73041b",
+    "src/card_module/custom_disp/overlay_state.h": "540ed5a6e3d697f82c6c50941545f1ad02e0ce7d8043adfae1ad5f8c41cfbad5",
+    "src/card_module/custom_disp/platform.json": "141f50be5ae0d8074a45a0e5fe965ea452f652a48e242b4ed5862c3434be3e46",
+    "src/card_module/custom_disp/refresh.h": "f27d1a8444294a84db912d2efb562d455d8e5a5977ab7bd38507b49e555e31ad",
+    "src/card_module/custom_disp/refresh_override.h": "8b2aace43d61f33c37416745b0d415658e484c4b29eae0a3ee6763e918777ee9",
+    "src/card_module/custom_disp/responsive.h": "407514203795314e91b9e80dc3420a7a3759fac53830773cbb7ab0800b868d8a",
+    "src/card_module/custom_disp/route.inc": "239eae888602693ca7712280f351c3d580a2281c36a30fae9fbc93624b765343",
+    "src/card_module/custom_disp/sdk_compat.h": "3383ca9eabb703db3ac0212c3b992689d2e324ea5d6eefcd90cc74dccf9c744f",
+    "src/card_module/custom_disp/sdk_sources.json": "99233f9618c0a3ffeb5dbade25eedccd936f23ca9662ea5cb135a96f67ef8049",
+    "src/card_module/custom_disp/settings.h": "5a4256afb6c91b18460555ff11bf6d2c93ed66770b5e17ca640a2b27b8f8793f",
+    "src/card_module/custom_disp/smooth.h": "4b315522cc8f6fbf6a27c1a82276b99ac4a689164dd091b7ec00bab7184de7df",
+    "src/card_module/custom_disp/sparse.h": "615637ee49c2b3f3f8c4ea1998c5c2735d3569082145f6f56c1e2de57df09959",
+    "src/card_module/custom_disp/target.h.in": "efb0f7ec75f448df0629b3c98c9a1ca7fe3b30c97975823b0de2b57b4bf6285a",
+    "src/card_module/custom_disp.h": "253cbf3a386f191ad2c7ff64f93dbd5e09a1e692b3bc4e1fb1d3f57f00129a4e",
+    "src/card_module/custom_disp_install.inc": "b739ab91e64a6dc13eb7014029ea7b312c4b238727cec08ed0da31eac12c7288",
+    "src/card_module/custom_disp_runtime.inc": "bf1045e5b1acee1b1319b75f31439bf46caa4e2945a4b80aa0500d14d549b3ca",
+    "src/card_module/main.c": "5521bdee64d08d9686aca131bf99cfe17e9a4f22473e70e83b7f0a479e01d2d4",
+    "src/card_module/vui_card.inc": "e62ba116d3fb19bb4a867f54c15da37cf7016de16ee0cc22fcee5d29f428fc8f",
+    "src/card_module/z5mod-sdk.patch": "3ff80018dde9c025e07f1c6b03e5bf915f87b342388d31395c7d046ca1b65e4c"
   },
   "compiler_version": "13.3.1",
   "limitations": "Build and static checks only. Camera timing, portrait layout and wake need hardware verification.",
+  "fork_revision": "a74f6f7df4ec33b9e85465992d37d4b2d60a868f",
   "camera_verification_scope": {
-    "matching_module_sha256": "5ff920e0fc80ba4210dd90bfb9cc68a08bbb15ad8a1dab224aea2f862c8af67b",
-    "coverage": "General acceptance, no itemized display, video or power-loss report",
+    "matching_module_sha256": "b3ed50ebf369d332015b521fa231ef392920ef60e1c0853d3a0700f966f4132a",
+    "matching_firmware_sha256": "a3704c6f7f7891b5d691985b6148af43d7bf4d58a35d862659661b1bd9a6c754",
+    "coverage": "Author camera test 2026-11-23: FILM settings carried over from A51 and kept across power cycles, RAW+JPEG grain and NEF Lightroom grain, custom DISP on LCD/EVF, timed Bulb menu, low-speed burst. Video not adapted; MTP listing speed-up ran on camera, effect not verified.",
     "windows_installer_camera_verified": false,
-    "source": "User reported A39 worked on 2026-11-17"
+    "source": "Author reported A52 passed on 2026-11-23"
   },
-  "fork_revision": "a74f6f7df4ec33b9e85465992d37d4b2d60a868f"
+  "a39_reproduction": {
+    "definitions": [
+      "-DVUI_DIAG_FOCUS",
+      "-DBULB_MENU"
+    ],
+    "output_sha256": "5ff920e0fc80ba4210dd90bfb9cc68a08bbb15ad8a1dab224aea2f862c8af67b",
+    "note": "Built from this source with only the A39 definitions (GCC 13.3.1) the module is byte-identical to A39."
+  }
 }

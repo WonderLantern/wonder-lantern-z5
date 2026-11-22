@@ -21,12 +21,17 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Focal length | Shown for every CPU lens (stock: power-zoom lenses only); can be turned off | Yes |
 | Battery percent | Remaining charge shown in the battery icon; can be turned off | Yes |
 | Extensions menu | All switches in one row, "Extensions", at the end of the Setup menu | Yes |
-| Custom DISP | Per-page level, histogram and details with separate LCD and EVF page memory | User reported A39 worked |
-| Timed Bulb | Set hours, minutes and seconds in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | A19 tested on camera. User reported A39 worked. |
+| Custom DISP | Per-page level, histogram and details with separate LCD and EVF page memory | User reported A39 worked; A52 tested on the author's camera |
+| Timed Bulb | Set hours, minutes and seconds in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | A19 tested on camera. User reported A39 worked. A52 tested on the author's camera. |
+| Film grain FILM | FUJI400 / HP5, strength 1–6, on the JPG and the NEF's embedded preview; about 1.1 s per image. **Avoid high-speed bursts with grain on** (low-speed 3 fps ran 20+ frames without waiting; high speed waits 1–2 s after 4 frames). Implementation and parameters: [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md) (Chinese) | **Tested on the author's camera** (A52) |
+| Lightroom grain inside the NEF | With "NEF写入: on" the camera writes matching Lightroom grain into the NEF's own XMP; with Lightroom's raw default set to "Camera Settings" it applies on import, no sidecar files | **Tested on the author's camera** (Lightroom Classic 13.2) |
+| Faster photo listing over USB | Speeds up listing photos on a computer over USB (port of Z30 mtp-fast); on whenever the card module is installed | Ran on the author's camera, **effect not verified** |
 | Test records | One-press record of a problem (`Z5LOG` folder) for feedback | Yes |
-| Burst speed-up (test) | Mechanical 233 → ~195 ms/frame (camera-tested with FX and DX lenses). **Silent: no clear gain yet** (~380 ms/frame vs 400 stock; under investigation). **AF-S only: in AF-C focus also stays at the first frame, not for tracking.** Setup menu row "连拍提速" below the extension row, two switches (mechanical / electronic, default on); please switch "view all in continuous mode" off yourself. See [docs/BURST_SPEED.md](docs/BURST_SPEED.md) (Chinese) | Older upstream build: mechanical tested, silent ineffective; this combination awaits camera testing |
+| Burst speed-up (test) | Mechanical 233 → ~195 ms/frame (camera-tested with FX and DX lenses). **Silent: no clear gain yet** (~380 ms/frame vs 400 stock; under investigation). **AF-S only: in AF-C focus also stays at the first frame, not for tracking.** Setup menu row "连拍提速" below the extension row, two switches (mechanical / electronic; from A50 off at every power-on, turning them on lasts until power-off). While on, "view all in continuous mode" cannot show live view during a burst. See [docs/BURST_SPEED.md](docs/BURST_SPEED.md) (Chinese) | Older upstream build: mechanical tested, silent ineffective; this combination awaits camera testing |
 
 The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
+
+**Current version A52** adds film grain (FILM), Lightroom grain written into the NEF and faster photo listing over USB to A39, tested on the author's camera (the listing speed-up's effect is not verified). Burst speed-up is now off at every power-on. Please avoid high-speed bursts with film grain on. See [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md) (Chinese), which also explains the implementation with its actual parameters.
 
 **A39** combines the A19 timed Bulb menu with Custom DISP from PR #6. Extension menus display in Simplified Chinese. Enable Custom DISP under Setup Menu → Extensions → Custom DISP. Each of the four pages has its own level, histogram and detail settings. The LCD keeps a display-off position, and the EVF cycles the four visible pages.
 
@@ -34,11 +39,11 @@ The user reported that A39 worked in camera testing. Individual display scenario
 
 ## Windows tool (no installation)
 
-Download the Windows tool from the [A39 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a39-20261117). It generates the firmware paired with A19 and the A39 card module from the official C 1.50 file. Existing tools can import Z5-update-a39-20261117.zip. The output includes Chinese instructions and the shutter sound converter.
+Download the Windows tool from the [A52 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a52-20261123). It generates the A52 firmware and card module from the official C 1.50 file. Existing tools can import Z5-update-a52-20261123.zip. The output includes Chinese instructions and the shutter sound converter.
 
 ## Usage
 
-**Already using the firmware paired with A19?** Back up the existing module and settings, then replace only Z5APP.BIN at the root of the card. Keep MENU.DAT and power-cycle the camera. To roll back, restore both backups. Custom DISP defaults to off when migrating from A19.
+**A52 needs new firmware** (two more entries for film grain and the NEF write, plus the USB listing speed-up). Coming from the A19/A39 firmware, flash it once as below. If you already flashed the A48-or-later test firmware (SHA-256 starting `a3704c6f`), back up Z5APP.BIN and SHUTTER/MENU.DAT and replace only Z5APP.BIN; A51 film-grain settings carry over. Custom DISP defaults to off when migrating from A19.
 
 ### 1. Prepare
 
@@ -64,7 +69,7 @@ output/card/SHUTTER/1-5.WAV      default test sounds (five)
 output/card/Z5LOG/DIAG01-20.BIN  20 empty test-record files
 ```
 
-The SHA-256 of `EG165050.BIN` should be `bf821031e6d0b7d5f8762eba7178db94adda90f91c8d078985039f4f1cad558e` (group 108 + burst speed-up entries). Do not redistribute this file.
+The SHA-256 of `EG165050.BIN` should be `a3704c6f7f7891b5d691985b6148af43d7bf4d58a35d862659661b1bd9a6c754` (group 108 + burst speed-up entries + USB listing speed-up + film grain and NEF write entries). Do not redistribute this file.
 
 ### 3. Flash (once)
 
@@ -112,7 +117,10 @@ The last row of the Setup menu, "Extensions" (扩展功能 in Chinese), holds:
 | Battery % | Charge in percent inside the battery icon, red at 20 % and below |
 | Custom DISP | One master for DISP0–DISP3; configure level, histogram and details per page; LCD/EVF remember their pages separately |
 | Timed Bulb | Set hours, minutes and seconds in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | A19 tested on camera. User reported A39 worked. |
-| Save log | Saves a test record; the row shows the file number ("01"), cycling over the oldest after all 20 fill |
+| FILM | Film grain: off / FUJI400 / HP5, strength 1–6, NEF write (on: Lightroom grain in the NEF). See [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md) |
+
+**Save log** is now the last row of the Setup menu: it saves a test record; the row shows the file number ("01"), cycling over the oldest after all 20 fill.
+
 
 - **Framing grid:** Custom Setting d8, with On (4×4), Off, 3×3, or 2×2 (centre cross).
 - **Histogram with level:** press DISP to reach the virtual horizon page. It appears about 1 second after power-on or wake, and "Apply settings to live view" must be on.
@@ -146,8 +154,8 @@ To restore the camera completely, download the Z 5 C 1.50 firmware from Nikon an
 | `src/` | Source for the card module and firmware hooks |
 | `tools/` | Audio converter |
 | `PLAN.md` | Completed and future work (Chinese) |
-| `docs/` | Development notes, custom DISP handoff and module build instructions (Chinese) |
-| `tests/card_module/` | Host tests for visibility, settings, refresh intervals and the shared histogram raster |
+| `docs/` | Film grain implementation, development notes, custom DISP handoff and module build instructions (Chinese) |
+| `tests/card_module/` | Host tests for visibility, settings (including FILM), refresh intervals and the shared histogram raster |
 
 The [module build instructions](docs/CARD_MODULE_BUILD.md) describe the pinned SDK and private MAIN inputs. Most users only need `patch.py` or the prebuilt module.
 
