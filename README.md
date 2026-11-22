@@ -23,7 +23,10 @@
 | 扩展功能菜单 | 所有开关集中在设定菜单最后一行“扩展功能” | 通过 |
 | DISP2 自定义（L21） | 详细信息页独立开关自制水平仪、直方图和详细信息；关闭详细信息保留简单页基础信息与电池 | L20 背屏/EVF 已反馈正常；L21 清理版待实机复测（视频未适配） |
 | 测试记录 | 出问题时一键保存记录（`Z5LOG` 文件夹），便于反馈 | 通过 |
-| 连拍提速（测试版） | 机械 233→约 195 ms/张（全画幅和 DX 镜头都已实测）；**静音目前没有明显提速**（约 380 ms/张，原厂 400，排查中）；**只适合 AF-S，AF-C 下也按 AF-S 工作，不适合追踪**；详见[说明](docs/BURST_SPEED.md) | 机械：整合版实机通过；静音：未生效 |
+| 连拍提速（测试版） | 机械 233→约 195 ms/张（全画幅和 DX 镜头都已实测）；**静音目前没有明显提速**（约 380 ms/张，原厂 400，排查中）；**只适合 AF-S，AF-C 下也按 AF-S 工作，不适合追踪**；A51 起每次开机默认关；详见[说明](docs/BURST_SPEED.md) | 机械：整合版实机通过；静音：未生效 |
+| 胶片颗粒 FILM（测试版 A51） | FUJI400 / HP5、强度 1–6，加在 JPG 和 NEF 内嵌预览上；每张约 1.1 秒，**开着颗粒时不建议高速连拍**（低速每秒 3 张连拍 20 多张不卡，高速连拍 4 张后会等 1–2 秒）；详见[说明](docs/FILM_GRAIN.md) | 通过（作者实机） |
+| NEF 写入 Lightroom 颗粒（测试版 A51） | “NEF写入：开”时相机把颗粒设置写进 NEF 自带的 XMP，Lightroom 原始默认设置选“相机设置”即自动带颗粒，不产生额外文件 | 通过（Lightroom Classic 13.2） |
+| 电脑读取照片加速（测试版 A51） | USB 连电脑浏览照片时加快列表读取（移植 Z30 mtp-fast），卡上有模块时自动生效 | **已上机，未验证效果** |
 
 取景器、视频模式下的新功能，以及最新版本的拔卡恢复，尚未单独确认。已完成和未来计划见 [PLAN.md](PLAN.md)，开发过程见 [docs/PROGRESS.md](docs/PROGRESS.md)。
 
@@ -32,6 +35,8 @@
 功能代码放在存储卡上的模块里。固件只增加很小的入口和判断；卡上没有模块时，网格、高光显示和同框都走原厂路径。改动只在 MAIN 模块内，不动引导区。
 
 ## Windows 免安装工具
+
+**胶片颗粒测试版：** [Releases](https://github.com/WonderLantern/wonder-lantern-z5/releases) 的 `film-grain-a51-20261123` 预发布提供胶片颗粒、NEF 内 Lightroom 颗粒和电脑读取照片加速（未验证）的 Windows 程序和数据包（`Z5-update-film-grain-a51-20261123.zip`）。它基于 A39 之前的源码，自定义 DISP 为 L21 版，不含 A39 的新版自定义 DISP。需要刷这一版生成的固件。说明见 [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md)。
 
 [Releases](https://github.com/WonderLantern/wonder-lantern-z5/releases) 的 `burst-speed-20261116` 预发布提供本版本（L22 + 连拍提速）的 Windows 程序和数据包（旧版程序可用“导入版本包”导入 `Z5-update-burst-speed-20261116.zip`）。之前的 `burst-speed-20261115` 开机会死机，已撤下，请勿使用。使用方式：下载 Windows 程序，选择自备的原厂固件即可生成文件。结果目录内含中文使用说明和快门声音转换工具。首次生成需联网下载并校验解码器。使用与恢复步骤仍以本文为准；生成的固件请勿分发。
 
@@ -108,9 +113,10 @@ python tools/make_snd_wav.py 你的声音.wav --out 转换结果
 | 焦距显示 | 所有 CPU 镜头显示焦距 |
 | 电量显示 | 电池图标里显示百分比，20% 以下变红 |
 | DISP2 自定义 | 配置已有详细信息页：自定义显示总开关、水平仪、直方图、详细信息；四项默认开启 |
+| FILM | 胶片颗粒：关闭 / FUJI400 / HP5、强度 1–6、NEF写入（开：把 Lightroom 颗粒写进 NEF）。见 [FILM_GRAIN](docs/FILM_GRAIN.md) |
 | 保存测试记录 | 出问题时停在那个画面，按 OK 保存，行上显示“已存 01”这样的编号；20 个存满显示“已满” |
 
-设定菜单“扩展功能”下面还有一行 **连拍提速**，进去是“机械快门提速”“电子快门提速”两个开关（默认开）。使用时请手动关闭原厂“连拍时查看全部”；曝光和对焦停在第一张，只适合 AF-S。详见 [docs/BURST_SPEED.md](docs/BURST_SPEED.md)。
+设定菜单“扩展功能”下面还有一行 **连拍提速**，进去是“机械快门提速”“电子快门提速”两个开关（A51 起每次开机默认关，打开后只在本次开机有效）。使用时请手动关闭原厂“连拍时查看全部”；曝光和对焦停在第一张，只适合 AF-S。详见 [docs/BURST_SPEED.md](docs/BURST_SPEED.md)。
 
 其他：
 
@@ -145,7 +151,7 @@ python tools/make_snd_wav.py 你的声音.wav --out 转换结果
 | `src/` | 卡上模块和固件钩子的源码 |
 | `tools/` | 音频转换工具 |
 | `PLAN.md` | 已完成的内容和未来计划 |
-| `docs/` | [连拍提速](docs/BURST_SPEED.md)、开发进度、[自定义 DISP 交接](docs/CUSTOM_DISP_HANDOFF.md)和[卡模块构建](docs/CARD_MODULE_BUILD.md) |
+| `docs/` | [胶片颗粒](docs/FILM_GRAIN.md)、[连拍提速](docs/BURST_SPEED.md)、开发进度、[自定义 DISP 交接](docs/CUSTOM_DISP_HANDOFF.md)和[卡模块构建](docs/CARD_MODULE_BUILD.md) |
 | `tests/card_module/` | 显示许可、设置兼容、刷新间隔和直方图栅格宿主测试 |
 
 卡模块可按[构建说明](docs/CARD_MODULE_BUILD.md)用固定 SDK 和自备 MAIN 重建；普通用户只需要 `patch.py` 或预编译插件。

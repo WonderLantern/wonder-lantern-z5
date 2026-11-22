@@ -16,6 +16,44 @@
 #include "z5/task.h"
 #include "custom_disp.h"
 
+#ifdef BULB_MENU
+/* "B门定时" in the photo shooting menu (burst_speed.inc / burst_speed_install.inc): the timed Bulb of A14/A15
+ * (computer-control switch + full 0x9207 executor sequence), time set in the menu instead of at build time. */
+#ifndef BULB_TIMER_MS
+#define BULB_TIMER_MS 0u
+#endif
+#define BULB_PCMODE
+#define BULB_FULLEXEC
+/* A18 (camera OK 2026-11-16): after "开始" the module task simulates a half press to leave the menu; the run
+ * starts BT_DELAY_MS after "开始" (A18 had 6 s, too long once the menu closes by itself). */
+#ifndef BT_STAY_MENU
+#define BT_CLOSE_TASK
+#define BT_HALF_PRESS
+#endif
+#ifndef BT_DELAY_MS
+#define BT_DELAY_MS 1500u
+#endif
+/* Its state lives on the heap: the SDK state block is full (0x20 + cm_t 0xAC0 + audio 0x5E0 = 0x1000), so cm_t
+ * must not grow. The pointer is kept in burst_viewall_off (unused since L56; only the A11 test reads it). */
+typedef struct {
+    u32 q[12];                      /* timed Bulb state, same layout as the 'TB12' record block */
+    u32 h, m, s, secs;              /* menu time; seconds of the armed run */
+    u32 stop, msg;                  /* end request; refusal on the start row (1 not Bulb, 2 zero time) */
+    u32 hdr, install;               /* page header; install result (1 or why not) */
+    u32 map0;                       /* start row's key map (heap): its OK destination is set per press */
+    u32 close_at;                   /* ms clock: close the menu then (after the key handling ended), 0 none */
+    u32 half_off;                   /* ms clock: release the simulated half press then, 0 none */
+    u32 pcl;                        /* PC_HIDE_CREATIVE install result (1 or why not) */
+    u32 pcl_n[3];                   /* calls of pcl_init / pcl_cb1 / pcl_cb4 */
+    u32 snap_at;                    /* A22: ms clock of the next RAM snapshot, 0 none */
+    u32 pk_hdr;                     /* BT_PICKER: header of the h:m:s picker view (copy of the date/time page) */
+    u32 im_n, im_runs;              /* PC_IMPORT: files imported by the last run; runs this power-up */
+    u32 im_hdr;                     /* PC_IMPORT: header of the "导入配方" page */
+    u32 im_log[1 + 4 * 9];          /* PC_IMPORT: 'PCIM', then per file {card id | slot << 16, data rc, store rc, busy} */
+} bt_t;
+#define BTP(c)        ((bt_t *)(c)->burst_viewall_off)
+#endif
+
 #define SEQ_BOOT      2u
 
 /* --- firmware, Z5 C1.50 -------------------------------------------------- */
@@ -483,7 +521,47 @@ IMG_FN static void zero_words(u32 *p, u32 words)
 #define DG_TE_OFF  (DG_SIZE - 0x1000u)  /* group 92: touch events, 256 x 16 bytes, count at 0xDF8 */
 #define DG_WL_OFF  (DG_SIZE - 0x3000u)  /* group 95: wide watch log, 512 x 16 bytes, count at 0xDF4 */
 #define DG_KR_OFF  (DG_WL_OFF - 0x2000u)  /* group 106: key/touch ring, 128 x 64 bytes, count at 0xDF0 */
+#ifdef DIAG_RAM_DUMP
+/* A22 (metering search): a RAM snapshot 4 s after "save test record" (on the shooting screen) at 0x10000-0x2FFFF:
+ * 64 KiB from 0xC18A0000 (capture parameters) and 64 KiB from 0xC2390000 (capture sequence); header 'RAMD' at
+ * 0x32800 (after the settings dump): [1] ms clock of the snapshot, [2] snapshot count, [3] shutter mode 0x020E, [4] ms clock of the save. */
+#define DG_RAM_OFF 0x10000u
+#ifndef DG_RAM_A
+#define DG_RAM_A   0xC18A0000u                 /* A22; A23: 0xC20E0000 (AESVC object 0xC20EA120) */
+#endif
+#ifndef DG_RAM_B
+#define DG_RAM_B   0xC2390000u                 /* A22; A23: 0xC1890000 (LV statistics tasks 0xC189Fxxx) */
+#endif
+#define DG_RAM_HDR 0x32800u
+#endif
+#ifdef DIAG_SETTINGS_DUMP
+#define DG_SET_OFF 0x30000u            /* A8: every setting's value, 2048 x u32 (+ 2048 x u8 size) */
+#define DG_SET_N   2048u
+#ifdef DIAG_RAM_DUMP
+#define DG_EV_CAP  ((DG_RAM_OFF - DG_EV_OFF) / DG_EV_SIZE)
+#else
+#define DG_EV_CAP  ((DG_SET_OFF - DG_EV_OFF) / DG_EV_SIZE)
+#endif
+#else
 #define DG_EV_CAP  ((DG_KR_OFF - DG_EV_OFF) / DG_EV_SIZE)
+#endif
+#ifdef JPEG_A42
+#if !defined(JPEG_LOG) || defined(JPEG_MARK) || defined(DIAG_SETTINGS_DUMP) || defined(DIAG_RAM_DUMP) || defined(VUI_DIAG_RAMDUMP)
+#error JPEG_A42 requires JPEG_LOG and its own diagnostic layout
+#endif
+#undef DG_EV_CAP
+#define DG_EV_CAP ((0x33000u - DG_EV_OFF) / DG_EV_SIZE)
+#endif
+#ifdef JPEG_A44
+#include "a44_strength.inc"
+#define A44_LOG(c) ((volatile u32 *)((c)->dg_buf + 0x33000u))
+#define A44_MODE 9u
+#define A44_LEVEL 11u
+#ifdef LIGHTROOM_GRAIN
+#define A47_LIGHTROOM 14u
+#define A47_CFG_BIT (1u << 13)
+#endif
+#endif
 #define DG_AFAREA  0xC1819D28u         /* AF_AREA task state */
 #define DG_LAYERS  0xC1D61388u         /* GUI layer enables, LCD (0xC1D61160 + 0x228) */
 
@@ -491,7 +569,11 @@ IMG_FN static void zero_words(u32 *p, u32 words)
 IMG_FN static void save_cfg(cm_t *c)
 {
     u32 f[16];
+#ifdef BULB_MENU
+    u32 data[4];
+#else
     u32 data[3];
+#endif
     u32 out = 0;
     c->edited = 1u;
     /* Camera test 2026-11-08: a MENU.DAT created here never reaches the card, while
@@ -505,8 +587,18 @@ IMG_FN static void save_cfg(cm_t *c)
     FW(close_fn, FW_CLOSE)(f);
     zero_words(f, 16);
     data[0] = CFG_MAGIC;
+#ifdef BULB_MENU
+    data[3] = BTP(c) ? 0xB7000000u | (BTP(c)->h << 16) | (BTP(c)->m << 8) | BTP(c)->s : 0u;   /* word 3: B门定时 */
+#endif
     data[2] = 0xD2150000u | (c->custom_flags & 15u) |
               (c->burst_mech ? 0u : BURST_CFG_MECH_OFF) | (c->burst_sil ? 0u : BURST_CFG_SIL_OFF);
+#ifdef JPEG_A44
+    if (c->dg_buf)
+        data[2] |= (A44_LOG(c)[A44_MODE] << 8) | (a44_strength(A44_LOG(c)[A44_LEVEL]) << 10);
+#ifdef LIGHTROOM_GRAIN
+    if (c->dg_buf && A44_LOG(c)[A47_LIGHTROOM]) data[2] |= A47_CFG_BIT;
+#endif
+#endif
     data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26) | (c->vui << 27) |
               ((c->focal_on ? 0u : 1u) << 28) |  /* group 104: bit 28 = focal display off */
               ((c->bat_on ? 0u : 1u) << 29) |    /* group 116: bit 29 = battery display off */
@@ -556,6 +648,63 @@ IMG_FN static void diag_write(cm_t *c)
         q[1] = c->burst_task_rc; q[2] = ok ? *(volatile u32 *)(p + 0x14u) : 0xFFFFFFFFu;
         q[3] = ok ? *(volatile u32 *)(p + 0x18u) : 0xFFFFFFFFu; q[4] = c->burst_tick; q[5] = sizeof(cm_t);
     }
+#ifdef TIME_TIMER_MS
+    {   /* A11: timed Time exposure state at 0xDC0: 'TTMR', shutter mode, capture state, timer word, limit ms */
+        u32 *q = b + 0xDC0u / 4u, p = *(const volatile u32 *)(0x115C286Cu + 66u * 16u + 8u);
+        q[0] = 0x524D5454u; q[1] = (p >= RAM_LO && p < RAM_HI) ? *(volatile u32 *)p : 0xFFu;
+        q[2] = *(volatile u8 *)0xC18A84E4u; q[3] = c->burst_viewall_off; q[4] = TIME_TIMER_MS;
+    }
+#endif
+#ifdef PC_TRACE
+    {   /* A32: the firmware's call counters (research/picture-control/z5_pctrace_fw.py) at 0xC2024A40, 0x80 bytes,
+         * copied to 0x32900 ('PCTR' = they were armed): entry k at +0x10 + 0x10 k = {count, r0, r1, caller}. */
+        const volatile u32 *s = (const volatile u32 *)0xC2024A40u;
+        u32 *q = b + 0x32900u / 4u;
+        for (u32 i = 0; i < 0x80u / 4u; i++) q[i] = s[i];
+    }
+#endif
+#if defined(PC_IMPORT) && defined(BULB_MENU)
+    if (BTP(c)) {   /* one-click import log ('PCIM' at 0x32A00, burst_speed.inc pi_ok), then install result and runs */
+        u32 *q = b + 0x32A00u / 4u;
+        for (u32 i = 0; i < 1u + 4u * 9u; i++) q[i] = BTP(c)->im_log[i];
+        q[40] = BTP(c)->install; q[41] = BTP(c)->im_runs; q[42] = BTP(c)->im_n;
+    }
+#endif
+#if defined(PC_HIDE_CREATIVE) && defined(BULB_MENU)
+    {   /* A28: Picture Control list state at save time, 'PCL1' at 0x32840 (after the RAMD header):
+         * [1] install result, [2..7] header 0xC1876D40 words 0..5, [8] descriptor +0x10 (callbacks),
+         * [9] callback word 0, [10..29] control ids of the first 20 rows of the current row table. */
+        u32 *q = b + 0x32840u / 4u;
+        const volatile u32 *h = (const volatile u32 *)0xC1876D40u;
+        q[0] = 0x314C4350u;
+        q[1] = BTP(c) ? BTP(c)->pcl : 0xFFFFFFFFu;
+        for (u32 i = 0; i < 6u; i++) q[2u + i] = h[i];
+        q[8] = *(const volatile u32 *)(0xC18339A8u + 0x10u);
+        q[9] = (q[8] >= 0x10000000u && q[8] < 0xC8700000u) ? *(const volatile u32 *)q[8] : 0u;
+        u32 rows = h[3], n = h[5] & 0xFFFFu;
+        for (u32 i = 0; i < 17u; i++)
+            q[10u + i] = (rows >= 0x10000000u && rows < 0xC8700000u && i < n) ? *(const volatile u16 *)(rows + i * 28u + 24u) : 0u;
+        for (u32 i = 0; i < 3u; i++) q[27u + i] = BTP(c) ? BTP(c)->pcl_n[i] : 0u;   /* A30: callback counts */
+    }
+#endif
+#ifdef DIAG_SETTINGS_DUMP
+    {   /* A8 (M900 search): the value of every entry of the setting table 0x115C286C (16-byte entries: type, size,
+         * value pointer, default pointer), read the way the getter 0x100B6520 reads it. Index i -> word at
+         * DG_SET_OFF + 4 i, size byte at DG_SET_OFF + 0x2000 + i (0 = pointer outside RAM, not read).
+         * Header word at 0xDB8: 'SETD'. Read-only on firmware RAM. */
+        u32 *v = b + DG_SET_OFF / 4u;
+        u8 *sz = (u8 *)b + DG_SET_OFF + 0x2000u;
+        for (u32 i = 0u; i < DG_SET_N; i++) {
+            const volatile u32 *e = (const volatile u32 *)(0x115C286Cu + i * 16u);
+            u32 n = e[1], a = e[2], x = 0u;
+            if (a >= RAM_LO && a < RAM_HI && (n == 1u || n == 2u || n == 4u)) {
+                x = n == 1u ? *(const volatile u8 *)a : n == 2u ? *(const volatile u16 *)a : *(const volatile u32 *)a;
+            } else n = 0u;
+            v[i] = x; sz[i] = (u8)n;
+        }
+        b[0xDB8u / 4u] = 0x44544553u;          /* 'SETD' */
+    }
+#endif
     {   /* group 106: firmware words at the two touch entries, hook calls per kind, header 0x40-0x8F */
         u32 *q = b + 0x40u / 4u;
         q[0] = 0x4B4F4F48u;                    /* 'HOOK' */
@@ -747,18 +896,31 @@ IMG_FN static u32 load_clip(cm_t *c)
 IMG_FN static u32 cfg_load(cm_t *c)
 {
     u32 f[16];
+#ifdef BULB_MENU
+    u32 data[4];
+    data[3] = 0;
+    if (BTP(c)) { BTP(c)->h = 0u; BTP(c)->m = 1u; BTP(c)->s = 0u; }
+#else
     u32 data[3];
+#endif
     u32 state = 1u;
     zero_words(f, 16);
     data[0] = 0; data[1] = 0; data[2] = 0;
     c->custom_flags = 15u;
     c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u; c->vui = 0u; c->focal_on = 1u;
     c->bat_on = 1u; c->touch_on = 1u;
+#ifdef BURST_BOOT_OFF
+    c->burst_mech = 0u; c->burst_sil = 0u;     /* A50: speed-up off at every power-on */
+#else
     c->burst_mech = 1u; c->burst_sil = 1u;
+#endif
     FW(bind_fn, FW_BIND)(f, c->cfg_path);
     if ((u32)FW(open_fn, FW_OPEN)(f, 0, 0) == FS_OPEN_OK) {
         FW(readat_fn, FW_READAT)(f, data, 0, 8u);
         FW(readat_fn, FW_READAT)(f, data + 2, 8u, 4u);
+#ifdef BULB_MENU
+        FW(readat_fn, FW_READAT)(f, data + 3, 12u, 4u);   /* absent in older 12-byte files: stays 0 */
+#endif
         FW(close_fn, FW_CLOSE)(f);
         state = data[0] == CFG_MAGIC ? 0u : 2u;
     }
@@ -766,8 +928,20 @@ IMG_FN static u32 cfg_load(cm_t *c)
     if (!state) {
         if ((data[2] & 0xFFFF0000u) == 0xD2150000u) {
             c->custom_flags = data[2] & 15u;
+#ifdef JPEG_A44
+            u32 mode = (data[2] >> 8) & 3u;
+            if (c->dg_buf) {
+                A44_LOG(c)[A44_MODE] = mode < 3u ? mode : 0u;
+                A44_LOG(c)[A44_LEVEL] = a44_strength((data[2] >> 10) & 7u);
+#ifdef LIGHTROOM_GRAIN
+                A44_LOG(c)[A47_LIGHTROOM] = (data[2] & A47_CFG_BIT) != 0u;
+#endif
+            }
+#endif
+#ifndef BURST_BOOT_OFF
             c->burst_mech = !(data[2] & BURST_CFG_MECH_OFF);   /* burst speed-up switches */
             c->burst_sil = !(data[2] & BURST_CFG_SIL_OFF);
+#endif
         }
         u32 on = data[1] & 0xFFu, type = (data[1] >> 8) & 0xFFu, vol = (data[1] >> 16) & 0xFFu;
         if (on <= 1u) c->on = on;
@@ -779,6 +953,12 @@ IMG_FN static u32 cfg_load(cm_t *c)
         c->focal_on = !((data[1] >> 28) & 1u);
         c->bat_on = !((data[1] >> 29) & 1u);   /* group 116 */
         c->touch_on = !((data[1] >> 30) & 1u); /* group 119 */
+#ifdef BULB_MENU
+        if (BTP(c) && (data[3] >> 24) == 0xB7u && ((data[3] >> 16) & 0xFFu) <= 23u && ((data[3] >> 8) & 0xFFu) <= 59u &&
+            (data[3] & 0xFFu) <= 59u) {
+            BTP(c)->h = (data[3] >> 16) & 0xFFu; BTP(c)->m = (data[3] >> 8) & 0xFFu; BTP(c)->s = data[3] & 0xFFu;
+        }
+#endif
     }
     return state;
 }
@@ -1263,14 +1443,38 @@ IMG_FN static void diag_save(cm_t *c)
     c->dg_ix = c->dg_res ? 0xFEu : 0x80u;
 }
 
+#if defined(BULB_TIMER_MS) && !defined(BULB_MENU)
+IMG_FN static void bulb_arm(cm_t *c);          /* A12, burst_speed.inc */
+#endif
+#ifdef DIAG_RAM_DUMP
+IMG_FN static void dg_snap(cm_t *c);           /* A22, burst_speed.inc */
+#endif
 IMG_FN static u32 save_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
     if (!c) return 0;
+#if defined(DIAG_RAM_DUMP) && defined(DG_SNAP_NOW)
+    if (c->dg_buf) dg_snap(c);                 /* emulator test: snapshot at once, in this record */
+#endif
     diag_save(c);
+#if defined(BULB_TIMER_MS) && !defined(BULB_MENU)
+    bulb_arm(c);                               /* A12: in Bulb, arm the timed remote Bulb */
+#endif
+#if defined(DIAG_RAM_DUMP) && defined(BULB_MENU)
+    if (BTP(c) && c->dg_buf) {                 /* A22: snapshot 6 s later, written with the next save */
+        BTP(c)->snap_at = (*(volatile u32 *)CM_MS_CLOCK + 6000u) | 1u;
+        ((volatile u32 *)(c->dg_buf + DG_RAM_HDR))[4] = *(volatile u32 *)CM_MS_CLOCK;
+    }
+#endif
     save_label(c);
+#if defined(JPEG_A44) && defined(SETUP_SAVE_REOPEN)
+    FW(page_fn, OPEN_PAGE)(2u, 0x1CBu); /* Rebuild the cached rows of the stock SETUP page. */
+#elif defined(JPEG_A44)
+    FW(refresh_fn, REFRESH)(REFRESH_ARG, 3u, 7u);
+#else
     hub_open(c);
+#endif
     return 0;
 }
 #endif
@@ -1397,6 +1601,9 @@ IMG_FN static u32 sound_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 }
 
 /* Group 116: every hub label, and the hub rows' label kind for the current language. */
+#ifdef JPEG_A44
+#include "a44_menu.inc"
+#endif
 IMG_FN static void hub_labels(cm_t *c)
 {
     u32 k, kind = c->hans ? F_UTF16 : F_ASCII;
@@ -1411,6 +1618,9 @@ IMG_FN static void hub_labels(cm_t *c)
     if (c->bat_hdr) bat_label(c);
     if (c->custom_hdr) custom_label(c);
     if (c->touch_hdr) touch_label(c);          /* group 119 */
+#ifdef JPEG_A44
+    a44_label(c);
+#endif
     if (c->burst_row) burst_label(c);          /* burst speed-up setup row */
 #ifdef VUI_DIAG_FOCUS
     save_label(c);
@@ -1475,7 +1685,29 @@ static void init_strings(cm_t *c)
     copy_str(c->dg_path, sizeof(c->dg_path), "A:\\SHUTTER\\DIAG.BIN");   /* group 116: diag_save names DIAGnn.BIN */
     if (!c->dg_buf) {                          /* 64 KiB ring for the draw-call recorder */
         u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(DG_SIZE, 0);
-        if (b) { u32 i; for (i = 0; i < DG_SIZE / 4u; i++) b[i] = 0u; c->dg_buf = (u32)b; }
+        if (b) {
+            for (u32 i = 0; i < DG_SIZE / 4u; ++i) b[i] = 0u;
+#if defined(JPEG_A44)
+            u8 *data = FW(alloc_fn, FW_ALLOC)(2u * A44_DATA_BYTES, 0);
+            u8 *work = data ? FW(alloc_fn, FW_ALLOC)(A44_WORK_BYTES, 0) : 0;
+            if (work) {
+                a44_prepare(data, work, 1u);
+                a44_prepare(data + A44_DATA_BYTES, work, 2u);
+                FW(free_fn, FW_FREE)(work);
+                b[0x33018u / 4u] = (u32)data;
+                b[0x3301Cu / 4u] = (u32)(data + A44_DATA_BYTES);
+            } else if (data) FW(free_fn, FW_FREE)(data);
+#elif defined(JPEG_A43)
+            u8 *data = FW(alloc_fn, FW_ALLOC)(A43_DATA_BYTES, 0);
+            short *tmp = data ? FW(alloc_fn, FW_ALLOC)(A43_TEMP_BYTES, 0) : 0;
+            if (tmp) {
+                a43_prepare(data, tmp);
+                FW(free_fn, FW_FREE)(tmp);
+                b[0x33018u / 4u] = (u32)data;
+            } else if (data) FW(free_fn, FW_FREE)(data);
+#endif
+            c->dg_buf = (u32)b;
+        }
     }
     if (!c->dg_wbuf) {                         /* group 95: wide watch copies and counts */
         u32 *b = (u32 *)FW(alloc_fn, FW_ALLOC)(0xE00u, 0);   /* group 101: 680 words + 680 counts */
@@ -1699,6 +1931,9 @@ static u32 install_touch_page(cm_t *c, u32 *title, u32 first_map)
 
 #include "custom_disp_install.inc"
 #include "burst_speed_install.inc"
+#ifdef JPEG_A44
+#include "a44_menu_install.inc"
+#endif
 
 /* Group 116: the hub view: one row per feature, each opening its view. Rows shaped like the owned page's. */
 static u32 install_hub(cm_t *c, u32 *title, u32 first_map)
@@ -1713,7 +1948,11 @@ static u32 install_hub(cm_t *c, u32 *title, u32 first_map)
     if (c->bat_hdr) { slots[n] = SLOT_B_ENTRY; ids[n] = ID_B_ENTRY; fns[n++] = img_addr(c, bat_entry_ok); }
     if (c->custom_hdr) { slots[n] = 253u; ids[n] = 0x2FD0u; fns[n++] = img_addr(c, custom_entry_ok); }
     /* Feature rows go above this line: the save row is always the last one. */
-#ifdef VUI_DIAG_FOCUS
+#if defined(JPEG_A44)
+    if (c->dg_buf && A44_LOG(c)[8]) {
+        slots[n] = A44_ENTRY_SLOT; ids[n] = A44_ENTRY_ID; fns[n++] = img_addr(c, a44_entry);
+    }
+#elif defined(VUI_DIAG_FOCUS)
     slots[n] = SLOT_SAVE; ids[n] = ID_SAVE; fns[n++] = img_addr(c, save_ok);
 #endif
     if (n < 3u) return 70u;                    /* the layout list starts at 3 rows */
@@ -1759,6 +1998,9 @@ static u32 install_menu(cm_t *c)
     /* SETUP: 41 stock rows + row 42 (copy of row 41 with our slot, flags, id). */
     u32 vui_ok = c->fx && *(volatile u16 *)VUI_SITE != 0xE92Du;
     u32 extra = 2u;                            /* group 116: "扩展功能" (features on its hub); "连拍提速" */
+#ifdef JPEG_A44
+    extra += 1u; /* Save diagnostics follows the other two extension rows. */
+#endif
     u32 *rows = (u32 *)z5_alloc((STOCK_ROWS + extra) * ROW_SIZE, 0);
     u32 *disp = (u32 *)z5_alloc((STOCK_ROWS + extra) * 4u, 0);
     if (!rows || !disp) return 13u;
@@ -1781,6 +2023,18 @@ static u32 install_menu(cm_t *c)
         if (!disp[STOCK_ROWS + 1u]) return 27u;
         c->burst_row = (u32)b;
     }
+#ifdef JPEG_A44
+    {
+        u32 *save = entry + 2u * ROW_WORDS;
+        copy_words(save, entry, ROW_WORDS);
+        save[0] = SLOT_SAVE;
+        save[6] = ID_SAVE;
+        disp[STOCK_ROWS + 2u] =
+            build_map(((const u32 *)SETUP_DISP)[STOCK_ROWS - 1u], img_addr(c, save_ok), STAY);
+        if (!disp[STOCK_ROWS + 2u]) return 28u;
+        save_label(c);
+    }
+#endif
     if (0) {                                   /* group 116: these rows are on the hub now */
         u32 *z = entry + ROW_WORDS;
         copy_words(z, entry, ROW_WORDS);
@@ -1853,6 +2107,22 @@ static u32 install_menu(cm_t *c)
     if (vui_ok && install_touch_page(c, title, first_map) != 1u) c->touch_hdr = 0u;   /* group 119 */
     if (install_custom_page(c, title, first_map) != 1u) return 90u;
     if (install_burst_page(c, title, first_map) != 1u) c->burst_hdr = 0u;   /* burst speed-up switches */
+#ifdef BULB_MENU
+    if (BTP(c)) BTP(c)->install = install_bt(c, title, first_map);   /* B门定时 row in the photo shooting menu */
+#endif
+#if defined(PC_HIDE_CREATIVE) || defined(PC_TEST_OPEN)
+    {
+        u32 r = install_pc_hide(c);            /* 设定优化校准 without the 20 creative ones */
+#ifdef BULB_MENU
+        if (BTP(c)) BTP(c)->pcl = r;
+#else
+        (void)r;
+#endif
+    }
+#endif
+#ifdef JPEG_A44
+    a44_install_menu(c, title, first_map);
+#endif
     if (install_hub(c, title, first_map) != 1u) c->hub_hdr = 0u;                   /* group 116 */
 
     /* Labels before anything can show them. */
@@ -1867,6 +2137,14 @@ static u32 install_menu(cm_t *c)
         copy_words(cb, (const u32 *)PAGE_CB, PAGE_CB_WORDS);
         if (cb[0] != (PAGE_CB_INIT | 1u)) return 23u;
         cb[0] = img_addr(c, title_cb);
+#ifdef BT_PICKER
+        if (BTP(c) && BTP(c)->pk_hdr) {        /* the picker view shares this page: callbacks pick per view */
+            cb[0] = img_addr(c, pk_cb0);
+            cb[1] = img_addr(c, pk_cb1);
+            cb[3] = img_addr(c, pk_cb3);
+            cb[4] = img_addr(c, pk_cb4);
+        }
+#endif
         page[4] = (u32)cb;
     }
     page[10] = (u32)ohdr;
@@ -1954,12 +2232,26 @@ static void first_run(cm_t *c)
 {
     u32 cur = *(volatile u32 *)SLOT_C;
     init_strings(c);
+#ifdef BULB_MENU
+    {
+        u32 *b = (u32 *)z5_alloc(sizeof(bt_t), 0);
+        if (b) for (u32 i = 0; i < sizeof(bt_t) / 4u; i++) b[i] = 0u;
+        c->burst_viewall_off = (u32)b;
+    }
+#endif
     for (u32 i = 0; i < CFG_TRIES && cfg_load(c) == 1u; i++) { }
     c->boot_hook = cur >= CODE_LO && cur < CODE_HI;
     c->lang = FW(read_fn, SETTING_READ)(LANG_KEY);
     c->phase = PH_DUAL;
     enable_dual_display(c);
     c->hans = CM_HANS;
+#ifdef PC_TRACE
+    {   /* A32: arm the firmware's call counters (text slots 290-299, unused) */
+        volatile u32 *s = (volatile u32 *)0xC2024A40u;
+        for (u32 i = 1u; i < 0x80u / 4u; i++) s[i] = 0u;
+        s[0] = 0x52544350u;                    /* 'PCTR' */
+    }
+#endif
     c->phase = PH_IMAGE;
     c->image = (u32)z5_img_copy(release_cb, release_cb_end) & ~1u;
     if (!c->image) { c->install = 17u; return; }
