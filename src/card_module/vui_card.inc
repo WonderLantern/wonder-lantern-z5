@@ -1735,6 +1735,9 @@ IMG_FN static void jpeg_log(cm_t *c, u32 *r)
             for (i = 0; i < 8u; i++) q[4u + i] = ((const volatile u32 *)d)[i];
 #if defined(JPEG_A42)
             u32 seed = q[0] ^ d ^ (h[1] * 0x9E3779B1u);
+#ifdef JPEG_A50
+            u32 kern = 2u;   /* grain kernel; previews use their own inside jpeg_a42 */
+#endif
 #if defined(JPEG_A44)
             if (r[7] == A42_S1
 #ifdef LIGHTROOM_GRAIN
@@ -1743,13 +1746,12 @@ IMG_FN static void jpeg_log(cm_t *c, u32 *r)
             ) {
                 h[10] = A44_LOG(c)[A44_MODE];
                 h[12] = a44_strength(A44_LOG(c)[A44_LEVEL]);
-#ifdef JPEG_A50
-#ifdef A51_KERNEL2
-                h[13] = 2u;
-#else
-                h[13] = h[15] <= 2u ? h[15] : 0u;
-                h[15] = h[13] == 2u ? 0u : h[13] + 1u;
-#endif
+#if defined(JPEG_A50) && !defined(A51_KERNEL2)
+                /* A50 rotation: header word 15 = next kernel. The JPGL header has no other free word:
+                 * word 13 is the FILM strength page header (a44_menu_install.inc) - A50-A52 kept the kernel
+                 * there and the strength page opened a bad page after the first shot. */
+                kern = h[15] <= 2u ? h[15] : 0u;
+                h[15] = kern == 2u ? 0u : kern + 1u;
 #endif
             }
             u32 mode = h[10];
@@ -1759,7 +1761,7 @@ IMG_FN static void jpeg_log(cm_t *c, u32 *r)
 #endif
             if (mode == 1u || mode == 2u)
 #ifdef JPEG_A50
-                jpeg_a42(q, b, r[7], seed, (const u8 *)h[5u + mode], level, h[13]);
+                jpeg_a42(q, b, r[7], seed, (const u8 *)h[5u + mode], level, kern);
 #else
                 jpeg_a42(q, b, r[7], seed, (const u8 *)h[5u + mode], level);
 #endif
@@ -1769,7 +1771,7 @@ IMG_FN static void jpeg_log(cm_t *c, u32 *r)
             }
             q[23] = (q[23] & 255u) | (mode << 8) | (level << 16);
 #ifdef JPEG_A50
-            q[23] |= h[13] << 24;
+            q[23] |= kern << 24;
 #endif
 #ifdef LIGHTROOM_GRAIN
             if (q[16] == A42_DONE &&
