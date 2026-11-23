@@ -725,6 +725,25 @@ IMG_FN static void diag_write(cm_t *c)
             if ((u32)FW(open_fn, FW_OPEN)(f, FS_CREATE, 0) != FS_OPEN_OK) { c->dg_res = 2u; return; }
         }
     }
+#ifdef AF_RAMDUMP
+    {   /* A57 (2026-11-23, readout only): with the A56 firmware the 4:3 photos (stock 1:1 area 8) keep the 1:1 limits
+           for the focus point. Three RAM blocks are copied into the event ring part of the record (0x4000-0x30000;
+           the JPGL / A44 block at 0x33000 is not touched), only after the file is open, so the user can compare
+           FX and 4:3 with the focus point at the left / right end. Header 'AFRD' at 0x4000: {magic, ms, n, then
+           (source, length, record offset) x n}. Reading does not dirty the source lines; the buffer is cleaned. */
+        u32 *h = b + 0x4000u / 4u, off = 0x4100u, a, k, s, n;
+        h[0] = 0x44524641u; h[1] = *(volatile u32 *)CM_MS_CLOCK; h[2] = 3u;
+        for (k = 0; k < 3u; k++) {   /* no constant table: the module runs from a copied image */
+            s = k == 0u ? 0xC1810000u : k == 1u ? 0xC1880000u : 0xC18C6000u;
+            n = k == 0u ? 0x18000u : k == 1u ? 0x10000u : 0x4000u;
+            h[3u + 3u * k] = s; h[4u + 3u * k] = n; h[5u + 3u * k] = off;
+            for (i = 0; i < n / 4u; i++) b[off / 4u + i] = ((const volatile u32 *)s)[i];
+            off += n;
+        }
+        for (a = (u32)b & ~31u; a < (u32)b + DG_SIZE; a += 32u) __asm__ volatile ("mcr p15, 0, %0, c7, c10, 1" :: "r"(a) : "memory");
+        __asm__ volatile ("dsb sy" ::: "memory");
+    }
+#endif
 #ifdef VUI_DIAG_RAMDUMP
     {   /* group 104/105 probe: two RAM blocks for the focus-distance search, over the draw-call ring; copied only
            after the file is open (camera: R2 when copied before), then the cache is left as it was found */
