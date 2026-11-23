@@ -92,6 +92,7 @@ static u32 install_bt(cm_t *c, u32 *title, u32 first_map)
     if (!pdisp[PHOTO_STOCK]) return 124u;
     BTP(c)->hdr = (u32)hdr;
     BTP(c)->map0 = disp[0];
+    BTP(c)->entry_row = (u32)e;
     bt_labels(c);
     ph[3] = (u32)prow;
     ph[4] = (u32)pdisp;

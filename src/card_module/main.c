@@ -49,6 +49,7 @@ typedef struct {
     u32 im_n, im_runs;              /* PC_IMPORT: files imported by the last run; runs this power-up */
     u32 im_hdr;                     /* PC_IMPORT: header of the "导入配方" page */
     u32 im_log[1 + 4 * 9];          /* PC_IMPORT: 'PCIM', then per file {card id | slot << 16, data rc, store rc, busy} */
+    u32 entry_row;                  /* A54: the photo-menu row, for its text kind */
 } bt_t;
 #define BTP(c)        ((bt_t *)(c)->burst_viewall_off)
 #endif
@@ -66,11 +67,12 @@ typedef struct {
 #define RAM_HI        0xC8700000u
 
 #define SETTING_READ  0x10456098u      /* u32 read(key)                          */
-/* 2026-11-16: 0x1400 turned out to be image quality, not the language (JPG reads 3 = "English").
- * Until the real language setting is known the module's own rows are always Simplified Chinese. */
-#define CM_HANS       1u
-#define LANG_ENGLISH  3u               /* read in the emulator with English UI; every
-                                         * other language gets Simplified Chinese */
+/* Menu language follows the camera UI (user 2026-11-23): Simplified Chinese when the UI resource is Simplified
+ * (8) or Traditional (9) Chinese, English otherwise. The resource index is what 0x10525C88 returns (RAM
+ * 0xC180FFE4 + 0x0C, set at boot from setting 0x1200 through the table 0x10746D00 and by the language page):
+ * setting 26 -> 8 Simplified, 27 -> 9 Traditional, 4 -> 1 English. 0x1400 is image quality, not language. */
+#define UI_LANG_RESOURCE (*(volatile const u32 *)(0xC180FFE4u + 0x0Cu))
+#define CM_HANS       (UI_LANG_RESOURCE == 8u || UI_LANG_RESOURCE == 9u)
 #define ASCII_SET     0x10447BAAu      /* (text, slot, style)                    */
 #define UTF16_SET     0x10447C06u
 #define HANS_STYLE    114u
@@ -488,7 +490,7 @@ IMG_FN static void set_label(cm_t *c, u32 row)
     }
 }
 
-/* Keep all extension menu labels in Simplified Chinese. */
+/* Extension menu labels in the camera's language (see CM_HANS). */
 IMG_FN static void refresh_labels(cm_t *c)
 {
     u32 hans = CM_HANS;
@@ -1302,6 +1304,8 @@ IMG_FN static u32 focal_off_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 /* Group 116: labels built from character constants (string literals are not in the copied image). */
 IMG_FN static void hz_put(u16 *b, u32 *n, u32 ch) { b[(*n)++] = (u16)ch; }
 IMG_FN static void en_put(char *b, u32 *n, u32 ch) { b[(*n)++] = (char)ch; }
+/* Up to four ASCII characters packed little-endian in an immediate (no .rodata in hook-image code). */
+IMG_FN static void en_w(char *b, u32 *n, u32 w) { while (w & 255u) { b[(*n)++] = (char)w; w >>= 8; } }
 
 IMG_FN static void bat_label(cm_t *c)          /* "电量显示：开/关" */
 {

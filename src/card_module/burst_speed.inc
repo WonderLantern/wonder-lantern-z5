@@ -321,9 +321,78 @@ IMG_FN static void bt_set(u16 *b, u32 n, u32 slot)
     *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
 }
 
+/* English (A54): same rows in ASCII; packed immediates, no .rodata (hook image). */
+IMG_FN static void bt_two_en(char *b, u32 *n, u32 v)
+{
+    u32 t = 0u;
+    while (v >= 10u) { v -= 10u; t++; }
+    en_put(b, n, '0' + t); en_put(b, n, '0' + v);
+}
+
+IMG_FN static void bt_time_en(cm_t *c, char *b, u32 *n)
+{
+    if (BTP(c)->h >= 10u) bt_two_en(b, n, BTP(c)->h); else en_put(b, n, '0' + BTP(c)->h);
+    en_put(b, n, ':'); bt_two_en(b, n, BTP(c)->m); en_put(b, n, ':'); bt_two_en(b, n, BTP(c)->s);
+}
+
+IMG_FN static void bt_set_en(char *b, u32 n, u32 slot)
+{
+    b[n] = 0;
+    FW(set_fn, ASCII_SET)(b, slot, 0u);
+}
+
+IMG_FN static void bt_kind(cm_t *c)
+{
+    u32 kind = c->hans ? F_UTF16 : F_ASCII;
+    if (BTP(c)->entry_row) {
+        volatile u32 *r = (volatile u32 *)BTP(c)->entry_row;
+        r[4] = (r[4] & ~(F_ASCII | F_UTF16)) | kind;
+    }
+    if (BTP(c)->hdr) {
+        const volatile u32 *h = (const volatile u32 *)BTP(c)->hdr;
+        u32 *rows = (u32 *)h[3], count = h[5] & 0xFFFFu;
+        for (u32 k = 0; rows && k < count; k++) {
+            volatile u32 *r = (volatile u32 *)(rows + k * ROW_WORDS);
+            r[4] = (r[4] & ~(F_ASCII | F_UTF16)) | kind;
+        }
+    }
+}
+
+IMG_FN static void bt_labels_en(cm_t *c)
+{
+    char b[40];
+    u32 n = 0, ph = BTP(c)->q[1];
+    en_w(b, &n, 0x656D6954u); en_w(b, &n, 0x75422064u); en_w(b, &n, 0x203A626Cu); bt_time_en(c, b, &n);
+    bt_set_en(b, n, BT_SLOT_ENTRY);                                   /* "Timed Bulb: h:mm:ss" */
+    n = 0;
+    if (ph == 1u) {                                                    /* "Waiting (OK cancels)" */
+        en_w(b, &n, 0x74696157u); en_w(b, &n, 0x20676E69u); en_w(b, &n, 0x204B4F28u);
+        en_w(b, &n, 0x636E6163u); en_w(b, &n, 0x29736C65u);
+    } else if (ph == 2u) {                                             /* "Exposing (OK ends)" */
+        en_w(b, &n, 0x6F707845u); en_w(b, &n, 0x676E6973u); en_w(b, &n, 0x4B4F2820u);
+        en_w(b, &n, 0x646E6520u); en_w(b, &n, 0x00002973u);
+    } else if (BTP(c)->msg == 1u) {                                    /* "Set Bulb mode first" */
+        en_w(b, &n, 0x20746553u); en_w(b, &n, 0x626C7542u); en_w(b, &n, 0x646F6D20u);
+        en_w(b, &n, 0x69662065u); en_w(b, &n, 0x00747372u);
+    } else if (BTP(c)->msg == 2u) {                                    /* "Set a time first" */
+        en_w(b, &n, 0x20746553u); en_w(b, &n, 0x69742061u); en_w(b, &n, 0x6620656Du); en_w(b, &n, 0x74737269u);
+    } else {                                                           /* "Start: h:mm:ss" */
+        en_w(b, &n, 0x72617453u); en_w(b, &n, 0x00203A74u); bt_time_en(c, b, &n);
+    }
+    bt_set_en(b, n, BT_SLOT_ROW);
+    n = 0; en_w(b, &n, 0x72756F48u); en_w(b, &n, 0x00203A73u); en_put(b, &n, '0' + BTP(c)->h);
+    bt_set_en(b, n, BT_SLOT_ROW + 1u);                                 /* "Hours: h" */
+    n = 0; en_w(b, &n, 0x756E694Du); en_w(b, &n, 0x3A736574u); en_w(b, &n, 0x00000020u); bt_two_en(b, &n, BTP(c)->m);
+    bt_set_en(b, n, BT_SLOT_ROW + 2u);                                 /* "Minutes: mm" */
+    n = 0; en_w(b, &n, 0x6F636553u); en_w(b, &n, 0x3A73646Eu); en_w(b, &n, 0x00000020u); bt_two_en(b, &n, BTP(c)->s);
+    bt_set_en(b, n, BT_SLOT_ROW + 3u);                                 /* "Seconds: ss" */
+}
 
 IMG_FN static void bt_labels(cm_t *c)
 {
+    c->hans = CM_HANS;                         /* the photo menu does not pass through refresh_labels */
+    bt_kind(c);
+    if (!c->hans) { bt_labels_en(c); return; }
     u16 b[24];
     u32 n = 0, ph = BTP(c)->q[1];
     bt_name(b, &n); hz_put(b, &n, 0xFF1Au); bt_time(c, b, &n);
@@ -359,9 +428,16 @@ IMG_FN static void bt_show(cm_t *c, u32 refresh)
 {
     u16 b[8];
     u32 n = 0;
-    bt_labels(c);
-    bt_name(b, &n);
-    bt_set(b, n, SLOT_TITLE_V);
+    bt_labels(c);                              /* also takes the camera language into c->hans */
+    if (c->title) ((volatile u32 *)c->title)[1] = c->hans ? 3u : 2u;   /* shared title widget's text kind */
+    if (c->hans) {
+        bt_name(b, &n);
+        bt_set(b, n, SLOT_TITLE_V);
+    } else {
+        char e[12];
+        en_w(e, &n, 0x656D6954u); en_w(e, &n, 0x75422064u); en_w(e, &n, 0x0000626Cu);   /* "Timed Bulb" */
+        bt_set_en(e, n, SLOT_TITLE_V);
+    }
     c->title_slot = SLOT_TITLE_V;
     (void)refresh;
     ((volatile u32 *)PAGE0)[10] = BTP(c)->hdr;
