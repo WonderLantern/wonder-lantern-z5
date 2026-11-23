@@ -19,14 +19,22 @@
 
 #include "font_glyphs.inc"   /* FX_COUNT, fx_cp[], fx_off[], fx_rec[], FX_REC_BYTES */
 
-static u32 fx_rd16(const u8 *p) { return p[0] | (u32)p[1] << 8; }
-static u32 fx_rd32(const u8 *p) { return p[0] | (u32)p[1] << 8 | (u32)p[2] << 16 | (u32)p[3] << 24; }
-static void fx_wr16(u8 *p, u32 v) { p[0] = (u8)v; p[1] = (u8)(v >> 8); }
-static void fx_wr32(u8 *p, u32 v) { p[0] = (u8)v; p[1] = (u8)(v >> 8); p[2] = (u8)(v >> 16); p[3] = (u8)(v >> 24); }
-static void fx_copy(u8 *d, const u8 *s, u32 n) { while (n--) *d++ = *s++; }
+/* A55: the helpers go into the copied image too (fx_install calls them; once not inlined, a plain static landed
+ * outside the image and the build's retained-branch check refused it). */
+#ifdef FX_HOST_TEST
+#define FX_FN static
+#else
+#define FX_FN IMG_FN static
+#endif
+
+FX_FN u32 fx_rd16(const u8 *p) { return p[0] | (u32)p[1] << 8; }
+FX_FN u32 fx_rd32(const u8 *p) { return p[0] | (u32)p[1] << 8 | (u32)p[2] << 16 | (u32)p[3] << 24; }
+FX_FN void fx_wr16(u8 *p, u32 v) { p[0] = (u8)v; p[1] = (u8)(v >> 8); }
+FX_FN void fx_wr32(u8 *p, u32 v) { p[0] = (u8)v; p[1] = (u8)(v >> 8); p[2] = (u8)(v >> 16); p[3] = (u8)(v >> 24); }
+FX_FN void fx_copy(u8 *d, const u8 *s, u32 n) { while (n--) *d++ = *s++; }
 
 /* Size of the extended font, or 0 if `blob` is not the expected mapped hif font. */
-static u32 fx_size(const u8 *blob, u32 size, u32 n, u32 rec_bytes)
+FX_FN u32 fx_size(const u8 *blob, u32 size, u32 n, u32 rec_bytes)
 {
     if (size < 0x80u || blob[0] != 'h' || blob[1] != 'i' || blob[2] != 'f' || blob[3] != 1u || blob[6] != 6u)
         return 0u;
@@ -50,7 +58,7 @@ static u32 fx_size(const u8 *blob, u32 size, u32 n, u32 rec_bytes)
 }
 
 /* Build the extended font into `out` (fx_size bytes). The new code points must be sorted and absent. */
-static void fx_build(const u8 *blob, u32 size, u8 *out, const u16 *cp, const u16 *off, const u8 *rec,
+FX_FN void fx_build(const u8 *blob, u32 size, u8 *out, const u16 *cp, const u16 *off, const u8 *rec,
                      u32 n, u32 rec_bytes)
 {
     u32 index = fx_rd32(blob + 0x2C), data = fx_rd32(blob + 0x30), features = fx_rd32(blob + 0x3C);

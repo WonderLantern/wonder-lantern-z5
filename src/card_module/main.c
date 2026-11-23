@@ -50,6 +50,9 @@ typedef struct {
     u32 im_hdr;                     /* PC_IMPORT: header of the "导入配方" page */
     u32 im_log[1 + 4 * 9];          /* PC_IMPORT: 'PCIM', then per file {card id | slot << 16, data rc, store rc, busy} */
     u32 entry_row;                  /* A54: the photo-menu row, for its text kind */
+    u32 cnt_i, gap_i;               /* A55: series steps (MENU.DAT word 1 bits 11-15 / 19-23), see bt_count / bt_gap */
+    u32 total, done;                /* A55: shots of the running series; shots finished */
+    u32 wait_from, ready;           /* A55: end of the last shot (ms clock); consecutive ready passes */
 } bt_t;
 #define BTP(c)        ((bt_t *)(c)->burst_viewall_off)
 #endif
@@ -202,6 +205,10 @@ typedef struct {
 #define R_RELOAD      3u
 #define R_ENTRY       4u
 #define R_TITLE       5u                /* page title (experiment)               */
+#define R_MECH        6u                /* A55: page row "机械快门：开/关" (text built from immediates) */
+#define SND_ROWS      5u                /* A55: page rows electronic, mechanical, type, volume, reload */
+#define SLOT_SND_MECH 264u              /* A55: free slot from the reserved 262..265 */
+#define ID_SND_MECH   0x2FE2u
 
 #define WAV_CAP       (240u * 1024u)   /* 1.28 s of 48 kHz stereo                */
 #define WAV_MIN       2000u
@@ -260,7 +267,7 @@ typedef struct {
     u32 cfg_state;          /* MENU.DAT: 0 valid, 1 open, 2 format, 3 seek/read failure */
     u32 boot_hook;          /* release slot held a callback at the first run */
     u32 edited;             /* the user changed a value this session         */
-    u32 lang_reserved;      /* retained layout; menus always use Simplified Chinese */
+    u32 snd_mech;           /* A55: shutter sound also for mechanical-shutter shots (was lang_reserved) */
     u32 boot_class;         /* draw class of the run that started the module */
     u32 dual;               /* histogram enabled on the level page           */
     u32 grid;               /* STYLE_ grid style                             */
@@ -417,8 +424,10 @@ static u32 release_cb(u32 a0, u32 a1, u32 a2, u32 a3)
         if (u >= RAM_LO && u < RAM_HI && *(volatile u32 *)u == CM_MAGIC) {
             volatile cm_t *c = (volatile cm_t *)u;
             orig = c->orig;
-            if (a0 == CODE_RELEASE && c->on && c->len &&
-                *(volatile u8 *)SILENT_BYTE == 2u) {
+            /* A55: electronic (silent, byte 2) and mechanical shots have their own switch; the slot fires for both
+             * (research/shutter-slots: 0x102042F4 calls it unconditionally). */
+            if (a0 == CODE_RELEASE && c->len &&
+                (*(volatile u8 *)SILENT_BYTE == 2u ? c->on : c->snd_mech)) {
                 u32 s = *(volatile u32 *)Z5_ANCHOR_AUDIO;
                 if (s >= RAM_LO && s < RAM_HI && *(volatile u32 *)(s + 0x08u) == AUDIO_MAGIC) {
                     *(volatile u32 *)(s + 0x48u) += 1u;     /* the play request */
@@ -442,9 +451,12 @@ IMG_FN static cm_t *cm_get(void)
     return 0;
 }
 
-/* Rewrite one row label (R_ONOFF..R_RELOAD, or R_ENTRY) from the settings. */
+IMG_FN static void snd_switch_label(cm_t *c, u32 mech);
+
+/* Rewrite one row label (R_ONOFF..R_RELOAD, R_MECH, or R_ENTRY) from the settings. */
 IMG_FN static void set_label(cm_t *c, u32 row)
 {
+    if (row == R_ONOFF || row == R_MECH) { snd_switch_label(c, row == R_MECH); return; }   /* A55 */
     u32 slot = row == R_ENTRY ? ENTRY_SLOT : row == R_TITLE ? TITLE_SLOT : ROW_FIRST_SLOT + row;
     if (row == R_TITLE) row = R_ENTRY;                    /* same text as the entry row */
     u32 value = row == R_TYPE ? c->type : c->vol;
@@ -501,11 +513,11 @@ IMG_FN static void refresh_labels(cm_t *c)
         r[4] = (r[4] & ~(F_ASCII | F_UTF16)) | kind;
     }
     if (c->title) ((volatile u32 *)c->title)[1] = hans ? 3u : 2u;
-    for (u32 k = 0; c->own_rows && k < NROWS; k++) {
+    for (u32 k = 0; c->own_rows && k < SND_ROWS; k++) {
         volatile u32 *r = (volatile u32 *)(c->own_rows + k * ROW_SIZE);
         r[4] = (r[4] & ~(F_ASCII | F_UTF16)) | kind;
     }
-    for (u32 k = 0; k <= R_TITLE; k++) set_label(c, k);
+    for (u32 k = 0; k <= R_MECH; k++) set_label(c, k);
 }
 
 IMG_FN static void zero_words(u32 *p, u32 words)
@@ -569,7 +581,11 @@ IMG_FN static void save_cfg(cm_t *c)
     data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26) | (c->vui << 27) |
               ((c->focal_on ? 0u : 1u) << 28) |  /* group 104: bit 28 = focal display off */
               ((c->bat_on ? 0u : 1u) << 29) |    /* group 116: bit 29 = battery display off */
-              ((c->touch_on ? 0u : 1u) << 30);   /* group 119: bit 30 = portrait touch off */
+              ((c->touch_on ? 0u : 1u) << 30) |  /* group 119: bit 30 = portrait touch off */
+              ((c->snd_mech ? 1u : 0u) << 31);   /* A55: bit 31 = sound for mechanical shots */
+#ifdef BULB_MENU
+    if (BTP(c)) data[1] |= (BTP(c)->cnt_i & 31u) << 11 | (BTP(c)->gap_i & 31u) << 19;   /* A55: see cfg_load */
+#endif
 #ifdef JPEG_A44
     if (c->dg_buf)                             /* FILM (A52): see cfg_load */
         data[1] |= 0x80u | (A44_LOG(c)[A44_MODE] << 1) | (a44_strength(A44_LOG(c)[A44_LEVEL]) << 3)
@@ -837,6 +853,7 @@ IMG_FN static void cfg_defaults(cm_t *c)
 #endif
     c->custom_flags = CUSTOM_DEFAULT_FLAGS;
     c->custom_control = 0u;
+    c->snd_mech = 0u;                          /* A55: mechanical shots stay quiet unless switched on */
     c->on = 1u; c->type = 1u; c->vol = 5u; c->grid = STYLE_STOCK; c->zebra = 0u; c->vui = 0u; c->focal_on = 1u;
     c->bat_on = 1u; c->touch_on = 1u;
 #ifdef BURST_BOOT_OFF
@@ -924,9 +941,16 @@ IMG_FN static u32 cfg_load(cm_t *c)
             A44_LOG(c)[A47_LIGHTROOM] = (g >> 6) & 1u;
 #endif
         }
-        u32 on = data[1] & ((data[1] & 0x80u) ? 1u : 0xFFu), type = (data[1] >> 8) & 0xFFu, vol = (data[1] >> 16) & 0xFFu;
+        u32 on = data[1] & ((data[1] & 0x80u) ? 1u : 0xFFu), type = (data[1] >> 8) & 7u, vol = (data[1] >> 16) & 7u;
 #else
-        u32 on = data[1] & 0xFFu, type = (data[1] >> 8) & 0xFFu, vol = (data[1] >> 16) & 0xFFu;
+        u32 on = data[1] & 0xFFu, type = (data[1] >> 8) & 7u, vol = (data[1] >> 16) & 7u;
+#endif
+        /* A55: word 1 bit 31 = sound for mechanical shots; bits 11-15 / 19-23 = timed-Bulb shot count / interval
+         * steps (0 = 1 shot / no wait, the older meaning). Older modules read type and volume as whole bytes and
+         * fall back to their defaults for those two when a series is set; nothing else changes for them. */
+        c->snd_mech = data[1] >> 31;
+#ifdef BULB_MENU
+        if (BTP(c)) { BTP(c)->cnt_i = (data[1] >> 11) & 31u; BTP(c)->gap_i = (data[1] >> 19) & 31u; }
 #endif
         if (on <= 1u) c->on = on;
         if (type >= 1u && type <= 5u) c->type = type;
@@ -943,6 +967,11 @@ IMG_FN static u32 cfg_load(cm_t *c)
         }
 #endif
     }
+#ifdef CM_EMU_CFG_OK
+    /* Emulator-only test builds (A55): the card standin cannot seek, so MENU.DAT never reads; take the defaults so
+     * menu values can be changed and seen. Never in a camera build. */
+    if (state) { cfg_defaults(c); state = 0u; }
+#endif
     __sync_synchronize();
     c->cfg_state = state;
     return state;
@@ -1020,6 +1049,18 @@ IMG_FN static u32 onoff_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 #else
     FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);             /* rebuild the rows (labels are cached) */
 #endif
+    return 0;
+}
+
+IMG_FN static u32 mech_ok(u32 a0, u32 a1, u32 a2, u32 a3)      /* A55: sound for mechanical-shutter shots */
+{
+    cm_t *c = cm_get();
+    (void)a0; (void)a1; (void)a2; (void)a3;
+    if (!c || !cfg_ready(c)) return 0;
+    c->snd_mech = !c->snd_mech;
+    set_label(c, R_MECH);
+    save_cfg(c);
+    FW(page_fn, OPEN_PAGE)(2u, OWN_INDEX);             /* rebuild the rows (labels are cached) */
     return 0;
 }
 
@@ -1306,6 +1347,32 @@ IMG_FN static void hz_put(u16 *b, u32 *n, u32 ch) { b[(*n)++] = (u16)ch; }
 IMG_FN static void en_put(char *b, u32 *n, u32 ch) { b[(*n)++] = (char)ch; }
 /* Up to four ASCII characters packed little-endian in an immediate (no .rodata in hook-image code). */
 IMG_FN static void en_w(char *b, u32 *n, u32 w) { while (w & 255u) { b[(*n)++] = (char)w; w >>= 8; } }
+
+/* A55: shutter-sound page rows "电子快门：开/关" (mech = 0, slot 246) and "机械快门：开/关" (mech = 1, slot 264);
+ * " !" while MENU.DAT is unread (changes blocked). The page title stays "快门声音". */
+IMG_FN static void snd_switch_label(cm_t *c, u32 mech)
+{
+    u32 n = 0, on = mech ? c->snd_mech : c->on, slot = mech ? SLOT_SND_MECH : ROW_FIRST_SLOT + R_ONOFF;
+    if (c->hans) {
+        u16 b[12];
+        if (mech) { hz_put(b, &n, 0x673Au); hz_put(b, &n, 0x68B0u); }
+        else { hz_put(b, &n, 0x7535u); hz_put(b, &n, 0x5B50u); }
+        hz_put(b, &n, 0x5FEBu); hz_put(b, &n, 0x95E8u); hz_put(b, &n, 0xFF1Au); hz_put(b, &n, on ? 0x5F00u : 0x5173u);
+        if (c->cfg_state) { hz_put(b, &n, ' '); hz_put(b, &n, '!'); }
+        b[n] = 0;
+        FW(set_fn, UTF16_SET)(b, slot, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        char b[24];
+        if (mech) { en_w(b, &n, 0x6863654Du); en_w(b, &n, 0x63696E61u); en_w(b, &n, 0x00006C61u); }   /* Mechanical */
+        else { en_w(b, &n, 0x63656C45u); en_w(b, &n, 0x6E6F7274u); en_w(b, &n, 0x00006369u); }       /* Electronic */
+        en_w(b, &n, 0x0000203Au);
+        if (on) en_w(b, &n, 0x00006E4Fu); else en_w(b, &n, 0x0066664Fu);
+        if (c->cfg_state) en_w(b, &n, 0x00002120u);
+        b[n] = 0;
+        FW(set_fn, ASCII_SET)(b, slot, 0u);
+    }
+}
 
 IMG_FN static void bat_label(cm_t *c)          /* "电量显示：开/关" */
 {
@@ -2006,8 +2073,8 @@ static u32 install_menu(cm_t *c)
     if (th[0] != 0x1002u || th[5] != 0x30003u) return 12u;
     /* th[1] is a list of row layouts indexed by row count ({n, 3 words} each):
      * the template points at the 3-row one, the 4-row one follows it. */
-    const u32 *layout4 = (const u32 *)(th[1] + 0x10u);
-    if (((const u32 *)th[1])[0] != 3u || layout4[0] != NROWS) return 18u;
+    const u32 *layout5 = (const u32 *)(th[1] + 0x20u);   /* A55: five rows */
+    if (((const u32 *)th[1])[0] != 3u || layout5[0] != SND_ROWS) return 18u;
 
     /* SETUP: 41 stock rows + row 42 (copy of row 41 with our slot, flags, id). */
     u32 vui_ok = c->fx && *(volatile u16 *)VUI_SITE != 0xE92Du;
@@ -2075,24 +2142,27 @@ static u32 install_menu(cm_t *c)
     /* Owned page: 4 rows shaped like SETUP row 41 (plain list row, value column
      * "--"; the template's own rows ask a callback for their value and showed an
      * hourglass), one event map per row. */
-    u32 *own = (u32 *)z5_alloc(NROWS * ROW_SIZE, 0);
-    u32 *odisp = (u32 *)z5_alloc(NROWS * 4u, 0);
+    u32 *own = (u32 *)z5_alloc(SND_ROWS * ROW_SIZE, 0);
+    u32 *odisp = (u32 *)z5_alloc(SND_ROWS * 4u, 0);
     u32 *ohdr = (u32 *)z5_alloc(7u * 4u, 0);
     if (!own || !odisp || !ohdr) return 15u;
     /* Handler addresses one by one: a static initialiser (array of function
      * pointers) holds link-time addresses in this -fpic module, not runtime ones. */
-    u32 handlers[NROWS];
-    handlers[R_ONOFF] = img_addr(c, onoff_ok);
-    handlers[R_TYPE] = img_addr(c, type_ok);
-    handlers[R_VOL] = img_addr(c, vol_ok);
-    handlers[R_RELOAD] = img_addr(c, reload_ok);
+    /* A55 page order: electronic, mechanical, type, volume, reload; the four older rows keep slots 246..249. */
+    u32 handlers[SND_ROWS];
+    handlers[0] = img_addr(c, onoff_ok);
+    handlers[1] = img_addr(c, mech_ok);
+    handlers[2] = img_addr(c, type_ok);
+    handlers[3] = img_addr(c, vol_ok);
+    handlers[4] = img_addr(c, reload_ok);
     u32 first_map = ((const u32 *)th[4])[0];
-    for (u32 k = 0; k < NROWS; k++) {
+    for (u32 k = 0; k < SND_ROWS; k++) {
         u32 *r = own + k * ROW_WORDS;
+        u32 old = k ? k - 1u : 0u;              /* R_ONOFF, -, R_TYPE, R_VOL, R_RELOAD */
         copy_words(r, (const u32 *)SETUP_ROWS + (STOCK_ROWS - 1u) * ROW_WORDS, ROW_WORDS);
-        r[0] = ROW_FIRST_SLOT + k;
+        r[0] = k == 1u ? SLOT_SND_MECH : ROW_FIRST_SLOT + old;
         r[4] = ENTRY_FLAGS | (c->hans ? F_UTF16 : F_ASCII);
-        r[6] = ROW_FIRST_ID + k;
+        r[6] = k == 1u ? ID_SND_MECH : ROW_FIRST_ID + old;
         odisp[k] = build_map(first_map, handlers[k], STAY);
         if (!odisp[k]) return 16u;
     }
@@ -2110,8 +2180,8 @@ static u32 install_menu(cm_t *c)
         (title[7] >> 16) != TITLE_WIDGET) return 20u;
     title[1] = c->hans ? 3u : 2u;
     c->title = (u32)title;
-    ohdr[0] = th[0]; ohdr[1] = (u32)layout4; ohdr[2] = (u32)title;
-    ohdr[3] = (u32)own; ohdr[4] = (u32)odisp; ohdr[5] = (NROWS << 16) | NROWS; ohdr[6] = th[6];
+    ohdr[0] = th[0]; ohdr[1] = (u32)layout5; ohdr[2] = (u32)title;
+    ohdr[3] = (u32)own; ohdr[4] = (u32)odisp; ohdr[5] = (SND_ROWS << 16) | SND_ROWS; ohdr[6] = th[6];
     c->own_hdr = (u32)ohdr;
     c->title_slot = TITLE_SLOT;
     if (c->fx) c->zebra_install = install_zebra_page(c, title, first_map);

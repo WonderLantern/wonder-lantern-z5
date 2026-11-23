@@ -51,15 +51,16 @@ static u32 install_bt(cm_t *c, u32 *title, u32 first_map)
     volatile u32 *ph = (volatile u32 *)PHOTO_HDR;
     const u32 *th = (const u32 *)TEMPLATE_HDR;
     const u32 *layout = 0;
-    u32 k, up[5], dn[5];
+    u32 k, up[BT_ROWS], dn[BT_ROWS], six = 0u;
     if (!BTP(c)) return 125u;
     if (ph[3] != PHOTO_ROWS || ph[4] != PHOTO_DISP || ph[5] != PHOTO_COUNT) return 120u;
+    /* A55: six rows; the second six-row layout (equally spaced selectable rows, as the FILM strength page) */
     for (k = 0; k < 8u; k++)
-        if (((const u32 *)(th[1] + k * 0x10u))[0] == 4u) { layout = (const u32 *)(th[1] + k * 0x10u); break; }
+        if (((const u32 *)(th[1] + k * 0x10u))[0] == BT_ROWS && ++six == 2u) { layout = (const u32 *)(th[1] + k * 0x10u); break; }
     if (!layout) return 121u;
-    const u32 nr = 4u;
-    u32 *rows = (u32 *)z5_alloc(5u * ROW_SIZE, 0);
-    u32 *disp = (u32 *)z5_alloc(5u * 4u, 0);
+    const u32 nr = BT_ROWS;
+    u32 *rows = (u32 *)z5_alloc(BT_ROWS * ROW_SIZE, 0);
+    u32 *disp = (u32 *)z5_alloc(BT_ROWS * 4u, 0);
     u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
     const u32 extra = 1u;
     u32 *prow = (u32 *)z5_alloc((PHOTO_STOCK + extra) * ROW_SIZE, 0);
@@ -69,14 +70,15 @@ static u32 install_bt(cm_t *c, u32 *title, u32 first_map)
     up[1] = img_addr(c, bt_h_up); dn[1] = img_addr(c, bt_h_dn);
     up[2] = img_addr(c, bt_m_up); dn[2] = img_addr(c, bt_m_dn);
     up[3] = img_addr(c, bt_s_up); dn[3] = img_addr(c, bt_s_dn);
-    up[4] = 0u; dn[4] = 0u;
+    up[4] = img_addr(c, bt_n_up); dn[4] = img_addr(c, bt_n_dn);
+    up[5] = img_addr(c, bt_g_up); dn[5] = img_addr(c, bt_g_dn);
     for (k = 0; k < nr; k++) {
         u32 *r = rows + k * ROW_WORDS;
         copy_words(r, (const u32 *)SETUP_ROWS + (STOCK_ROWS - 1u) * ROW_WORDS, ROW_WORDS);
         r[4] = ENTRY_FLAGS | F_UTF16;
         r[0] = BT_SLOT_ROW + k;
         r[6] = BT_ID_ROW + k;
-        disp[k] = (k && k < 4u) ? bt_map(first_map, up[k], dn[k]) : build_map(first_map, up[k], STAY);
+        disp[k] = k ? bt_map(first_map, up[k], dn[k]) : build_map(first_map, up[k], STAY);
         if (!disp[k]) return 123u;
     }
     hdr[0] = th[0]; hdr[1] = (u32)layout; hdr[2] = (u32)title;

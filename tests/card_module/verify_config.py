@@ -17,7 +17,7 @@ code=(ROOT/'src/card_module/custom_disp/settings.h').read_text(encoding='utf-8')
 typedef uint32_t u32;
 #define IMG_FN
 #define BULB_MENU
-typedef struct {u32 h,m,s;} bt_t;
+typedef struct {u32 h,m,s,cnt_i,gap_i;} bt_t;
 #define BTP(c) ((c)->timer)
 #define CFG_MAGIC 0x4D53355Au
 #define FS_OPEN_OK 0x043A0080u
@@ -33,7 +33,7 @@ typedef struct {u32 cfg_ms,cfg_busy;}custom_disp_state;
 #define FS_WRITE_EXISTING 0xAu
 static u32 cfg_clock;
 typedef struct {u32 edited,save_err,stage,saves,on,type,vol,grid,zebra,vui,focal_on,bat_on,touch_on,custom_flags,custom_control,cfg_state,burst_mech,burst_sil;
- bt_t *timer; uintptr_t custom_state;u32 phase,err,reload,fx;char cfg_path[24];}cm_t;
+ bt_t *timer; uintptr_t custom_state;u32 phase,err,reload,fx,snd_mech;char cfg_path[24];}cm_t;
 static _Alignas(u32) unsigned char file[24];static u32 length=8,exists=1,position;
 static u32 fail_open,fail_seek,fail_read,fail_write,readback_fail,writes,opens,recoveries;
 static void zero_words(u32 *p,u32 n){memset(p,0,n*4);}
@@ -184,6 +184,23 @@ int main(void){
  fail_read=1;timer.m=17;c.custom_control=0;assert(cfg_load(&c)==3);
  assert(timer.m==17&&!c.custom_control);
  fail_read=0;assert(!cfg_load(&c)&&timer.m==1&&c.custom_control==merged.custom_control);
+ /* A55: mechanical-shutter sound (word 1 bit 31) and the Bulb series steps (bits 11-15 / 19-23) round-trip with
+  * every type and volume; all zero keeps the older word 1 byte for byte; older readers (whole type / volume
+  * bytes) see out-of-range values only when a series is set and then keep their own defaults. */
+ for(u32 mech=0;mech<2;mech++)for(u32 ci=0;ci<32;ci++)for(u32 gi=0;gi<32;gi++)for(u32 ty=1;ty<=5;ty++){
+  c.snd_mech=mech;timer.cnt_i=ci;timer.gap_i=gi;c.type=ty;c.vol=6-ty;c.on=ty&1;save_cfg(&c);
+  u32 w1=((u32 *)file)[1];
+  if(!mech&&!ci&&!gi)assert(w1==(c.on|(ty<<8)|((6-ty)<<16)|(c.grid<<24)|(c.zebra<<26)|(c.vui<<27)|
+   ((c.focal_on?0u:1u)<<28)|((c.bat_on?0u:1u)<<29)|((c.touch_on?0u:1u)<<30)));
+  if(!ci)assert(((w1>>8)&0xFFu)==ty);
+  if(!gi)assert(((w1>>16)&0xFFu)==6-ty);
+  bt_t t2={0};cm_t n2={.timer=&t2};assert(!cfg_load(&n2));
+  assert(n2.snd_mech==mech&&t2.cnt_i==ci&&t2.gap_i==gi&&n2.type==ty&&n2.vol==6-ty&&n2.on==(ty&1));
+  assert(t2.h==timer.h&&t2.m==timer.m&&t2.s==timer.s);
+ }
+ /* Files without the A55 bits load with mechanical sound off and one shot, no interval. */
+ c.snd_mech=0;timer.cnt_i=0;timer.gap_i=0;save_cfg(&c);
+ {bt_t t3={.cnt_i=9,.gap_i=9};cm_t n3={.timer=&t3,.snd_mech=1};assert(!cfg_load(&n3)&&!n3.snd_mech&&!t3.cnt_i&&!t3.gap_i);}
  return 0;
 }
 '''
@@ -191,4 +208,4 @@ with tempfile.TemporaryDirectory(prefix='z5-custom-config-') as t:
  p=Path(t);(p/'check.c').write_text(code)
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(p/'check.c'),'-o',str(p/'check')],check=True)
  subprocess.run([str(p/'check')],check=True)
-print('PASS: exhaustive 20-bit preferences, legacy migration, global switch and both page memories; 8/12/16/20-byte reads and A19/L39 migrations; open/seek/read failures preserve RAM and disk; zero-byte writes do not truncate; readback verification; 500ms GUI retry, no boot writes, recovered baseline before edits, busy guard and clock wrap')
+print('PASS: exhaustive 20-bit preferences, legacy migration, global switch and both page memories; 8/12/16/20-byte reads and A19/L39 migrations; open/seek/read failures preserve RAM and disk; zero-byte writes do not truncate; readback verification; 500ms GUI retry, no boot writes, recovered baseline before edits, busy guard and clock wrap; A55 mechanical-sound bit and Bulb series steps round-trip, zero keeps the old word 1')

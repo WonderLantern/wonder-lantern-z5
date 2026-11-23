@@ -204,6 +204,64 @@ IMG_FN static void bt_half(u32 down)
 #endif
 
 
+#ifdef BULB_MENU
+/* A55: Bulb series ("拍摄张数" / "间隔"). Each shot is the camera-verified single run (computer-control switch on,
+ * 0x9207 executor, end, switch off); between shots the task waits until the interval has passed and the camera is
+ * ready: property 0x1B17 clear (the busy test the USB 0x9207 checker 0x103173F6 answers 0x2019 with) and the
+ * exposure-open word 0xC18A7EE4 clear, seen on two passes in a row, and at least BT_GAP_MIN_MS after the end.
+ * The getters the USB checker 0x103177D4 also asks (0x1021F528, 0x102203A2, 0x102203C6) are only recorded.
+ * No ready camera within the exposure time + BT_READY_MS ends the series (reason 0xB5000000 | busy bits).
+ * Record 'TBS1' at DIAG 0x36400: [1] shots, [2] done, [3] interval s, [4] exposure s, [5] last busy bits,
+ * [6] last wait ms, [7] stop reason; per shot from +0x40, 64 x 16 bytes: start word, start ms, end ms, wait ms
+ * before it. camera_verified: false. */
+#define BT_SERIES_OFF  0x36400u
+#define BT_SERIES_MAGIC 0x31534254u         /* 'TBS1' */
+#ifndef BT_GAP_MIN_MS
+#define BT_GAP_MIN_MS  2000u
+#endif
+#ifndef BT_READY_MS
+#define BT_READY_MS    120000u
+#endif
+IMG_FN static u32 bt_count(u32 i)           /* 1..10, 15..50 by 5, 60..100 by 10, 200..900 by 100, 999 */
+{
+    i &= 31u;
+    if (i < 10u) return i + 1u;
+    if (i < 18u) return 15u + 5u * (i - 10u);
+    if (i < 23u) return 60u + 10u * (i - 18u);
+    if (i < 31u) return 200u + 100u * (i - 23u);
+    return 999u;
+}
+
+IMG_FN static u32 bt_gap(u32 i)             /* seconds: 0..10, 15..60 by 5, 90..300 by 30, 600, 900, 1800 */
+{
+    i &= 31u;
+    if (i < 11u) return i;
+    if (i < 21u) return 15u + 5u * (i - 11u);
+    if (i < 29u) return 90u + 30u * (i - 21u);
+    return i == 29u ? 600u : i == 30u ? 900u : 1800u;
+}
+
+IMG_FN static u32 bt_busy(void)
+{
+    return (PCM_PROP(0x1B17u) ? 1u : 0u) | (*(volatile u32 *)0xC18A7EE4u ? 2u : 0u) |
+           (((u32 (*)(void))0x1021F529u)() ? 4u : 0u) | (((u32 (*)(void))0x102203A3u)() ? 8u : 0u) |
+           (((u32 (*)(void))0x102203C7u)() ? 16u : 0u);
+}
+
+IMG_FN static volatile u32 *bt_log(cm_t *c)
+{
+    return c->dg_buf ? (volatile u32 *)(c->dg_buf + BT_SERIES_OFF) : 0;
+}
+
+IMG_FN static void bt_end_series(cm_t *c, volatile u32 *q, u32 why)
+{
+    volatile u32 *g = bt_log(c);
+    q[1] = 3u;
+    if (why) q[9] = why;
+    if (g) g[7] = why;
+}
+#endif
+
 IMG_FN static void bulb_step(cm_t *c)
 {
 #ifdef BULB_MENU
@@ -230,8 +288,18 @@ IMG_FN static void bulb_step(cm_t *c)
 #endif
     u32 now = *(volatile u32 *)CM_MS_CLOCK;
     if (q[0] != BT_MAGIC) return;
+#ifdef BULB_MENU
+    if (q[1] == 1u && BTP(c)->stop && BTP(c)->done) {   /* A55: ended between shots */
+        BTP(c)->stop = 0u;
+        bt_end_series(c, q, 0x5E000000u | BTP(c)->done);
+        return;
+    }
+#endif
     if (q[1] == 1u && (s32)(now - q[2]) >= 0) {
         if (bt_mode() != 2u) { q[9] = 0xBAD00000u | bt_mode(); q[1] = 3u; return; }
+#ifdef BULB_MENU
+        for (u32 i = 3u; i <= 8u; i++) q[i] = 0u;   /* per-shot words (A55: a series reuses the block) */
+#endif
 #ifdef BULB_PCMODE
         q[10] = pc_mode(1u);                   /* 0xDE8: switch to computer control first */
         now = *(volatile u32 *)CM_MS_CLOCK;
@@ -243,6 +311,15 @@ IMG_FN static void bulb_step(cm_t *c)
 #else
         q[3] = ((u32 (*)(u32, u32))BT_START)(BT_SESSION, *(volatile u32 *)BT_PARAM);
 #endif
+#ifdef BULB_MENU
+        {
+            volatile u32 *g = bt_log(c);
+            if (g) {
+                volatile u32 *e = g + 16u + (BTP(c)->done & 63u) * 4u;
+                e[0] = q[3]; e[1] = q[2]; e[2] = 0u; e[3] = BTP(c)->done ? now - BTP(c)->wait_from : 0u;
+            }
+        }
+#endif
     } else if (q[1] == 2u) {
         if (!q[5] && now - q[2] >= 500u) {
             q[5] = 0x100u | *(volatile u8 *)0xC18A84E4u;
@@ -253,6 +330,7 @@ IMG_FN static void bulb_step(cm_t *c)
         if (now - q[2] >= BT_RUN_MS(c)) {
             u32 z = 0u;
 #ifdef BULB_MENU
+            u32 stopped = BTP(c)->stop;
             BTP(c)->stop = 0u;
 #endif
             q[4] = ((u32 (*)(u32 *))BT_END)(&z);
@@ -261,20 +339,58 @@ IMG_FN static void bulb_step(cm_t *c)
 #ifdef BULB_PCMODE
             q[11] = pc_mode(0u);               /* 0xDEC: back from computer control */
 #endif
+#ifdef BULB_MENU
+            {
+                volatile u32 *g = bt_log(c);
+                if (g) { g[16u + (BTP(c)->done & 63u) * 4u + 2u] = now; g[2] = BTP(c)->done + 1u; }
+            }
+            BTP(c)->done += 1u;
+            BTP(c)->wait_from = *(volatile u32 *)CM_MS_CLOCK;
+            BTP(c)->ready = 0u;
+            if (stopped) bt_end_series(c, q, 0x5E000000u | BTP(c)->done);
+            else if (BTP(c)->done < BTP(c)->total) q[1] = 4u;   /* A55: next shot after the interval */
+#endif
         }
     } else if (q[1] == 3u && q[7] && !q[8] && now - q[7] >= 1000u) {
         q[8] = 0x100u | *(volatile u8 *)0xC18A84E4u | (*(volatile u32 *)0xC18A7EE4u << 4);
     }
+#ifdef BULB_MENU
+    else if (q[1] == 4u) {                     /* A55: between the shots of a series */
+        bt_t *t = BTP(c);
+        u32 waited = now - t->wait_from, busy = bt_busy();
+        volatile u32 *g = bt_log(c);
+        if (!q[8] && waited >= 1000u)
+            q[8] = 0x100u | *(volatile u8 *)0xC18A84E4u | (*(volatile u32 *)0xC18A7EE4u << 4);
+        if (g) { g[5] = busy; g[6] = waited; }
+        if (t->stop) {
+            t->stop = 0u;
+            bt_end_series(c, q, 0x5E000000u | t->done);
+        } else if (bt_mode() != 2u) {
+            bt_end_series(c, q, 0xBAD00000u | bt_mode());
+        } else if (waited >= BT_GAP_MIN_MS && waited >= bt_gap(t->gap_i) * 1000u) {
+            if (busy & 3u) {
+                t->ready = 0u;
+                if (waited >= t->secs * 1000u + bt_gap(t->gap_i) * 1000u + BT_READY_MS)
+                    bt_end_series(c, q, 0xB5000000u | busy);
+            } else if (++t->ready >= 2u) {
+                t->ready = 0u;
+                q[2] = now;
+                q[1] = 1u;                     /* the next pass starts the shot */
+            }
+        }
+    }
+#endif
 }
 #endif
 
 #ifdef BULB_MENU
-/* "B门定时" page (photo shooting menu row -> 4 rows): start / cancel, hours, minutes, seconds.
+/* "B门定时" page (photo shooting menu row -> 6 rows): start / cancel, hours, minutes, seconds; A55: shots, interval.
  * Right or OK adds one, left takes one (wraps 0..9 h, 0..59 min / s). Start arms the run BT_DELAY_MS later
  * (time to leave the menu with a half press); pressed again it cancels (before the start) or ends now.
  * Only in Bulb (0x020E = 2); otherwise the row says so. Labels always Simplified Chinese (AGENTS.md rule 8). */
 #define BT_SLOT_ENTRY  257u             /* photo shooting menu row "B门定时：h:mm:ss" */
-#define BT_SLOT_ROW    258u             /* 258..261: start, hours, minutes, seconds */
+#define BT_SLOT_ROW    258u             /* 258..263: start, hours, minutes, seconds, shots, interval (A55) */
+#define BT_ROWS        6u
 #define BT_ID_ENTRY    0x2FC0u          /* ids not present in the stock ROM row tables */
 #define BT_ID_ROW      0x2FC1u
 #ifndef BT_CLOSE_MS
@@ -341,6 +457,51 @@ IMG_FN static void bt_set_en(char *b, u32 n, u32 slot)
     FW(set_fn, ASCII_SET)(b, slot, 0u);
 }
 
+/* A55: decimal (no division helper in the module) into a UTF-16 (hb) or ASCII (eb) buffer. */
+IMG_FN static void bt_num(u16 *hb, char *eb, u32 *n, u32 v)
+{
+    u32 started = 0u, p = 1000u;
+    while (p) {
+        u32 d = 0u;
+        while (v >= p) { v -= p; d++; }
+        if (d || started || p == 1u) {
+            started = 1u;
+            if (hb) hz_put(hb, n, '0' + d); else en_put(eb, n, '0' + d);
+        }
+        p = p == 1000u ? 100u : p == 100u ? 10u : p == 10u ? 1u : 0u;
+    }
+}
+
+IMG_FN static void bt_gap_text(u16 *hb, char *eb, u32 *n, u32 v)   /* "1分30秒" / "1 min 30 s" */
+{
+    u32 m = 0u;
+    while (v >= 60u) { v -= 60u; m++; }
+    if (m) { bt_num(hb, eb, n, m); if (hb) hz_put(hb, n, 0x5206u); else en_w(eb, n, 0x6E696D20u); }
+    if (v || !m) {
+        if (!hb && m) en_put(eb, n, ' ');
+        bt_num(hb, eb, n, v);
+        if (hb) hz_put(hb, n, 0x79D2u); else en_w(eb, n, 0x00007320u);
+    }
+}
+
+/* " 3/10" while a series runs (shot i of the total); "×10" after the time when more than one shot is set. */
+IMG_FN static void bt_prog(cm_t *c, u16 *hb, char *eb, u32 *n, u32 i)
+{
+    if (BTP(c)->total < 2u) return;
+    if (hb) hz_put(hb, n, ' '); else en_put(eb, n, ' ');
+    bt_num(hb, eb, n, i);
+    if (hb) hz_put(hb, n, '/'); else en_put(eb, n, '/');
+    bt_num(hb, eb, n, BTP(c)->total);
+}
+
+IMG_FN static void bt_times(cm_t *c, u16 *hb, char *eb, u32 *n)
+{
+    u32 k = bt_count(BTP(c)->cnt_i);
+    if (k < 2u) return;
+    if (hb) hz_put(hb, n, 0x00D7u); else en_w(eb, n, 0x00007820u);   /* "×" / " x" */
+    bt_num(hb, eb, n, k);
+}
+
 IMG_FN static void bt_kind(cm_t *c)
 {
     u32 kind = c->hans ? F_UTF16 : F_ASCII;
@@ -363,21 +524,25 @@ IMG_FN static void bt_labels_en(cm_t *c)
     char b[40];
     u32 n = 0, ph = BTP(c)->q[1];
     en_w(b, &n, 0x656D6954u); en_w(b, &n, 0x75422064u); en_w(b, &n, 0x203A626Cu); bt_time_en(c, b, &n);
-    bt_set_en(b, n, BT_SLOT_ENTRY);                                   /* "Timed Bulb: h:mm:ss" */
+    bt_times(c, 0, b, &n);
+    bt_set_en(b, n, BT_SLOT_ENTRY);                                   /* "Timed Bulb: h:mm:ss x10" */
     n = 0;
-    if (ph == 1u) {                                                    /* "Waiting (OK cancels)" */
+    if (ph == 4u || (ph == 1u && BTP(c)->done)) {                      /* A55: "Interval 3/10 (OK ends)" */
+        en_w(b, &n, 0x65746E49u); en_w(b, &n, 0x6C617672u); bt_prog(c, 0, b, &n, BTP(c)->done);
+        en_w(b, &n, 0x4B4F2820u); en_w(b, &n, 0x646E6520u); en_w(b, &n, 0x00002973u);
+    } else if (ph == 2u) {                                             /* "Exposing 3/10 (OK ends)" */
+        en_w(b, &n, 0x6F707845u); en_w(b, &n, 0x676E6973u); bt_prog(c, 0, b, &n, BTP(c)->done + 1u);
+        en_w(b, &n, 0x4B4F2820u); en_w(b, &n, 0x646E6520u); en_w(b, &n, 0x00002973u);
+    } else if (ph == 1u) {                                             /* "Waiting (OK cancels)" */
         en_w(b, &n, 0x74696157u); en_w(b, &n, 0x20676E69u); en_w(b, &n, 0x204B4F28u);
         en_w(b, &n, 0x636E6163u); en_w(b, &n, 0x29736C65u);
-    } else if (ph == 2u) {                                             /* "Exposing (OK ends)" */
-        en_w(b, &n, 0x6F707845u); en_w(b, &n, 0x676E6973u); en_w(b, &n, 0x4B4F2820u);
-        en_w(b, &n, 0x646E6520u); en_w(b, &n, 0x00002973u);
     } else if (BTP(c)->msg == 1u) {                                    /* "Set Bulb mode first" */
         en_w(b, &n, 0x20746553u); en_w(b, &n, 0x626C7542u); en_w(b, &n, 0x646F6D20u);
         en_w(b, &n, 0x69662065u); en_w(b, &n, 0x00747372u);
     } else if (BTP(c)->msg == 2u) {                                    /* "Set a time first" */
         en_w(b, &n, 0x20746553u); en_w(b, &n, 0x69742061u); en_w(b, &n, 0x6620656Du); en_w(b, &n, 0x74737269u);
-    } else {                                                           /* "Start: h:mm:ss" */
-        en_w(b, &n, 0x72617453u); en_w(b, &n, 0x00203A74u); bt_time_en(c, b, &n);
+    } else {                                                           /* "Start: h:mm:ss x10" */
+        en_w(b, &n, 0x72617453u); en_w(b, &n, 0x00203A74u); bt_time_en(c, b, &n); bt_times(c, 0, b, &n);
     }
     bt_set_en(b, n, BT_SLOT_ROW);
     n = 0; en_w(b, &n, 0x72756F48u); en_w(b, &n, 0x00203A73u); en_put(b, &n, '0' + BTP(c)->h);
@@ -386,6 +551,11 @@ IMG_FN static void bt_labels_en(cm_t *c)
     bt_set_en(b, n, BT_SLOT_ROW + 2u);                                 /* "Minutes: mm" */
     n = 0; en_w(b, &n, 0x6F636553u); en_w(b, &n, 0x3A73646Eu); en_w(b, &n, 0x00000020u); bt_two_en(b, &n, BTP(c)->s);
     bt_set_en(b, n, BT_SLOT_ROW + 3u);                                 /* "Seconds: ss" */
+    n = 0; en_w(b, &n, 0x746F6853u); en_w(b, &n, 0x00203A73u); bt_num(0, b, &n, bt_count(BTP(c)->cnt_i));
+    bt_set_en(b, n, BT_SLOT_ROW + 4u);                                 /* A55 "Shots: n" */
+    n = 0; en_w(b, &n, 0x65746E49u); en_w(b, &n, 0x6C617672u); en_w(b, &n, 0x0000203Au);
+    bt_gap_text(0, b, &n, bt_gap(BTP(c)->gap_i));
+    bt_set_en(b, n, BT_SLOT_ROW + 5u);                                 /* A55 "Interval: 1 min 30 s" */
 }
 
 IMG_FN static void bt_labels(cm_t *c)
@@ -395,16 +565,20 @@ IMG_FN static void bt_labels(cm_t *c)
     if (!c->hans) { bt_labels_en(c); return; }
     u16 b[24];
     u32 n = 0, ph = BTP(c)->q[1];
-    bt_name(b, &n); hz_put(b, &n, 0xFF1Au); bt_time(c, b, &n);
+    bt_name(b, &n); hz_put(b, &n, 0xFF1Au); bt_time(c, b, &n); bt_times(c, b, 0, &n);
     bt_set(b, n, BT_SLOT_ENTRY);
     n = 0;
-    if (ph == 1u) {                            /* 等待开始（OK取消） */
+    if (ph == 4u || (ph == 1u && BTP(c)->done)) {   /* A55: 间隔中 3/10（OK结束） */
+        hz_put(b, &n, 0x95F4u); hz_put(b, &n, 0x9694u); hz_put(b, &n, 0x4E2Du); bt_prog(c, b, 0, &n, BTP(c)->done);
+        hz_put(b, &n, 0xFF08u); hz_put(b, &n, 'O'); hz_put(b, &n, 'K'); hz_put(b, &n, 0x7ED3u); hz_put(b, &n, 0x675Fu);
+        hz_put(b, &n, 0xFF09u);
+    } else if (ph == 2u) {                     /* 曝光中 3/10（OK结束） */
+        hz_put(b, &n, 0x66DDu); hz_put(b, &n, 0x5149u); hz_put(b, &n, 0x4E2Du); bt_prog(c, b, 0, &n, BTP(c)->done + 1u);
+        hz_put(b, &n, 0xFF08u); hz_put(b, &n, 'O'); hz_put(b, &n, 'K'); hz_put(b, &n, 0x7ED3u); hz_put(b, &n, 0x675Fu);
+        hz_put(b, &n, 0xFF09u);
+    } else if (ph == 1u) {                     /* 等待开始（OK取消） */
         hz_put(b, &n, 0x7B49u); hz_put(b, &n, 0x5F85u); hz_put(b, &n, 0x5F00u); hz_put(b, &n, 0x59CBu);
         hz_put(b, &n, 0xFF08u); hz_put(b, &n, 'O'); hz_put(b, &n, 'K'); hz_put(b, &n, 0x53D6u); hz_put(b, &n, 0x6D88u);
-        hz_put(b, &n, 0xFF09u);
-    } else if (ph == 2u) {                     /* 曝光中（OK结束） */
-        hz_put(b, &n, 0x66DDu); hz_put(b, &n, 0x5149u); hz_put(b, &n, 0x4E2Du);
-        hz_put(b, &n, 0xFF08u); hz_put(b, &n, 'O'); hz_put(b, &n, 'K'); hz_put(b, &n, 0x7ED3u); hz_put(b, &n, 0x675Fu);
         hz_put(b, &n, 0xFF09u);
     } else if (BTP(c)->msg == 1u) {              /* 请先设为B门 */
         hz_put(b, &n, 0x8BF7u); hz_put(b, &n, 0x5148u); hz_put(b, &n, 0x8BBEu); hz_put(b, &n, 0x4E3Au);
@@ -413,7 +587,7 @@ IMG_FN static void bt_labels(cm_t *c)
         hz_put(b, &n, 0x8BF7u); hz_put(b, &n, 0x5148u); hz_put(b, &n, 0x8BBEu); hz_put(b, &n, 0x5B9Au);
         hz_put(b, &n, 0x65F6u); hz_put(b, &n, 0x95F4u);
     } else {                                   /* 开始：h:mm:ss */
-        hz_put(b, &n, 0x5F00u); hz_put(b, &n, 0x59CBu); hz_put(b, &n, 0xFF1Au); bt_time(c, b, &n);
+        hz_put(b, &n, 0x5F00u); hz_put(b, &n, 0x59CBu); hz_put(b, &n, 0xFF1Au); bt_time(c, b, &n); bt_times(c, b, 0, &n);
     }
     bt_set(b, n, BT_SLOT_ROW);
     n = 0; hz_put(b, &n, 0x5C0Fu); hz_put(b, &n, 0x65F6u); hz_put(b, &n, 0xFF1Au); hz_put(b, &n, '0' + BTP(c)->h);
@@ -422,6 +596,10 @@ IMG_FN static void bt_labels(cm_t *c)
     bt_set(b, n, BT_SLOT_ROW + 2u);            /* 分钟：mm */
     n = 0; hz_put(b, &n, 0x79D2u); hz_put(b, &n, 0xFF1Au); bt_two(b, &n, BTP(c)->s);
     bt_set(b, n, BT_SLOT_ROW + 3u);            /* 秒：ss */
+    n = 0; hz_put(b, &n, 0x5F20u); hz_put(b, &n, 0x6570u); hz_put(b, &n, 0xFF1Au); bt_num(b, 0, &n, bt_count(BTP(c)->cnt_i));
+    bt_set(b, n, BT_SLOT_ROW + 4u);            /* A55 张数：n */
+    n = 0; hz_put(b, &n, 0x95F4u); hz_put(b, &n, 0x9694u); hz_put(b, &n, 0xFF1Au); bt_gap_text(b, 0, &n, bt_gap(BTP(c)->gap_i));
+    bt_set(b, n, BT_SLOT_ROW + 5u);            /* A55 间隔：1分30秒 */
 }
 
 IMG_FN static void bt_show(cm_t *c, u32 refresh)
@@ -458,9 +636,10 @@ IMG_FN static void bt_adjust(u32 field, u32 up)
 {
     cm_t *c = cm_get();
     if (!c || !BTP(c) || !cfg_ready(c)) return;
-    if (BTP(c)->q[1] != 1u && BTP(c)->q[1] != 2u) {   /* fixed while armed or open */
-        u32 *v = field == 0u ? &BTP(c)->h : field == 1u ? &BTP(c)->m : &BTP(c)->s;
-        u32 max = field == 0u ? 23u : 59u;
+    if (BTP(c)->q[1] != 1u && BTP(c)->q[1] != 2u && BTP(c)->q[1] != 4u) {   /* fixed while a run is on */
+        u32 *v = field == 0u ? &BTP(c)->h : field == 1u ? &BTP(c)->m : field == 2u ? &BTP(c)->s :
+                 field == 3u ? &BTP(c)->cnt_i : &BTP(c)->gap_i;
+        u32 max = field == 0u ? 23u : field <= 2u ? 59u : 31u;   /* A55: shot / interval steps 0..31 */
         *v = up ? (*v >= max ? 0u : *v + 1u) : (*v ? *v - 1u : max);
         BTP(c)->msg = 0u;
         save_cfg(c);
@@ -474,6 +653,10 @@ IMG_FN static u32 bt_m_up(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; 
 IMG_FN static u32 bt_m_dn(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(1u, 0u); return 0; }
 IMG_FN static u32 bt_s_up(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(2u, 1u); return 0; }
 IMG_FN static u32 bt_s_dn(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(2u, 0u); return 0; }
+IMG_FN static u32 bt_n_up(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(3u, 1u); return 0; }
+IMG_FN static u32 bt_n_dn(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(3u, 0u); return 0; }
+IMG_FN static u32 bt_g_up(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(4u, 1u); return 0; }
+IMG_FN static u32 bt_g_dn(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; bt_adjust(4u, 0u); return 0; }
 
 
 IMG_FN static u32 bt_start_ok(u32 a0, u32 a1, u32 a2, u32 a3)
@@ -482,10 +665,10 @@ IMG_FN static u32 bt_start_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     (void)a0; (void)a1; (void)a2; (void)a3;
     if (!c || !BTP(c)) return 0;
     volatile u32 *q = BTP(c)->q;
-    if (q[1] == 1u) {
+    if (q[1] == 1u && !BTP(c)->done) {
         q[1] = 0u;                             /* cancel before the start */
-    } else if (q[1] == 2u) {
-        BTP(c)->stop = 1u;                       /* end now (next task pass) */
+    } else if (q[1] == 1u || q[1] == 2u || q[1] == 4u) {
+        BTP(c)->stop = 1u;                       /* end now (next task pass); A55: no further shots */
     } else if (!cfg_ready(c)) {
         return 0;
     } else if (bt_mode() != 2u) {
@@ -495,6 +678,16 @@ IMG_FN static u32 bt_start_ok(u32 a0, u32 a1, u32 a2, u32 a3)
     } else {
         for (u32 i = 1u; i < 12u; i++) q[i] = 0u;
         BTP(c)->secs = BTP(c)->h * 3600u + BTP(c)->m * 60u + BTP(c)->s;
+        BTP(c)->total = bt_count(BTP(c)->cnt_i);   /* A55 */
+        BTP(c)->done = 0u;
+        BTP(c)->ready = 0u;
+        {
+            volatile u32 *g = bt_log(c);
+            if (g) {
+                for (u32 i = 0u; i < 16u + 64u * 4u; i++) g[i] = 0u;
+                g[0] = BT_SERIES_MAGIC; g[1] = BTP(c)->total; g[3] = bt_gap(BTP(c)->gap_i); g[4] = BTP(c)->secs;
+            }
+        }
         BTP(c)->stop = 0u;
         BTP(c)->msg = 0u;
         q[2] = *(volatile u32 *)CM_MS_CLOCK + BT_DELAY_MS;
