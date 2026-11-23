@@ -723,6 +723,9 @@ IMG_FN static void burst_task(u32 unused)
 #ifdef BULB_TIMER_MS
         if (c) bulb_step(c);
 #endif
+#ifdef ASPECT43_FX
+        if (c) a43_watch(c);                   /* A69: 4:3 tables only while FX and chosen */
+#endif
 #ifdef BULB_MENU
         if (c && c->dg_buf && BTP(c)) for (u32 i = 0u; i < 12u; i++) ((volatile u32 *)(c->dg_buf + 0xDC0u))[i] = BTP(c)->q[i];
 #endif

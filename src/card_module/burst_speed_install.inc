@@ -62,7 +62,11 @@ static u32 install_bt(cm_t *c, u32 *title, u32 first_map)
     u32 *rows = (u32 *)z5_alloc(BT_ROWS * ROW_SIZE, 0);
     u32 *disp = (u32 *)z5_alloc(BT_ROWS * 4u, 0);
     u32 *hdr = (u32 *)z5_alloc(7u * 4u, 0);
+#ifdef ASPECT43_FX
+    const u32 extra = BTP(c)->a43_status == 1u ? 2u : 1u;   /* A69: "照片画幅" after "B门定时" (A68 firmware only) */
+#else
     const u32 extra = 1u;
+#endif
     u32 *prow = (u32 *)z5_alloc((PHOTO_STOCK + extra) * ROW_SIZE, 0);
     u32 *pdisp = (u32 *)z5_alloc((PHOTO_STOCK + extra) * 4u, 0);
     if (!rows || !disp || !hdr || !prow || !pdisp) return 122u;
@@ -92,6 +96,31 @@ static u32 install_bt(cm_t *c, u32 *title, u32 first_map)
     copy_words(pdisp, (const u32 *)PHOTO_DISP, PHOTO_STOCK);
     pdisp[PHOTO_STOCK] = build_map(((const u32 *)PHOTO_DISP)[PHOTO_STOCK - 1u], img_addr(c, bt_entry_ok), STAY);
     if (!pdisp[PHOTO_STOCK]) return 124u;
+#ifdef ASPECT43_FX
+    if (extra == 2u) {                         /* A69: "照片画幅" row and its two-row page (off / 4:3) */
+        u32 *e2 = e + ROW_WORDS;
+        u32 *arows = (u32 *)z5_alloc(2u * ROW_SIZE, 0);
+        u32 *adisp = (u32 *)z5_alloc(2u * 4u, 0);
+        u32 *ahdr = (u32 *)z5_alloc(7u * 4u, 0);
+        if (!arows || !adisp || !ahdr || ((const u32 *)LAYOUTS_2ROW)[0] != 2u) return 126u;
+        copy_words(e2, e, ROW_WORDS);
+        e2[0] = A43_SLOT_ENTRY;
+        e2[6] = A43_ID_ENTRY;
+        pdisp[PHOTO_STOCK + 1u] = build_map(((const u32 *)PHOTO_DISP)[PHOTO_STOCK - 1u], img_addr(c, a43_entry_ok), STAY);
+        copy_words(arows, (const u32 *)GRID_ROWS, ROW_WORDS);
+        copy_words(arows + ROW_WORDS, arows, ROW_WORDS);
+        arows[0] = A43_SLOT_ROW;      arows[4] = PLAIN_ROW | F_UTF16; arows[6] = A43_ID_ROW;
+        arows[ROW_WORDS] = A43_SLOT_ROW + 1u; arows[ROW_WORDS + 4u] = PLAIN_ROW | F_UTF16; arows[ROW_WORDS + 6u] = A43_ID_ROW1;
+        adisp[0] = build_map(first_map, img_addr(c, a43_off_ok), STAY);
+        adisp[1] = build_map(first_map, img_addr(c, a43_43_ok), STAY);
+        if (!pdisp[PHOTO_STOCK + 1u] || !adisp[0] || !adisp[1]) return 127u;
+        ahdr[0] = th[0]; ahdr[1] = LAYOUTS_2ROW; ahdr[2] = (u32)title;
+        ahdr[3] = (u32)arows; ahdr[4] = (u32)adisp; ahdr[5] = (2u << 16) | 2u; ahdr[6] = th[6];
+        BTP(c)->a43_hdr = (u32)ahdr;
+        BTP(c)->a43_entry_row = (u32)e2;
+        a43_labels(c);
+    }
+#endif
     BTP(c)->hdr = (u32)hdr;
     BTP(c)->map0 = disp[0];
     BTP(c)->entry_row = (u32)e;

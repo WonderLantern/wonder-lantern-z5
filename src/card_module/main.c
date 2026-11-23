@@ -53,6 +53,9 @@ typedef struct {
     u32 cnt_i, gap_i;               /* A55: series steps (MENU.DAT word 1 bits 11-15 / 19-23), see bt_count / bt_gap */
     u32 total, done;                /* A55: shots of the running series; shots finished */
     u32 wait_from, ready;           /* A55: end of the last shot (ms clock); consecutive ready passes */
+    u32 a43_sel, a43_status;        /* A69: photo aspect (0 off, 1 4:3; MENU.DAT word 4 bits 12-15); prepare result */
+    u32 a43_copy, a43_hdr;          /* A69: 4:3 table copies (record buffer 0x36A40); "照片画幅" page header */
+    u32 a43_entry_row;              /* A69: the photo-menu row, for its text kind */
 } bt_t;
 #define BTP(c)        ((bt_t *)(c)->burst_viewall_off)
 #endif
@@ -240,6 +243,11 @@ typedef struct {
 #define BURST_CFG_MECH_OFF 0x10u        /* MENU.DAT word 2: mechanical burst speed-up off (burst_speed.inc) */
 #define BURST_CFG_SIL_OFF  0x20u        /* MENU.DAT word 2: electronic (silent) burst speed-up off */
 #define CFG_MAGIC     0x4D53355Au      /* 'Z5SM' */
+#ifdef ASPECT43_FX
+#define A43_PROFILES  1u               /* A69: photo aspects after "off" (1 = 4:3) */
+#else
+#define A43_PROFILES  0u               /* no photo-aspect option: word 4 bits 12-15 must stay 0 */
+#endif
 #define L_EN          20u
 #define L_HZ          8u
 #define TEXT_CHARS    40u
@@ -576,6 +584,9 @@ IMG_FN static void save_cfg(cm_t *c)
     if (BTP(c)) data[3] = 0xB7000000u | (BTP(c)->h << 16) | (BTP(c)->m << 8) | BTP(c)->s;
 #endif
     data[4] = CUSTOM_CONTROL_TAG | (c->custom_control & CUSTOM_CONTROL_MASK);
+#ifdef ASPECT43_FX
+    if (BTP(c)) data[4] |= (BTP(c)->a43_sel & 15u) << 12;   /* A69: photo aspect; 0 keeps the older word */
+#endif
     data[2] = CUSTOM_CFG_TAG | CUSTOM_NORMALIZE(c->custom_flags | CUSTOM_ENABLE_MASK) |
               (c->burst_mech ? 0u : CUSTOM_CFG_MECH_OFF) | (c->burst_sil ? 0u : CUSTOM_CFG_SIL_OFF);
     data[1] = c->on | (c->type << 8) | (c->vol << 16) | (c->grid << 24) | (c->zebra << 26) | (c->vui << 27) |
@@ -913,7 +924,8 @@ IMG_FN static u32 cfg_load(cm_t *c)
                 u32 control = control_word & CUSTOM_CONTROL_MASK;
                 u32 current = (length == 16u || (length == 20u && timer_ok)) &&
                     third == CUSTOM_CFG_TAG && (data[2] & 0x00C00000u) == 0u &&
-                    control_word == (CUSTOM_CONTROL_TAG | control) &&
+                    (control_word & ~0xF000u) == (CUSTOM_CONTROL_TAG | control) &&
+                    ((control_word >> 12) & 15u) <= A43_PROFILES &&   /* A69: photo aspect */
                     CUSTOM_LOGICAL(control, 0u) <= 4u && CUSTOM_LOGICAL(control, 1u) <= 4u;
                 state = data[0] == CFG_MAGIC && (legacy || a19 || current) ? 0u : 2u;
             }
@@ -944,6 +956,9 @@ IMG_FN static u32 cfg_load(cm_t *c)
         else if (length == 12u && (tag == 0xD2160000u || (data[2] & 0xFF000000u) == CUSTOM_CFG_OLD_TAG))
             c->custom_control = (c->custom_flags & CUSTOM_ENABLE_MASK) ? CUSTOM_CONTROL_ON : 0u;
         c->custom_flags = CUSTOM_NORMALIZE(c->custom_flags | CUSTOM_ENABLE_MASK);
+#ifdef BULB_MENU
+        if (BTP(c)) BTP(c)->a43_sel = length == 20u ? (data[4] >> 12) & 15u : 0u;   /* A69: photo aspect */
+#endif
 #ifdef JPEG_A44
         /* FILM (A52): word 1 bit 7 marks bits 1-2 style, 3-5 strength, 6 NEF write; the shutter-sound switch
          * keeps bit 0. Files from A44-A51 (tag 0xD215) kept them in word 2 bits 8-9, 10-12 and 13. */
@@ -1692,6 +1707,14 @@ IMG_FN static void hub_labels(cm_t *c)
 #endif
 }
 
+#ifdef ASPECT43_FX
+#include "aspect43_fx_tables.inc"
+#define A43_PTRS      0xC18C7554u
+#define A43_LOG_OFF   0x36A00u
+#define A43_COPY_OFF  0x36A40u
+#define A43_COPY_BYTES 512u   /* A68: groups, then the firmware's configuration log from +224 */
+#include "aspect_menu.inc"     /* A69: image code (a43_apply, a43_watch, the "照片画幅" page) */
+#endif
 #include "burst_speed.inc"  /* image code: must stay before Z5_IMAGE_END */
 #include "vui_card.inc"   /* research/vertical-ui/vui_card.inc in the development tree */
 
@@ -2303,11 +2326,6 @@ static u32 install_grid(cm_t *c)
  * state area, last info area, last info kind, remapped calls, ms), so "save test record" keeps the counters.
  * Only on the A66 / A67 firmware (veneer at 0x105BA37C, a hooked capture-state or capture-info site) and with stock
  * pointers. Record at 0x36A00: 'A43F', status (1 = enabled, other = why not), copy address. camera_verified: false. */
-#include "aspect43_fx_tables.inc"
-#define A43_PTRS      0xC18C7554u
-#define A43_LOG_OFF   0x36A00u
-#define A43_COPY_OFF  0x36A40u
-#define A43_COPY_BYTES 512u   /* A68: groups, then the firmware's configuration log from +224 */
 static u32 install_fx43(cm_t *c)
 {
     static const u32 stock[A43_GROUPS] = { 0x1167B884u, 0x1167B8F0u, 0x1167B95Cu, 0x1167BA28u, 0x1167BB00u,
@@ -2316,22 +2334,23 @@ static u32 install_fx43(cm_t *c)
     volatile u32 *log = c->dg_buf ? (volatile u32 *)(c->dg_buf + A43_LOG_OFF) : 0;
     u32 status = 1u, g;
     u8 *copy = 0;
-    if (*(volatile u32 *)0x105BA37Cu != 0xF000F8DFu ||
-        (*(volatile u32 *)0x101DC65Au == 0x04CCF895u && *(volatile u32 *)0x101905B8u == 0x04CCF884u &&
-         *(volatile u32 *)0x10142A7Cu == 0x4FF8E92Du)) status = 2u;   /* none of the A66 / A67 / A68 hooks */
+    if (!BTP(c)) status = 5u;
+    else if (*(volatile u32 *)0x105BA37Cu != 0xF000F8DFu || *(volatile u32 *)0x10142A7Cu == 0x4FF8E92Du)
+        status = 2u;                                            /* not the A68 firmware */
     for (g = 0; status == 1u && g < A43_GROUPS; g++)
-        if (ptr[g * 9u + 8u] != stock[g]) status = 3u;          /* not the stock pointers (already enabled?) */
+        if (ptr[g * 9u + 8u] != stock[g]) status = 3u;          /* not the stock pointers */
     if (status == 1u) {
         copy = c->dg_buf ? (u8 *)(c->dg_buf + A43_COPY_OFF) : (u8 *)z5_alloc(A43_COPY_BYTES, 0);
         if (!copy) status = 4u;
     }
     if (status == 1u) {
         for (g = 0; g < A43_COPY_BYTES; g++) copy[g] = g < A43_GROUPS * A43_GROUP_BYTES ? a43_tables[g] : 0u;
-        __asm__ volatile ("dsb sy" ::: "memory");
-        for (g = 0; g < A43_GROUPS; g++)                        /* group 1 last: it is the firmware's switch */
-            if (g != 1u) ptr[g * 9u + 8u] = (u32)(copy + g * A43_GROUP_BYTES);
-        __asm__ volatile ("dsb sy" ::: "memory");
-        ptr[1u * 9u + 8u] = (u32)(copy + 1u * A43_GROUP_BYTES);
+        BTP(c)->a43_copy = (u32)copy;
+    }
+    if (BTP(c)) {
+        BTP(c)->a43_status = status;
+        if (status != 1u) BTP(c)->a43_sel = 0u;
+        a43_apply(c);
     }
     if (log) { log[0] = 0x46333441u; log[1] = status; log[2] = (u32)copy; }   /* 'A43F' */
     return status;
@@ -2431,14 +2450,14 @@ static void first_run(cm_t *c)
 #ifndef CM_SKIP_MENU
     c->phase = PH_MENU;
     c->fx = fx_hooks_present();
+#ifdef ASPECT43_FX
+    install_fx43(c);                           /* A69: 4:3 tables ready; the saved choice applied */
+#endif
     c->install = install_menu(c);
     if (c->vui_install == 1u) { vui_label(c); focal_label(c); c->vui_fn = img_addr(c, vui_hook); }
     hub_labels(c);                             /* group 116 */
 #ifdef ASPECT43_ROW
     install_area43(c);                         /* A60: label of the 4:3 row in "Choose image area" */
-#endif
-#ifdef ASPECT43_FX
-    install_fx43(c);                           /* A66/A67: 4:3 photos from FX */
 #endif
     if (c->install == 1u) burst_start(c);      /* burst speed-up task */
 #ifdef VUI_DIAG_FOCUS

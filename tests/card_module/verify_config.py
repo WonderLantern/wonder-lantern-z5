@@ -17,7 +17,9 @@ code=(ROOT/'src/card_module/custom_disp/settings.h').read_text(encoding='utf-8')
 typedef uint32_t u32;
 #define IMG_FN
 #define BULB_MENU
-typedef struct {u32 h,m,s,cnt_i,gap_i;} bt_t;
+#define ASPECT43_FX
+#define A43_PROFILES 1u
+typedef struct {u32 h,m,s,cnt_i,gap_i,a43_sel;} bt_t;
 #define BTP(c) ((c)->timer)
 #define CFG_MAGIC 0x4D53355Au
 #define FS_OPEN_OK 0x043A0080u
@@ -201,6 +203,13 @@ int main(void){
  /* Files without the A55 bits load with mechanical sound off and one shot, no interval. */
  c.snd_mech=0;timer.cnt_i=0;timer.gap_i=0;save_cfg(&c);
  {bt_t t3={.cnt_i=9,.gap_i=9};cm_t n3={.timer=&t3,.snd_mech=1};assert(!cfg_load(&n3)&&!n3.snd_mech&&!t3.cnt_i&&!t3.gap_i);}
+ /* A69: photo aspect in word 4 bits 12-15 round-trips; 0 keeps the older word 4; out of range is refused */
+ {u32 w4=((u32 *)file)[4];assert(!(w4&0xF000u));
+  timer.a43_sel=1;save_cfg(&c);assert(((u32 *)file)[4]==(w4|0x1000u));
+  bt_t t4={0};cm_t n4={.timer=&t4};assert(!cfg_load(&n4)&&t4.a43_sel==1&&n4.custom_control==c.custom_control);
+  timer.a43_sel=0;save_cfg(&c);assert(((u32 *)file)[4]==w4);
+  ((u32 *)file)[4]=w4|0x2000u;bt_t t5={.a43_sel=7};cm_t n5={.timer=&t5};assert(cfg_load(&n5)==2&&t5.a43_sel==7);
+  ((u32 *)file)[4]=w4;assert(!cfg_load(&n5)&&!t5.a43_sel);}
  return 0;
 }
 '''
@@ -208,4 +217,4 @@ with tempfile.TemporaryDirectory(prefix='z5-custom-config-') as t:
  p=Path(t);(p/'check.c').write_text(code)
  subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(p/'check.c'),'-o',str(p/'check')],check=True)
  subprocess.run([str(p/'check')],check=True)
-print('PASS: exhaustive 20-bit preferences, legacy migration, global switch and both page memories; 8/12/16/20-byte reads and A19/L39 migrations; open/seek/read failures preserve RAM and disk; zero-byte writes do not truncate; readback verification; 500ms GUI retry, no boot writes, recovered baseline before edits, busy guard and clock wrap; A55 mechanical-sound bit and Bulb series steps round-trip, zero keeps the old word 1')
+print('PASS: exhaustive 20-bit preferences, legacy migration, global switch and both page memories; 8/12/16/20-byte reads and A19/L39 migrations; open/seek/read failures preserve RAM and disk; zero-byte writes do not truncate; readback verification; 500ms GUI retry, no boot writes, recovered baseline before edits, busy guard and clock wrap; A55 mechanical-sound bit and Bulb series steps round-trip, zero keeps the old word 1; A69 photo aspect in word 4 round-trips, 0 = older file, out of range refused')
