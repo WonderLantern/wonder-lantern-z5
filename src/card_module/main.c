@@ -1573,6 +1573,9 @@ IMG_FN static u32 sound_entry_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 }
 
 /* Group 116: every hub label, and the hub rows' label kind for the current language. */
+#ifdef FONT_EXT
+#include "font_ext.inc"
+#endif
 #ifdef JPEG_A44
 #include "a44_menu.inc"
 #endif
@@ -2116,6 +2119,9 @@ static u32 install_menu(cm_t *c)
     if (install_burst_page(c, title, first_map) != 1u) c->burst_hdr = 0u;   /* burst speed-up switches */
 #ifdef BULB_MENU
     if (BTP(c)) BTP(c)->install = install_bt(c, title, first_map);   /* B门定时 row in the photo shooting menu */
+#endif
+#ifdef FONT_EXT
+    fx_install(c);                             /* A54: extra glyphs for the stock Simplified Chinese font */
 #endif
 #ifdef JPEG_A44
     a44_install_menu(c, title, first_map);

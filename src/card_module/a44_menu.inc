@@ -15,7 +15,14 @@ IMG_FN static void a44_label(cm_t *c)
     if (!c->dg_buf) return;
     u16 text[16];
     u32 n = 0, mode = A44_LOG(c)[A44_MODE];
-    hz_put(text, &n, 'F'); hz_put(text, &n, 'I'); hz_put(text, &n, 'L'); hz_put(text, &n, 'M');
+#ifdef FONT_EXT
+    if (fx_ready(c)) {                         /* 胶片颗粒 with the glyphs added by font_ext.inc */
+        hz_put(text, &n, 0x80F6u); hz_put(text, &n, 0x7247u); hz_put(text, &n, 0x9897u); hz_put(text, &n, 0x7C92u);
+    } else
+#endif
+    {
+        hz_put(text, &n, 'F'); hz_put(text, &n, 'I'); hz_put(text, &n, 'L'); hz_put(text, &n, 'M');
+    }
     hz_put(text, &n, 0xFF1Au);
     if (mode == 1u) {
         hz_put(text, &n, 'F'); hz_put(text, &n, 'U');
