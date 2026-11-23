@@ -2295,8 +2295,8 @@ static u32 install_grid(cm_t *c)
 }
 
 #ifdef ASPECT43_FX
-/* A66/A67 (2026-11-24): 4:3 photos while the camera stays in FX (research/aspect/z5_aspect43_fx_a67_fw.py,
- * firmware A67). The firmware writes area 8 / aspect kind 3 into the capture info for FX captures and takes area 8's
+/* A66-A68 (2026-11-24): 4:3 photos while the camera stays in FX (research/aspect/z5_aspect43_fx_a68_fw.py,
+ * firmware A68; A68 wraps the power-on geometry configuration). The firmware writes area 8 / aspect kind 3 into the capture info for FX captures and takes area 8's
  * offset / trim as 4:3 once area 8's group-1 pointer of the RAM geometry pointer table 0xC18C7554 points into RAM.
  * Here: copies of A56's camera-proven 4:3 tables (aspect43_fx_tables.inc) and area 8's seven pointers -> the copies.
  * The copies live in the record buffer at 0x36A40 (groups at +g * 32, the firmware's counters at +224: calls, last
@@ -2307,7 +2307,7 @@ static u32 install_grid(cm_t *c)
 #define A43_PTRS      0xC18C7554u
 #define A43_LOG_OFF   0x36A00u
 #define A43_COPY_OFF  0x36A40u
-#define A43_COPY_BYTES 256u
+#define A43_COPY_BYTES 512u   /* A68: groups, then the firmware's configuration log from +224 */
 static u32 install_fx43(cm_t *c)
 {
     static const u32 stock[A43_GROUPS] = { 0x1167B884u, 0x1167B8F0u, 0x1167B95Cu, 0x1167BA28u, 0x1167BB00u,
@@ -2317,7 +2317,8 @@ static u32 install_fx43(cm_t *c)
     u32 status = 1u, g;
     u8 *copy = 0;
     if (*(volatile u32 *)0x105BA37Cu != 0xF000F8DFu ||
-        (*(volatile u32 *)0x101DC65Au == 0x04CCF895u && *(volatile u32 *)0x101905B8u == 0x04CCF884u)) status = 2u;
+        (*(volatile u32 *)0x101DC65Au == 0x04CCF895u && *(volatile u32 *)0x101905B8u == 0x04CCF884u &&
+         *(volatile u32 *)0x10142A7Cu == 0x4FF8E92Du)) status = 2u;   /* none of the A66 / A67 / A68 hooks */
     for (g = 0; status == 1u && g < A43_GROUPS; g++)
         if (ptr[g * 9u + 8u] != stock[g]) status = 3u;          /* not the stock pointers (already enabled?) */
     if (status == 1u) {
