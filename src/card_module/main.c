@@ -2295,15 +2295,19 @@ static u32 install_grid(cm_t *c)
 }
 
 #ifdef ASPECT43_FX
-/* A66 (2026-11-24): 4:3 photos while the camera stays in FX (research/aspect/z5_aspect43_fx_fw.py, firmware
- * ed1684a4). The firmware records FX as area 8 in the capture state and takes area 8's offset / trim / aspect kind
- * as 4:3 once area 8's group-1 pointer of the RAM geometry pointer table 0xC18C7554 points into RAM. Here: heap
- * copies of A56's camera-proven 4:3 tables (aspect43_fx_tables.inc) and area 8's seven pointers -> the copies.
- * Only on that firmware (veneer at 0x105BA37C, capture-state hook at 0x101905B8) and with stock pointers.
- * Record at DIAG 0x36A00: 'A43F', status (1 = enabled, other = why not), heap copy. camera_verified: false. */
+/* A66/A67 (2026-11-24): 4:3 photos while the camera stays in FX (research/aspect/z5_aspect43_fx_a67_fw.py,
+ * firmware A67). The firmware writes area 8 / aspect kind 3 into the capture info for FX captures and takes area 8's
+ * offset / trim as 4:3 once area 8's group-1 pointer of the RAM geometry pointer table 0xC18C7554 points into RAM.
+ * Here: copies of A56's camera-proven 4:3 tables (aspect43_fx_tables.inc) and area 8's seven pointers -> the copies.
+ * The copies live in the record buffer at 0x36A40 (groups at +g * 32, the firmware's counters at +224: calls, last
+ * state area, last info area, last info kind, remapped calls, ms), so "save test record" keeps the counters.
+ * Only on the A66 / A67 firmware (veneer at 0x105BA37C, a hooked capture-state or capture-info site) and with stock
+ * pointers. Record at 0x36A00: 'A43F', status (1 = enabled, other = why not), copy address. camera_verified: false. */
 #include "aspect43_fx_tables.inc"
 #define A43_PTRS      0xC18C7554u
 #define A43_LOG_OFF   0x36A00u
+#define A43_COPY_OFF  0x36A40u
+#define A43_COPY_BYTES 256u
 static u32 install_fx43(cm_t *c)
 {
     static const u32 stock[A43_GROUPS] = { 0x1167B884u, 0x1167B8F0u, 0x1167B95Cu, 0x1167BA28u, 0x1167BB00u,
@@ -2311,23 +2315,24 @@ static u32 install_fx43(cm_t *c)
     volatile u32 *ptr = (volatile u32 *)A43_PTRS;
     volatile u32 *log = c->dg_buf ? (volatile u32 *)(c->dg_buf + A43_LOG_OFF) : 0;
     u32 status = 1u, g;
-    u8 *heap = 0;
-    if (*(volatile u32 *)0x105BA37Cu != 0xF000F8DFu || *(volatile u32 *)0x101905B8u == 0x04CCF884u) status = 2u;
+    u8 *copy = 0;
+    if (*(volatile u32 *)0x105BA37Cu != 0xF000F8DFu ||
+        (*(volatile u32 *)0x101DC65Au == 0x04CCF895u && *(volatile u32 *)0x101905B8u == 0x04CCF884u)) status = 2u;
     for (g = 0; status == 1u && g < A43_GROUPS; g++)
         if (ptr[g * 9u + 8u] != stock[g]) status = 3u;          /* not the stock pointers (already enabled?) */
     if (status == 1u) {
-        heap = (u8 *)z5_alloc(A43_GROUPS * A43_GROUP_BYTES, 0);
-        if (!heap) status = 4u;
+        copy = c->dg_buf ? (u8 *)(c->dg_buf + A43_COPY_OFF) : (u8 *)z5_alloc(A43_COPY_BYTES, 0);
+        if (!copy) status = 4u;
     }
     if (status == 1u) {
-        for (g = 0; g < A43_GROUPS * A43_GROUP_BYTES; g++) heap[g] = a43_tables[g];
+        for (g = 0; g < A43_COPY_BYTES; g++) copy[g] = g < A43_GROUPS * A43_GROUP_BYTES ? a43_tables[g] : 0u;
         __asm__ volatile ("dsb sy" ::: "memory");
         for (g = 0; g < A43_GROUPS; g++)                        /* group 1 last: it is the firmware's switch */
-            if (g != 1u) ptr[g * 9u + 8u] = (u32)(heap + g * A43_GROUP_BYTES);
+            if (g != 1u) ptr[g * 9u + 8u] = (u32)(copy + g * A43_GROUP_BYTES);
         __asm__ volatile ("dsb sy" ::: "memory");
-        ptr[1u * 9u + 8u] = (u32)(heap + 1u * A43_GROUP_BYTES);
+        ptr[1u * 9u + 8u] = (u32)(copy + 1u * A43_GROUP_BYTES);
     }
-    if (log) { log[0] = 0x46333441u; log[1] = status; log[2] = (u32)heap; }   /* 'A43F' */
+    if (log) { log[0] = 0x46333441u; log[1] = status; log[2] = (u32)copy; }   /* 'A43F' */
     return status;
 }
 #endif
@@ -2432,7 +2437,7 @@ static void first_run(cm_t *c)
     install_area43(c);                         /* A60: label of the 4:3 row in "Choose image area" */
 #endif
 #ifdef ASPECT43_FX
-    install_fx43(c);                           /* A66: 4:3 photos from FX (firmware ed1684a4) */
+    install_fx43(c);                           /* A66/A67: 4:3 photos from FX */
 #endif
     if (c->install == 1u) burst_start(c);      /* burst speed-up task */
 #ifdef VUI_DIAG_FOCUS
