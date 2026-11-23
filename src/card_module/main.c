@@ -2294,6 +2294,40 @@ static u32 install_grid(cm_t *c)
     return 1u;
 }
 
+#ifdef ASPECT43_ROW
+/* A60 (2026-11-23): with the A60 firmware the "Choose image area" page (81, header 0xC1876980) shows its stock
+ * fifth row 0x17AE (Z5 hides it: it is the 5:4 slot, OK sets 0x402 = 2) and image area 2 is a 4:3 crop
+ * (research/aspect/z5_area3_fw.py). The row's stock text id 0x4C2 is "Disable"; give it our own text slot 265
+ * (free: 262/263 Bulb rows, 264 mechanical sound). Rows are copied to the heap; key maps stay stock.
+ * Only when the firmware carries the A60 aspect-kind edit (0x10190590 = movs r0, #3). */
+#define AREA_HDR      0xC1876980u
+#define AREA_ROWS     0x114EE8ECu
+#define AREA_DISP     0x1153DE6Cu
+#define AREA_COUNT    0x00050005u
+#define AREA_ROW43    2u
+#define AREA_SLOT43   265u
+static u32 install_area43(cm_t *c)
+{
+    volatile u32 *hdr = (volatile u32 *)AREA_HDR;
+    if (*(volatile u16 *)0x10190590u != 0x2003u) return 40u;          /* not the A60 firmware */
+    if (hdr[3] != AREA_ROWS || hdr[4] != AREA_DISP || hdr[5] != AREA_COUNT) return 41u;
+    u32 *rows = (u32 *)z5_alloc(5u * ROW_SIZE, 0);
+    if (!rows) return 42u;
+    copy_words(rows, (const u32 *)AREA_ROWS, 5u * ROW_WORDS);
+    if (rows[AREA_ROW43 * ROW_WORDS] != 0x4C2u || rows[AREA_ROW43 * ROW_WORDS + 6u] != 0x17AEu) return 43u;
+    rows[AREA_ROW43 * ROW_WORDS] = AREA_SLOT43;
+    rows[AREA_ROW43 * ROW_WORDS + 4u] = rows[AREA_ROW43 * ROW_WORDS + 4u] | (c->hans ? F_UTF16 : F_ASCII);
+    if (c->hans) {
+        FW(set_fn, UTF16_SET)((const u16 *)u"4:3   (32x24)", AREA_SLOT43, HANS_STYLE);
+        *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
+    } else {
+        FW(set_fn, ASCII_SET)("4:3   (32x24)", AREA_SLOT43, 0u);
+    }
+    hdr[3] = (u32)rows;                        /* same count and key maps: only the row text changes */
+    return 1u;
+}
+#endif
+
 /* Only with the two firmware gates; otherwise the masks stay as they are. */
 static void enable_dual_display(cm_t *c)
 {
@@ -2356,6 +2390,9 @@ static void first_run(cm_t *c)
     c->install = install_menu(c);
     if (c->vui_install == 1u) { vui_label(c); focal_label(c); c->vui_fn = img_addr(c, vui_hook); }
     hub_labels(c);                             /* group 116 */
+#ifdef ASPECT43_ROW
+    install_area43(c);                         /* A60: label of the 4:3 row in "Choose image area" */
+#endif
     if (c->install == 1u) burst_start(c);      /* burst speed-up task */
 #ifdef VUI_DIAG_FOCUS
     if (c->vui_install == 1u) c->vui_tp_fn = img_addr(c, vui_tp_hit);   /* group 91: touch recorder */
