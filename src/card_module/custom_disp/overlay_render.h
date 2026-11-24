@@ -182,7 +182,7 @@ static u32 overlay_source_paint_impl(u32 object)
      * erase or restore it here: native controls have just finished drawing. */
     s->drawing_image = mapped; s->drawing_bank = native; s->ready = 1u;
     u32 painted = (flags & 2u) ? level_paint() : 1u;
-    if (!output) aspect_mask_paint(s, mapped, width, height);   /* A74: 4:3 live-view mask, LCD */
+    aspect_mask_paint(s, mapped, width, height);   /* A74: 4:3 live-view mask (LCD); A79: EVF too */
     s->ready = 0; s->drawing_image = s->drawing_bank = 0;
     if (!disp_pass_matches(output)) { m[18] = 0; return overlay_source_refuse(s, 32u); }
     overlay_diag_cost(1u, Z5_FULL_TICK - start);

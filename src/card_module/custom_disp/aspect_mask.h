@@ -9,11 +9,23 @@
  * rotating banks are remembered per output.
  * "On" = the A68/A69 4:3 pointer is in RAM (area 8 group 1, 0xC18C7598): the module turns it on only for 4:3 in
  * FX, so DX / 16:9 / stock 1:1 and "off" show no mask.
- * Limits: LCD only; only on pages the custom DISP overlay draws on; native redraws may briefly uncover a strip
+ * A79 (2026-11-24): the EVF too. Its native surfaces (720 x 480, 1024 x 682 / 768, 1280 x 960) carry the 3:2
+ * live view across the full width, so each bar is width * 332 / 6016 columns (40 / 57 / 71), full height; on
+ * the 4:3 surfaces the extra rows above / below are black or info bars, where 50% black changes nothing visible.
+ * Limits (A74): only on pages the custom DISP overlay draws on; native redraws may briefly uncover a strip
  * until the next pass. camera_verified: false. */
 #define A43_MASK_PTR    0xC18C7598u
-#define A43_MASK_COLOR  0x80000000u
+#define A43_MASK_COLOR  0xF0000000u    /* A79: near black (94%, premultiplied); A74 was 0x80000000 (50%) */
 #define A43_MASK_SIDE   40u            /* 720 * 332 / 6016 = 39.7 */
+
+/* Bar width for a supported surface, 0 = not drawn. */
+Z5_IMAGE(custom_disp_image) static u32 aspect_mask_side(u32 width, u32 height)
+{
+    if (width == 720u && height == 480u) return A43_MASK_SIDE;
+    if (width == 1024u && (height == 682u || height == 768u)) return 57u;   /* 56.5 */
+    if (width == 1280u && height == 960u) return 71u;                         /* 70.6 */
+    return 0u;
+}
 
 Z5_IMAGE(custom_disp_image) static u32 aspect_mask_on(void)
 {
@@ -26,13 +38,13 @@ Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conv
 static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw)
 {
     volatile u32 *px = (volatile u32 *)surface;
-    u32 changed = 0;
-    if (width != 720u || height != 480u || !surface || (surface & 3u)) return 0;
+    u32 changed = 0, bar = aspect_mask_side(width, height);
+    if (!bar || !surface || (surface & 3u)) return 0;
     for (u32 y = 0; y < height; y++) {
         volatile u32 *row = px + y * width;
         for (u32 side = 0; side < 2u; side++) {
-            u32 x0 = side ? width - A43_MASK_SIDE : 0u, first = 0xffffu, last = 0;
-            for (u32 x = x0; x < x0 + A43_MASK_SIDE; x++) {
+            u32 x0 = side ? width - bar : 0u, first = 0xffffu, last = 0;
+            for (u32 x = x0; x < x0 + bar; x++) {
                 u32 v = row[x];
                 if (draw ? v != 0u : v != A43_MASK_COLOR) continue;
                 row[x] = draw ? A43_MASK_COLOR : 0u;
