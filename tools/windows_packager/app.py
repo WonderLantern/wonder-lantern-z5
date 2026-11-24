@@ -2,7 +2,6 @@
 import ctypes
 import hashlib
 import importlib.util
-import json
 import os
 import shutil
 import sys
@@ -12,8 +11,6 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
-
-from release_data import import_update, verify_installed
 
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 ASSETS = ROOT / 'assets'
@@ -37,26 +34,20 @@ def new_output(parent):
     raise ValueError('无法创建不重名的结果文件夹。')
 
 
-def generate(source, dest, release=ASSETS):
-    source, dest, release = Path(source), Path(dest), Path(release)
+def generate(source, dest):
+    source, dest = Path(source), Path(dest)
     if not source.is_file():
         raise ValueError('请选择原厂 Z_5_0150.bin 文件。')
     if dest.exists():
         raise ValueError('输出文件夹已经存在，请选择新的文件夹。')
     if not fixed_disk(dest):
         raise ValueError('请选择电脑本地固定磁盘，不能选择移动存储设备。')
-    baseline = json.loads((ASSETS / 'patch_data' / 'patches.json').read_text(encoding='utf-8'))
-    candidate = json.loads((release / 'patch_data' / 'patches.json').read_text(encoding='utf-8'))
-    if candidate.get('z5mod') != baseline.get('z5mod') or candidate.get('stock_main_sha256') != baseline.get('stock_main_sha256') or candidate.get('stock_package_sha256') != baseline.get('stock_package_sha256'):
-        raise ValueError('版本包的原厂固件或解码器配置不匹配。')
-    if release != ASSETS:
-        verify_installed(release)
     spec = importlib.util.spec_from_file_location('upstream_patch', ASSETS / 'patch.py')
     patch = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(patch)
-    patch.DATA = release / 'patch_data' / 'patches.json'
-    patch.CARD_MODULE = release / 'card' / 'Z5APP.BIN'
-    patch.HERE = release
+    patch.DATA = ASSETS / 'patch_data' / 'patches.json'
+    patch.CARD_MODULE = ASSETS / 'card' / 'Z5APP.BIN'
+    patch.HERE = ASSETS
     patch.THIRD_PARTY = USER / 'decoder'
     original_load = patch.load_decoder
     def checked_load(args, pin):
@@ -96,18 +87,6 @@ def main():
     frame.pack(fill='both', expand=True)
     source = tk.StringVar()
     destination = tk.StringVar(value=str(Path.home() / 'Documents'))
-    version = tk.StringVar(value='内置公开版本')
-    release = [ASSETS]
-    active_file = USER / 'active-version.txt'
-    if active_file.is_file():
-        try:
-            active = active_file.read_text(encoding='utf-8').strip()
-            if Path(active).name != active:
-                raise ValueError('无效版本名')
-            release[0] = verify_installed(USER / 'versions' / active)
-            version.set('已选择版本：' + active)
-        except (OSError, ValueError, json.JSONDecodeError):
-            version.set('已保存版本无效，使用内置公开版本')
     ttk.Label(frame, text='Nikon Z 5 · C 1.50', font=('Microsoft YaHei', 15, 'bold')).grid(row=0, column=0, columnspan=3, sticky='w', pady=(0, 12))
     ttk.Label(frame, text='原厂固件').grid(row=1, column=0, sticky='w')
     ttk.Entry(frame, textvariable=source, width=56).grid(row=2, column=0, columnspan=2, sticky='ew', pady=4)
@@ -119,30 +98,17 @@ def main():
         if parent:
             destination.set(parent)
     ttk.Button(frame, text='选择位置', command=choose_output).grid(row=4, column=2, padx=8)
-    ttk.Label(frame, textvariable=version).grid(row=5, column=0, sticky='w', pady=8)
-    def update():
-        path = filedialog.askopenfilename(title='选择可信来源的版本包', filetypes=[('版本包', '*.zip')])
-        if not path:
-            return
-        if not messagebox.askyesno('导入更新', '只导入可信来源的版本包。哈希只能检查完整性，不能证明发布者身份。继续吗？'):
-            return
-        try:
-            release[0] = import_update(path, USER / 'versions')
-            active_file.write_text(release[0].name, encoding='utf-8')
-            version.set('已选择版本：' + release[0].name)
-        except Exception as e:
-            messagebox.showerror('更新失败', str(e))
-    ttk.Button(frame, text='导入版本包', command=update).grid(row=5, column=2, padx=8)
+    ttk.Label(frame, text='版本：A81（固件和卡上模块都在程序内）').grid(row=5, column=0, columnspan=3, sticky='w', pady=8)
     status = tk.StringVar(value='首次生成需要联网获取并校验解码器。')
     ttk.Label(frame, textvariable=status).grid(row=6, column=0, columnspan=3, sticky='w', pady=8)
     def build():
-        selected_source, selected_dest, selected_release = source.get(), destination.get(), release[0]
+        selected_source, selected_dest = source.get(), destination.get()
         button.state(['disabled'])
         status.set('正在校验并生成，请稍候……')
         def run():
             try:
                 result = new_output(selected_dest)
-                generate(selected_source, result, selected_release)
+                generate(selected_source, result)
                 msg, ok = '生成成功：\n' + str(result), True
             except (Exception, SystemExit) as e:
                 msg, ok = str(e), False

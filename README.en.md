@@ -10,8 +10,8 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 
 | Feature | Description | Camera tested |
 | --- | --- | --- |
-| Custom shutter sound | Plays a WAV from the card during silent photography, with up to 5 sounds and on/off, sound and volume settings. The mechanical shutter is unchanged | Yes |
-| Simplified Chinese menu | "Shutter sound" page in the Setup menu | Yes |
+| Custom shutter sound | Plays a WAV from the card, up to 5 sounds, with sound and volume settings and separate switches for electronic and mechanical shutter (mechanical off by default) | **Tested on the author's camera** (A55) |
+| English / Chinese menus | The card module's menus follow the camera language: English or Simplified Chinese | In use on the author's camera |
 | Histogram with level | Shows the histogram on the virtual horizon page | Yes (photo mode, rear monitor) |
 | Framing grid styles | Adds 3×3 and 2×2 to Custom Setting d8. The stock "On" remains 4×4 | Yes (photo mode, rear monitor) |
 | Photo highlight display (zebra) | Brings the stock movie highlight display to photo live view, with its own switch in the Setup menu | Yes (photo mode, rear monitor) |
@@ -22,7 +22,8 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Battery percent | Remaining charge shown in the battery icon; can be turned off | Yes |
 | Extensions menu | All switches in one row, "Extensions", at the end of the Setup menu | Yes |
 | Custom DISP | Per-page level, histogram and details with separate LCD and EVF page memory | User reported A39 worked; A52 tested on the author's camera |
-| Timed Bulb | Set hours, minutes and seconds in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | A19 tested on camera. User reported A39 worked. A52 tested on the author's camera. |
+| Timed Bulb | Set hours, minutes, seconds, shot count and interval in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | **Tested on the author's camera** (series: A55) |
+| Photo aspect | 4:3 or 2.33:1 in the photo shooting menu; JPG and NEF are recorded in that shape, with a mask on the monitor and in the viewfinder (needs Custom DISP on). **The mask can show minor glitches in some situations; this is a known issue.** See [docs/PHOTO_ASPECT.md](docs/PHOTO_ASPECT.md) (Chinese) | **Tested on the author's camera** (A81) |
 | Film grain FILM | FUJI400 / HP5, strength 1–6, on the JPG and the NEF's embedded preview; about 1.1 s per image. **Avoid high-speed bursts with grain on** (low-speed 3 fps ran 20+ frames without waiting; high speed waits 1–2 s after 4 frames). Implementation and parameters: [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md) (Chinese) | **Tested on the author's camera** (A52) |
 | Lightroom grain inside the NEF | With "NEF写入: on" the camera writes matching Lightroom grain into the NEF's own XMP; with Lightroom's raw default set to "Camera Settings" it applies on import, no sidecar files | **Tested on the author's camera** (Lightroom Classic 13.2) |
 | Faster photo listing over USB | Speeds up listing photos on a computer over USB (port of Z30 mtp-fast); on whenever the card module is installed | Ran on the author's camera, **effect not verified** |
@@ -31,19 +32,21 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 
 The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
 
-**Current version A52** adds film grain (FILM), Lightroom grain written into the NEF and faster photo listing over USB to A39, tested on the author's camera (the listing speed-up's effect is not verified). Burst speed-up is now off at every power-on. Please avoid high-speed bursts with film grain on. See [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md) (Chinese), which also explains the implementation with its actual parameters.
+**Current version A81** adds photo aspect 4:3 / 2.33:1, Bulb series with shot count and interval, separate electronic/mechanical shutter-sound switches and menus that follow the camera language (English or Simplified Chinese), and fixes the A50–A52 freeze on the FILM strength page after a shot. Tested on the author's camera (the USB listing speed-up's effect is still not verified).
 
-**A39** combines the A19 timed Bulb menu with Custom DISP from PR #6. Extension menus display in Simplified Chinese. Enable Custom DISP under Setup Menu → Extensions → Custom DISP. Each of the four pages has its own level, histogram and detail settings. The LCD keeps a display-off position, and the EVF cycles the four visible pages.
+**Known issue: the aspect mask can show minor glitches in some situations** (for example a brief flicker near icons); the recorded photo is not affected. Playback zoom works only for photos in the currently selected aspect. See [docs/PHOTO_ASPECT.md](docs/PHOTO_ASPECT.md) (Chinese). Please avoid high-speed bursts with film grain on.
+
+**A39** combines the A19 timed Bulb menu with Custom DISP from PR #6. Enable Custom DISP under Setup Menu → Extensions → Custom DISP. Each of the four pages has its own level, histogram and detail settings. The LCD keeps a display-off position, and the EVF cycles the four visible pages.
 
 The user reported that A39 worked in camera testing. Individual display scenarios and video were not reported separately. See the [portrait notes](docs/PORTRAIT_UI.md) and [Custom DISP handoff](docs/CUSTOM_DISP_HANDOFF.md).
 
 ## Windows tool (no installation)
 
-Download the Windows tool from the [A52 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a52-20261123). It generates the A52 firmware and card module from the official C 1.50 file. Existing tools can import Z5-update-a52-20261123.zip. The output includes Chinese instructions and the shutter sound converter.
+Download `Z5Extensions.exe` from the [A81 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a81-20261125). It generates the A81 firmware and card files from the official C 1.50 file. It is the only download: separate module files and update bundles are no longer provided, and bundle import has been removed. To update, download the new exe. The output includes Chinese instructions and the shutter sound converter.
 
 ## Usage
 
-**A52 needs new firmware** (two more entries for film grain and the NEF write, plus the USB listing speed-up). Coming from the A19/A39 firmware, flash it once as below. If you already flashed the A48-or-later test firmware (SHA-256 starting `a3704c6f`), back up Z5APP.BIN and SHUTTER/MENU.DAT and replace only Z5APP.BIN; A51 film-grain settings carry over. Custom DISP defaults to off when migrating from A19.
+**A81 needs new firmware** (photo aspect entries). Coming from any older version, including the A52 firmware (SHA-256 starting `a3704c6f`), flash it once as below and replace Z5APP.BIN on the card as well. Back up Z5APP.BIN and SHUTTER/MENU.DAT first; keep your MENU.DAT to keep your settings.
 
 ### 1. Prepare
 
@@ -69,7 +72,7 @@ output/card/SHUTTER/1-5.WAV      default test sounds (five)
 output/card/Z5LOG/DIAG01-20.BIN  20 empty test-record files
 ```
 
-The SHA-256 of `EG165050.BIN` should be `a3704c6f7f7891b5d691985b6148af43d7bf4d58a35d862659661b1bd9a6c754` (group 108 + burst speed-up entries + USB listing speed-up + film grain and NEF write entries). Do not redistribute this file.
+The SHA-256 of `EG165050.BIN` should be `13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5` (A52 firmware + photo aspect entries). Do not redistribute this file.
 
 ### 3. Flash (once)
 
@@ -109,7 +112,7 @@ The last row of the Setup menu, "Extensions" (扩展功能 in Chinese), holds:
 
 | Item | What it does |
 | --- | --- |
-| Shutter sound | With silent photography on: on/off, sound type, volume, reload |
+| Shutter sound | Separate electronic / mechanical switches, sound type, volume, reload |
 | Photo zebra | Also turn on the stock highlight display pattern in Custom Settings group g |
 | Portrait UI | Portrait layout master switch (on in the generated settings file) |
 | Portrait touch | Touch in portrait; when off, touches in portrait are ignored, landscape is unaffected |

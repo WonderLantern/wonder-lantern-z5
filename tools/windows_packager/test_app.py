@@ -26,7 +26,7 @@ class AppTests(unittest.TestCase):
                 self.skipTest('run integration case with local release checkout')
             with patch.object(app, 'ASSETS', assets):
                 with self.assertRaises(SystemExit):
-                    app.generate(source, base / 'result', assets)
+                    app.generate(source, base / 'result')
             self.assertFalse((base / 'result').exists())
 
 

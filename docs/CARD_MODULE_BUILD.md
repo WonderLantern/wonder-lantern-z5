@@ -95,20 +95,17 @@ Z5_EXTRA='-DJPEG_LOG -DBURST_EXTRA_BITS=0x60u -DJPEG_A42 -DJPEG_A43=1 -DJPEG_A44
 
 结果 `b3ed50ebf369d332015b521fa231ef392920ef60e1c0853d3a0700f966f4132a`（GCC 13.3.1）。A52 配套固件 `a3704c6f…` 在 A39 配套固件上增加 MTP 列表加速、JPEG 编码入口闸门和 NEF `crd:` 闸门，钩子源码见 `src/firmware_hooks/z5_mtp_fw.py`、`z5_grain_fw.py`、`z5_crd_fw.py`；用户用 `patch.py` 从原厂文件生成。FILM 设置的主机测试：`tests/card_module/verify_film_config.py`。实现说明见 [FILM_GRAIN.md](FILM_GRAIN.md)。
 
+## A81：照片画幅
+
+A52 的 `Z5_EXTRA` 再加 `-DFONT_EXT -DASPECT43_FX`，GCC 13.3.1 结果 `274c864d156920d93ef8d85567ab1c55db888c6d6a0dc998dc158bb60e014a89`（从仓库源码重建一致）。配套固件 `13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5` 在 `a3704c6f…` 上增加照片画幅钩子。实现见 [PHOTO_ASPECT.md](PHOTO_ASPECT.md)。
+
 ## 更新发布文件
 
 1. 把审核过的构建产物复制到根目录 `card/Z5APP.BIN`。
 2. 只更新 `patch_data/patches.json` 中的 `card_module_sha256`；本轮不修改固件 edits、appends 或输出 SHA-256。
 3. 根据本次 `report.json` 更新 [card-module-release.json](card-module-release.json)；更新版本、摘要和验证说明。
-4. 运行上述测试，核对根目录插件与清单一致。数据包可用以下命令生成，`--output` 必须是新文件：
-
-```sh
-python3 tools/windows_packager/make_update.py \
-  --repo . --version a39-20261117 \
-  --output build/a39-20261117.zip
-```
-
-该 ZIP 是数据包，包含插件、补丁数据和五个默认音效，不含生成后的尼康固件。各版本发布页提供已更新的 Windows 程序和可供早期工具导入的数据包。
+4. 运行上述测试，核对根目录插件与清单一致。
+5. 重新构建 `Z5Extensions.exe`。发布页只提供这个程序，不再制作模块更新包。
 
 ## 提交边界
 

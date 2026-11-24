@@ -17,6 +17,8 @@ Running `patch.py` downloads z5mod's decoder files, including its XOR mask, into
 - **WonderLantern-z6** (https://github.com/WonderLantern/WonderLantern-z6): feature design for custom shutter sounds and framing guides was studied. No code from it is used.
 - **z7-qemu** (https://github.com/WonderLantern/z7-qemu, by R3tr0ooo and contributors), **z6-qemu** (https://github.com/WonderLantern/z6-qemu) and **z7ii-qemu** (https://github.com/nightglasses/z7ii-qemu): the separate z5-qemu emulator used during development derives from the first two and consulted the third. None of their code is in this repository.
 
+- **Noto Sans CJK SC** (Adobe / Google, SIL OFL 1.1, see licenses/OFL-Noto-CJK.txt): five glyphs the card module adds to the Simplified Chinese font at run time. The font-extension layout follows wonder-lantern-z30 `extend_font` (MIT).
+
 ## Test sounds
 
 `card/SHUTTER/1.WAV` to `5.WAV` are default test sounds provided by the maintainer, who states that they are open-source audio with no copyright restrictions. `2.WAV` had its leading silence trimmed.

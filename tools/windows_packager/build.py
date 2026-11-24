@@ -32,7 +32,7 @@ def main():
         command.extend(['--hidden-import', module])
     for source, target in [('patch.py', 'assets'), ('patch_data', 'assets/patch_data'),
                            ('card', 'assets/card'), ('LICENSE', 'assets'), ('NOTICE.md', 'assets'),
-                           ('README.md', 'assets')]:
+                           ('README.md', 'assets'), ('licenses', 'assets/licenses')]:
         command.extend(['--add-data', str(repo / source) + ';' + target])
     command.extend(['--add-data', str(HERE / '使用说明.txt') + ';.'])
     for path in (out / 'sound-dist' / 'AudioConverter.exe', sound_source, HERE / 'audio_app.py', HERE / 'GPL-2.0.txt'):

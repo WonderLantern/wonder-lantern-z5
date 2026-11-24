@@ -21,7 +21,7 @@
 | `src/firmware_hooks/` | 固件钩子生成与研究代码；普通卡模块修改无需改这里 |
 | `patch.py`、`patch_data/patches.json` | 校验用户提供的固件并生成本地结果 |
 | `tests/card_module/` | 编译实际 C 辅助函数的宿主逻辑测试 |
-| `tools/windows_packager/` | Windows 工具、数据包生成和校验 |
+| `tools/windows_packager/` | Windows 工具 |
 
 ## 工作范围与文件边界
 
@@ -82,7 +82,7 @@ python3 -B -m unittest discover -s tools/windows_packager -p 'test_*.py'
 1. 将通过检查的产物复制到 `card/Z5APP.BIN`。
 2. 更新 `patch_data/patches.json` 的 `card_module_sha256`；卡模块任务保持固件 edits、appends 和输出摘要不变，并核对差异。
 3. 从本次 `report.json` 更新 `docs/card-module-release.json`，如实记录源码摘要、检查结果、是否实机验证。更新用户文档中的版本和绘制行为；中文/英文 README 保持一致。
-4. 需要数据包时运行 `python3 tools/windows_packager/make_update.py --repo . --version <version> --output build/<version>.zip`，输出文件必须尚不存在。校验包只含清单、插件、补丁数据和五个默认音效，并测试导入/校验流程。
+4. 重新构建 `Z5Extensions.exe`（`tools/windows_packager/build.py`）。发布页只提供这个程序，不再制作模块更新包。
 5. 最后检查 `git diff --check`、`git diff --stat` 和 `git status --short`，确认没有实验文件、私有输入或无关改动混入。
 
-现有兼容固件用户只需替换卡模块并完全断电重启。上游旧 Windows EXE 不自动包含本 fork 插件，需导入本 fork 数据包或重建工具。
+A81 需要刷 A81 固件并同时替换卡模块；旧 EXE 不包含新插件，需下载新的 EXE。
