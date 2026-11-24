@@ -14,6 +14,9 @@
 #define A43_MASK_PTR    0xC18C7598u
 #define A43_MASK_COLOR  0x80000000u
 #define A43_MASK_SIDE   40u            /* 720 * 332 / 6016 = 39.7 */
+#define A43_MASK_REDRAW 1500u          /* A79: unfilled pixels that mean a large native redraw */
+#define A43_MASK_HOLD_MS 250u          /* A79: wait this long for the native controls to settle */
+#define A43_MASK_FREE_MS 600u          /* A79: then fill every bank without a new hold */
 
 Z5_IMAGE(custom_disp_image) static u32 aspect_mask_on(void)
 {
@@ -21,7 +24,8 @@ Z5_IMAGE(custom_disp_image) static u32 aspect_mask_on(void)
     return p >= 0xC1800000u && p < 0xC8700000u;
 }
 
-/* Returns the number of pixels changed; marks changed rows for the sparse publish. */
+/* draw 1: fill transparent pixels; 0: erase the mask colour; 2: only count the transparent pixels.
+ * Returns the number of pixels changed (or counted); marks changed rows for the sparse publish. */
 Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2")))
 static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw)
 {
@@ -35,6 +39,7 @@ static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw)
             for (u32 x = x0; x < x0 + A43_MASK_SIDE; x++) {
                 u32 v = row[x];
                 if (draw ? v != 0u : v != A43_MASK_COLOR) continue;
+                if (draw == 2u) { changed++; continue; }
                 row[x] = draw ? A43_MASK_COLOR : 0u;
                 if (x < first) first = x;
                 last = x;
@@ -59,6 +64,24 @@ Z5_IMAGE(custom_disp_image) static void aspect_mask_paint(overlay_state *s, u32 
             for (i = 0; i < 4u; i++) if (!s->mask_owned[i]) { slot = i; break; }
             if (slot == 4u) { slot = s->mask_next & 3u; s->mask_next++; }
             s->mask_owned[slot] = surface;
+        }
+        /* A79: after a large native redraw (back from the instant review, page entry, power-on) the native
+         * controls finish over several passes; filling at once lit the mask under icon pixels that were still
+         * transparent (camera: brief flicker near the exposure scale). Wait until the redraw settles: a pass
+         * that finds more than A43_MASK_REDRAW unfilled pixels starts a hold of A43_MASK_HOLD_MS; small
+         * repairs during shooting are still filled at once. After a hold, every rotating bank is filled
+         * freely for A43_MASK_FREE_MS, so the other (still empty) banks do not start a new hold each. */
+        u32 now = Z5_FULL_TICK;
+        if (s->mask_hold) {
+            if (now - s->mask_hold_tick < A43_MASK_HOLD_MS) { s->mask_holds++; return; }
+            s->mask_hold = 0;
+            s->mask_free = 1; s->mask_free_tick = now;
+        } else {
+            if (s->mask_free && now - s->mask_free_tick >= A43_MASK_FREE_MS) s->mask_free = 0;
+            if (!s->mask_free && aspect_mask_apply(surface, width, height, 2u) > A43_MASK_REDRAW) {
+                s->mask_hold = 1; s->mask_hold_tick = now; s->mask_holds++;
+                return;
+            }
         }
         s->mask_pixels += aspect_mask_apply(surface, width, height, 1u);
         s->mask_paints++;
