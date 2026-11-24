@@ -53,15 +53,21 @@ IMG_FN static void a43_apply(cm_t *c)
     __asm__ volatile ("dsb sy" ::: "memory");
 }
 
-/* A70 (2026-11-24): A69 on camera (DIAG18/19, DSC_1708-1712): the first 4:3 shot after switching (or after power-on
- * with 4:3 saved) shows a pixel mess in the image review right after the shot; the file is fine and so is the review
- * of every later shot. The A68 firmware hook gives the capture info area 8 / kind 3 at the shot's first geometry
- * call and leaves them there, so from the second shot on, the info already says 4:3 before the next shot; the
- * review apparently reads that state before the shot's own configuration. Here the info is put into that same
- * "after a 4:3 shot" state as soon as 4:3 is on, and back to the stock values of the actual area when it is off.
- * Capture info pointer 0xC18C68CC (A57 RAM dumps: 0xC3B34558 every power-up, the info of every A68/A69 shot).
- * It is cross-checked with the firmware log (callers 0x10143229); a mismatch stops it. Record 0x36A00 words 3-6:
- * info, primed, restored, stopped. camera_verified: false. */
+/* A70 (2026-11-24): A69 on camera (DIAG18/19, DSC_1708-1712): the first 4:3 shot after power-on (with 4:3 saved)
+ * shows a pixel mess in the image review right after the shot; the file is fine and so is the review of every later
+ * shot. The A68 firmware hook gives the capture info area 8 / kind 3 at the shot's first geometry call and leaves
+ * them there. A70 put the info into that "after a 4:3 shot" state whenever 4:3 was on (pointer 0xC18C68CC).
+ * A71 (2026-11-24): A70 on camera (DIAG20/DIAG01, DSC_1713-1720): power-on with 4:3, FX shot, back to 4:3 -> review
+ * mess and a freeze; after a restart everything fine. The record shows 0xC18C68CC moves to another object around
+ * shots (A70's cross-check stopped the priming after the first 4:3 shot), so after a shot A70 could write into the
+ * wrong object. The JPEG log (q[13] = capture info of each encode) shows one capture info 0xC3B34558 for every FX,
+ * DX and 4:3 shot of A69/A70. A71 locks the pointer's first valid value and writes only there, and only before the
+ * first JPEG encode of the power-up (JPEG log count at record 0x33004; RAW shots encode their preview too) and the
+ * first 4:3 configuration; it stops for good when the pointer leaves the locked value. The mess was always the first
+ * 4:3 shot of a power-up (A69 DSC_1708/1711; A70 after the restart the primed first shot and the first 4:3 shot after
+ * FX / DX were fine), so later shots need no priming.
+ * Record 0x36A00 words 3-6: info, primed, restored, stop value; 7: pointer changes, 8-15: first 4 (ms, value).
+ * camera_verified: false. */
 #define A43_INFO_PTR   (*(volatile const u32 *)0xC18C68CCu)
 #define A43_KIND_FN    ((u32 (*)(u32))0x10190577u)          /* aspect kind of an area (stock, A59 notes) */
 
@@ -70,28 +76,40 @@ IMG_FN static void a43_prime(cm_t *c)
     bt_t *t = BTP(c);
     volatile u32 *log = c->dg_buf ? (volatile u32 *)(c->dg_buf + A43_LOG_OFF) : 0;
     const volatile u32 *fw = (const volatile u32 *)(t->a43_copy + 224u);
-    u32 info = A43_INFO_PTR, i, area;
+    u32 info = A43_INFO_PTR, area, n;
     volatile u8 *a, *k;
-    if (t->a43_prime_off || info < RAM_LO || info >= RAM_HI - 0x400u) return;
-    for (i = 0; i < 8u; i++)
-        if (fw[3u + i * 8u + 7u] == 0x10143229u && fw[3u + i * 8u + 5u] != info) {
-            t->a43_prime_off = 1u;
-            if (log) log[6] = fw[3u + i * 8u + 5u];
-            return;
+    if (info != t->a43_last_ptr) {                                 /* trace the pointer's first changes */
+        t->a43_last_ptr = info;
+        if (log) {
+            n = log[7];
+            if (n < 4u) { log[8u + 2u * n] = *(volatile const u32 *)0xC18EB388u; log[9u + 2u * n] = info; }
+            log[7] = n + 1u;
         }
+    }
+    if (t->a43_prime_off || !log) return;                          /* no record buffer: no shot detector */
+    if (!t->a43_lock) {
+        if (info < RAM_LO || info >= RAM_HI - 0x400u) return;
+        t->a43_lock = info;
+    }
+    if (info != t->a43_lock || fw[0] != 0u || *(volatile const u32 *)(c->dg_buf + 0x33004u) != 0u) {
+        t->a43_prime_off = 1u;                                     /* a shot happened: never write again */
+        log[6] = info;
+        return;
+    }
+    info = t->a43_lock;
     if (*(volatile u32 *)(info + 0xFCu) != 0u) return;             /* photo branch only */
     a = (volatile u8 *)(info + 0x200u);
     k = (volatile u8 *)(info + 0x21Eu);
     if (a43_is_on()) {
         if (*a == 0u && *k == 0u) {
             *a = 8u; *k = 3u;
-            if (log) { log[3] = info; log[4]++; }
+            log[3] = info; log[4]++;
         }
     } else if (*k == 3u) {                                         /* kind 3 is ours: stock maps no area to it */
         area = A43_AREA_NOW;
         if (area > 8u) return;
         *a = (u8)area; *k = (u8)A43_KIND_FN(area);
-        if (log) { log[3] = info; log[5]++; }
+        log[3] = info; log[5]++;
     }
 }
 
