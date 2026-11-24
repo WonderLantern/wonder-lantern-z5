@@ -1,6 +1,5 @@
 /* Native detailed-page overlays and refresh diagnostics. */
 
-#define A43_MASK_SEEN_WORDS 1200u   /* A80: 2 x 40 x 480 bar pixels, one bit each */
 typedef struct {
     u32 active, reason, entries, installs, restores;
     volatile u32 ready, paints, source_reason, source_busy, source_gate;
@@ -16,7 +15,7 @@ typedef struct {
     u32 walk_tick, walk_own_ms, walk_tracking, walk_delay;
     sparse_dirty sparse;
     u32 mask_owned[4], mask_next, mask_paints, mask_erases, mask_pixels;  /* A74 4:3 mask */
-    u32 mask_epoch_tick, mask_seen[2][A43_MASK_SEEN_WORDS];                /* A80 native-icon memory (bar pixels) */
+    u32 mask_hold, mask_hold_tick, mask_holds, mask_free, mask_free_tick;                            /* A79 settle hold */
 } overlay_state;
 
 Z5_IMAGE(custom_disp_image) static overlay_state *overlay_data(void)
