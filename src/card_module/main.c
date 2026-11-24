@@ -55,6 +55,7 @@ typedef struct {
     u32 wait_from, ready;           /* A55: end of the last shot (ms clock); consecutive ready passes */
     u32 a43_sel, a43_status;        /* A69: photo aspect (0 off, 1 4:3; MENU.DAT word 4 bits 12-15); prepare result */
     u32 a43_copy, a43_hdr;          /* A69: 4:3 table copies (record buffer 0x36A40); "照片画幅" page header */
+    u32 a43_prime_off;              /* A70: capture-info priming stopped (pointer check failed) */
     u32 a43_entry_row;              /* A69: the photo-menu row, for its text kind */
 } bt_t;
 #define BTP(c)        ((bt_t *)(c)->burst_viewall_off)

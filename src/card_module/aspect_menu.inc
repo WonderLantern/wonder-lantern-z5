@@ -53,9 +53,53 @@ IMG_FN static void a43_apply(cm_t *c)
     __asm__ volatile ("dsb sy" ::: "memory");
 }
 
+/* A70 (2026-11-24): A69 on camera (DIAG18/19, DSC_1708-1712): the first 4:3 shot after switching (or after power-on
+ * with 4:3 saved) shows a pixel mess in the image review right after the shot; the file is fine and so is the review
+ * of every later shot. The A68 firmware hook gives the capture info area 8 / kind 3 at the shot's first geometry
+ * call and leaves them there, so from the second shot on, the info already says 4:3 before the next shot; the
+ * review apparently reads that state before the shot's own configuration. Here the info is put into that same
+ * "after a 4:3 shot" state as soon as 4:3 is on, and back to the stock values of the actual area when it is off.
+ * Capture info pointer 0xC18C68CC (A57 RAM dumps: 0xC3B34558 every power-up, the info of every A68/A69 shot).
+ * It is cross-checked with the firmware log (callers 0x10143229); a mismatch stops it. Record 0x36A00 words 3-6:
+ * info, primed, restored, stopped. camera_verified: false. */
+#define A43_INFO_PTR   (*(volatile const u32 *)0xC18C68CCu)
+#define A43_KIND_FN    ((u32 (*)(u32))0x10190577u)          /* aspect kind of an area (stock, A59 notes) */
+
+IMG_FN static void a43_prime(cm_t *c)
+{
+    bt_t *t = BTP(c);
+    volatile u32 *log = c->dg_buf ? (volatile u32 *)(c->dg_buf + A43_LOG_OFF) : 0;
+    const volatile u32 *fw = (const volatile u32 *)(t->a43_copy + 224u);
+    u32 info = A43_INFO_PTR, i, area;
+    volatile u8 *a, *k;
+    if (t->a43_prime_off || info < RAM_LO || info >= RAM_HI - 0x400u) return;
+    for (i = 0; i < 8u; i++)
+        if (fw[3u + i * 8u + 7u] == 0x10143229u && fw[3u + i * 8u + 5u] != info) {
+            t->a43_prime_off = 1u;
+            if (log) log[6] = fw[3u + i * 8u + 5u];
+            return;
+        }
+    if (*(volatile u32 *)(info + 0xFCu) != 0u) return;             /* photo branch only */
+    a = (volatile u8 *)(info + 0x200u);
+    k = (volatile u8 *)(info + 0x21Eu);
+    if (a43_is_on()) {
+        if (*a == 0u && *k == 0u) {
+            *a = 8u; *k = 3u;
+            if (log) { log[3] = info; log[4]++; }
+        }
+    } else if (*k == 3u) {                                         /* kind 3 is ours: stock maps no area to it */
+        area = A43_AREA_NOW;
+        if (area > 8u) return;
+        *a = (u8)area; *k = (u8)A43_KIND_FN(area);
+        if (log) { log[3] = info; log[5]++; }
+    }
+}
+
 IMG_FN static void a43_watch(cm_t *c)      /* module task, every 50 ms: follow the area and the choice */
 {
-    if (BTP(c) && BTP(c)->a43_status == 1u && a43_want(c) != a43_is_on()) a43_apply(c);
+    if (!BTP(c) || BTP(c)->a43_status != 1u) return;
+    if (a43_want(c) != a43_is_on()) a43_apply(c);
+    a43_prime(c);
 }
 
 IMG_FN static void a43_row_kind(volatile u32 *r, u32 hans)
