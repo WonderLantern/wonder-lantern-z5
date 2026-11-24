@@ -11,7 +11,7 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Feature | Description | Camera tested |
 | --- | --- | --- |
 | Custom shutter sound | Plays a WAV from the card, up to 5 sounds, with sound and volume settings and separate switches for electronic and mechanical shutter (mechanical off by default) | **Tested on the author's camera** (A55) |
-| English / Chinese menus | The card module's menus follow the camera language: English or Simplified Chinese | In use on the author's camera |
+| English / Chinese menus | Every menu of the card module has English and Simplified Chinese text and follows the camera language automatically: Simplified Chinese when the camera is set to Simplified or Traditional Chinese, English for every other language | Chinese: in use on the author's camera. English: checked in the emulator (except the Photo aspect page), no separate camera record |
 | Histogram with level | Shows the histogram on the virtual horizon page | Yes (photo mode, rear monitor) |
 | Framing grid styles | Adds 3×3 and 2×2 to Custom Setting d8. The stock "On" remains 4×4 | Yes (photo mode, rear monitor) |
 | Photo highlight display (zebra) | Brings the stock movie highlight display to photo live view, with its own switch in the Setup menu | Yes (photo mode, rear monitor) |
@@ -25,7 +25,7 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Timed Bulb | Set hours, minutes, seconds, shot count and interval in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | **Tested on the author's camera** (series: A55) |
 | Photo aspect | 4:3 or 2.33:1 in the photo shooting menu; JPG and NEF are recorded in that shape, with a mask on the monitor and in the viewfinder (needs Custom DISP on). **The mask can show minor glitches in some situations; this is a known issue.** See [docs/PHOTO_ASPECT.md](docs/PHOTO_ASPECT.md) (Chinese) | **Tested on the author's camera** (A81) |
 | Film grain FILM | FUJI400 / HP5, strength 1–6, on the JPG and the NEF's embedded preview; about 1.1 s per image. **Avoid high-speed bursts with grain on** (low-speed 3 fps ran 20+ frames without waiting; high speed waits 1–2 s after 4 frames). Implementation and parameters: [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md) (Chinese) | **Tested on the author's camera** (A52) |
-| Lightroom grain inside the NEF | With "NEF写入: on" the camera writes matching Lightroom grain into the NEF's own XMP; with Lightroom's raw default set to "Camera Settings" it applies on import, no sidecar files | **Tested on the author's camera** (Lightroom Classic 13.2) |
+| Lightroom grain inside the NEF | With "NEF write: On" the camera writes matching Lightroom grain into the NEF's own XMP; with Lightroom's raw default set to "Camera Settings" it applies on import, no sidecar files | **Tested on the author's camera** (Lightroom Classic 13.2) |
 | Faster photo listing over USB | Speeds up listing photos on a computer over USB (port of Z30 mtp-fast); on whenever the card module is installed | Ran on the author's camera, **effect not verified** |
 | Test records | One-press record of a problem (`Z5LOG` folder) for feedback | Yes |
 | Burst speed-up (test) | Mechanical 233 → ~195 ms/frame (camera-tested with FX and DX lenses). **Silent: no clear gain yet** (~380 ms/frame vs 400 stock; under investigation). **AF-S only: in AF-C focus also stays at the first frame, not for tracking.** Setup menu row "连拍提速" below the extension row, two switches (mechanical / electronic; from A50 off at every power-on, turning them on lasts until power-off). While on, "view all in continuous mode" cannot show live view during a burst. See [docs/BURST_SPEED.md](docs/BURST_SPEED.md) (Chinese) | Older upstream build: mechanical tested, silent ineffective; this combination awaits camera testing |
@@ -42,7 +42,7 @@ The user reported that A39 worked in camera testing. Individual display scenario
 
 ## Windows tool (no installation)
 
-Download `Z5Extensions.exe` from the [A81 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a81-20261125). It generates the A81 firmware and card files from the official C 1.50 file. It is the only download: separate module files and update bundles are no longer provided, and bundle import has been removed. To update, download the new exe. The output includes Chinese instructions and the shutter sound converter.
+Download `Z5Extensions.exe` from the [A81 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a81-20261125). It generates the A81 firmware and card files from the official C 1.50 file. It is the only download: separate module files and update bundles are no longer provided, and bundle import has been removed. To update, download the new exe. The output includes Chinese instructions and the shutter sound converter. The tool's window is in Chinese: choose the official file, choose the output folder, then press the button at the bottom.
 
 ## Usage
 
