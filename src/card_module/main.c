@@ -56,6 +56,7 @@ typedef struct {
     u32 a43_sel, a43_status;        /* A69: photo aspect (0 off, 1 4:3; MENU.DAT word 4 bits 12-15); prepare result */
     u32 a43_copy, a43_hdr;          /* A69: 4:3 table copies (record buffer 0x36A40); "照片画幅" page header */
     u32 a43_entry_row;              /* A69: the photo-menu row, for its text kind */
+    u32 a43_loaded;                 /* A81: ratio whose tables are in the active groups (1 4:3, 2 2.33:1) */
 } bt_t;
 #define BTP(c)        ((bt_t *)(c)->burst_viewall_off)
 #endif
@@ -244,7 +245,7 @@ typedef struct {
 #define BURST_CFG_SIL_OFF  0x20u        /* MENU.DAT word 2: electronic (silent) burst speed-up off */
 #define CFG_MAGIC     0x4D53355Au      /* 'Z5SM' */
 #ifdef ASPECT43_FX
-#define A43_PROFILES  1u               /* A69: photo aspects after "off" (1 = 4:3) */
+#define A43_PROFILES  2u               /* A69: photo aspects after "off" (1 = 4:3); A81: 2 = 2.33:1 */
 #else
 #define A43_PROFILES  0u               /* no photo-aspect option: word 4 bits 12-15 must stay 0 */
 #endif
@@ -1709,10 +1710,14 @@ IMG_FN static void hub_labels(cm_t *c)
 
 #ifdef ASPECT43_FX
 #include "aspect43_fx_tables.inc"
+#include "aspect233_tables.inc"     /* A81 */
 #define A43_PTRS      0xC18C7554u
 #define A43_LOG_OFF   0x36A00u
 #define A43_COPY_OFF  0x36A40u
-#define A43_COPY_BYTES 512u   /* A68: groups, then the firmware's configuration log from +224 */
+#define A43_COPY_BYTES 0x480u /* A68: groups, firmware log from +224; A81: parameter block +0x200, table sets for
+                                * 4:3 at +0x280 and 2.33:1 at +0x380 (the active groups are copied from them) */
+#define A43_STASH43   0x280u
+#define A43_STASH233  0x380u
 #include "aspect_menu.inc"     /* A69: image code (a43_apply, a43_watch, the "照片画幅" page) */
 #endif
 #include "burst_speed.inc"  /* image code: must stay before Z5_IMAGE_END */
@@ -2345,7 +2350,12 @@ static u32 install_fx43(cm_t *c)
     }
     if (status == 1u) {
         for (g = 0; g < A43_COPY_BYTES; g++) copy[g] = g < A43_GROUPS * A43_GROUP_BYTES ? a43_tables[g] : 0u;
+        for (g = 0; g < A43_GROUPS * A43_GROUP_BYTES; g++) {   /* A81: both table sets for runtime switching */
+            copy[A43_STASH43 + g] = a43_tables[g];
+            copy[A43_STASH233 + g] = a233_tables[g];
+        }
         BTP(c)->a43_copy = (u32)copy;
+        BTP(c)->a43_loaded = 1u;                               /* the active groups hold 4:3 */
     }
     if (BTP(c)) {
         BTP(c)->a43_status = status;

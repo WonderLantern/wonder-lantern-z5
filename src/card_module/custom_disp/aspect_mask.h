@@ -12,13 +12,14 @@
  * A79 (2026-11-24): the EVF too. Its native surfaces (720 x 480, 1024 x 682 / 768, 1280 x 960) carry the 3:2
  * live view across the full width, so each bar is width * 332 / 6016 columns (40 / 57 / 71), full height; on
  * the 4:3 surfaces the extra rows above / below are black or info bars, where 50% black changes nothing visible.
+ * A81: 2.33:1 uses top / bottom bands instead (ratio from the module's parameter block).
  * Limits (A74): only on pages the custom DISP overlay draws on; native redraws may briefly uncover a strip
  * until the next pass. camera_verified: false. */
 #define A43_MASK_PTR    0xC18C7598u
 #define A43_MASK_COLOR  0xF0000000u    /* A79: near black (94%, premultiplied); A74 was 0x80000000 (50%) */
 #define A43_MASK_SIDE   40u            /* 720 * 332 / 6016 = 39.7 */
 
-/* Bar width for a supported surface, 0 = not drawn. */
+/* Bar width (4:3, left / right) for a supported surface, 0 = not drawn. */
 Z5_IMAGE(custom_disp_image) static u32 aspect_mask_side(u32 width, u32 height)
 {
     if (width == 720u && height == 480u) return A43_MASK_SIDE;
@@ -27,24 +28,46 @@ Z5_IMAGE(custom_disp_image) static u32 aspect_mask_side(u32 width, u32 height)
     return 0u;
 }
 
-Z5_IMAGE(custom_disp_image) static u32 aspect_mask_on(void)
+/* A81: bar height (2.33:1, top / bottom): the 3:2 live view spans the full width, so the photo is width * 2576 /
+ * 6016 rows centred in the surface. 720 x 480 -> 86, 1024 x 682 -> 122, 1024 x 768 -> 165, 1280 x 960 -> 206. */
+Z5_IMAGE(custom_disp_image) static u32 aspect_mask_band(u32 width, u32 height)
 {
-    u32 p = *(volatile const u32 *)A43_MASK_PTR;
-    return p >= 0xC1800000u && p < 0xC8700000u;
+    if (width == 720u && height == 480u) return 86u;
+    if (width == 1024u && height == 682u) return 122u;
+    if (width == 1024u && height == 768u) return 165u;
+    if (width == 1280u && height == 960u) return 206u;
+    return 0u;
 }
 
-/* Returns the number of pixels changed; marks changed rows for the sparse publish. */
+/* 0 off, 1 4:3, 2 2.33:1. The A81 module writes 'RATP' and the ratio into the copy at +0x200; without the block
+ * (A78-era module) an enabled crop is 4:3. */
+Z5_IMAGE(custom_disp_image) static u32 aspect_mask_ratio(void)
+{
+    u32 p = *(volatile const u32 *)A43_MASK_PTR;
+    if (p < 0xC1800000u || p >= 0xC8700000u - 0x400u) return 0u;
+    volatile const u32 *b = (volatile const u32 *)(p - 32u + 0x200u);
+    if (b[0] != 0x50544152u) return 1u;
+    u32 r = (b[5] >> 8) & 255u;
+    return r == 2u ? 2u : 1u;
+}
+
+/* draw: 1 = fill transparent pixels of the ratio's bars, 0 = erase the mask colour anywhere on the surface.
+ * Returns the number of pixels changed; marks changed rows for the sparse publish. */
 Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2")))
-static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw)
+static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw, u32 ratio)
 {
     volatile u32 *px = (volatile u32 *)surface;
-    u32 changed = 0, bar = aspect_mask_side(width, height);
-    if (!bar || !surface || (surface & 3u)) return 0;
+    u32 changed = 0, bar = aspect_mask_side(width, height), band = aspect_mask_band(width, height);
+    if (!bar || !band || !surface || (surface & 3u)) return 0;
     for (u32 y = 0; y < height; y++) {
         volatile u32 *row = px + y * width;
-        for (u32 side = 0; side < 2u; side++) {
-            u32 x0 = side ? width - bar : 0u, first = 0xffffu, last = 0;
-            for (u32 x = x0; x < x0 + bar; x++) {
+        u32 x0a = 0, x1a = 0, x0b = 0, x1b = 0;               /* up to two column ranges in this row */
+        if (!draw) { x1a = width; }
+        else if (ratio == 2u) { if (y < band || y >= height - band) x1a = width; }
+        else { x1a = bar; x0b = width - bar; x1b = width; }
+        for (u32 k = 0; k < 2u; k++) {
+            u32 a = k ? x0b : x0a, e = k ? x1b : x1a, first = 0xffffu, last = 0;
+            for (u32 x = a; x < e; x++) {
                 u32 v = row[x];
                 if (draw ? v != 0u : v != A43_MASK_COLOR) continue;
                 row[x] = draw ? A43_MASK_COLOR : 0u;
@@ -61,21 +84,26 @@ static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw)
     return changed;
 }
 
-/* Called from the tail paint with the current mapped surface. The owned list is per output. */
+/* Called from the tail paint with the current mapped surface. The owned list is per output; a surface painted
+ * for another ratio is erased first (4:3 <-> 2.33:1 switch). */
 Z5_IMAGE(custom_disp_image) static void aspect_mask_paint(overlay_state *s, u32 surface, u32 width, u32 height)
 {
-    u32 on = aspect_mask_on(), i, slot = 4u;
+    u32 ratio = aspect_mask_ratio(), i, slot = 4u;
     for (i = 0; i < 4u; i++) if (s->mask_owned[i] == surface) { slot = i; break; }
-    if (on) {
+    if (ratio) {
         if (slot == 4u) {
             for (i = 0; i < 4u; i++) if (!s->mask_owned[i]) { slot = i; break; }
             if (slot == 4u) { slot = s->mask_next & 3u; s->mask_next++; }
             s->mask_owned[slot] = surface;
+            s->mask_ratio[slot] = ratio;
+        } else if (s->mask_ratio[slot] != ratio) {
+            s->mask_pixels += aspect_mask_apply(surface, width, height, 0u, 0u);
+            s->mask_ratio[slot] = ratio;
         }
-        s->mask_pixels += aspect_mask_apply(surface, width, height, 1u);
+        s->mask_pixels += aspect_mask_apply(surface, width, height, 1u, ratio);
         s->mask_paints++;
     } else if (slot != 4u) {
-        s->mask_pixels += aspect_mask_apply(surface, width, height, 0u);
+        s->mask_pixels += aspect_mask_apply(surface, width, height, 0u, 0u);
         s->mask_owned[slot] = 0;
         s->mask_erases++;
     }
