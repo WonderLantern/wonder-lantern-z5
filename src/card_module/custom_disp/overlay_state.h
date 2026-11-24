@@ -14,6 +14,7 @@ typedef struct {
     u32 diag_custom_ms;
     u32 walk_tick, walk_own_ms, walk_tracking, walk_delay;
     sparse_dirty sparse;
+    u32 mask_owned[4], mask_next, mask_paints, mask_erases, mask_pixels;  /* A74 4:3 mask */
 } overlay_state;
 
 Z5_IMAGE(custom_disp_image) static overlay_state *overlay_data(void)

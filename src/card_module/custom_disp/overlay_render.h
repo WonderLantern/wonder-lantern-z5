@@ -1,5 +1,6 @@
 /* Both outputs skip the native first walk, drawing on later checked walks.
  * Native controls keep their usual order. No firmware or instruction edits. */
+#include "aspect_mask.h"
 #define Z5_WALK_FIRST_RETURN  0x1030D8B5u
 #define Z5_WALK_SECOND_RETURN 0x1030D8DFu
 #define Z5_WALK_THIRD_RETURN  0x1030D8F9u
@@ -181,6 +182,7 @@ static u32 overlay_source_paint_impl(u32 object)
      * erase or restore it here: native controls have just finished drawing. */
     s->drawing_image = mapped; s->drawing_bank = native; s->ready = 1u;
     u32 painted = (flags & 2u) ? level_paint() : 1u;
+    if (!output) aspect_mask_paint(s, mapped, width, height);   /* A74: 4:3 live-view mask, LCD */
     s->ready = 0; s->drawing_image = s->drawing_bank = 0;
     if (!disp_pass_matches(output)) { m[18] = 0; return overlay_source_refuse(s, 32u); }
     overlay_diag_cost(1u, Z5_FULL_TICK - start);
