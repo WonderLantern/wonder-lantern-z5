@@ -54,10 +54,7 @@ Z5_IMAGE(custom_disp_image) static u32 aspect_mask_ratio(void)
 }
 
 /* draw: 1 = fill transparent pixels of the ratio's bars, 0 = erase the mask colour anywhere on the surface.
- * Returns the number of pixels changed; marks changed rows for the sparse publish.
- * A93 (2026-11-25): "transparent" = alpha 0, not only the value 0: after a shot the native code clears icon
- * rectangles and the boxes stayed open in front of the live view; pixels with any alpha (native UI) are left
- * alone as before. The only change against A91 (A89 / A90 / A92 changed more here and the overlay stopped). */
+ * Returns the number of pixels changed; marks changed rows for the sparse publish. */
 Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2")))
 static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw, u32 ratio)
 {
@@ -74,7 +71,7 @@ static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw, u32 r
             u32 a = k ? x0b : x0a, e = k ? x1b : x1a, first = 0xffffu, last = 0;
             for (u32 x = a; x < e; x++) {
                 u32 v = row[x];
-                if (draw ? (v >> 24) != 0u : v != A43_MASK_COLOR) continue;   /* A93: any alpha-0 pixel */
+                if (draw ? v != 0u : v != A43_MASK_COLOR) continue;
                 row[x] = draw ? A43_MASK_COLOR : 0u;
                 if (x < first) first = x;
                 last = x;
