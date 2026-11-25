@@ -47,9 +47,11 @@ IMG_FN static void a43_apply(cm_t *c)
             }
             const volatile u32 *src = (const volatile u32 *)(b + (r == 2u ? A43_STASH233 : A43_STASH43));
             for (i = 0; i < A43_GROUPS * A43_GROUP_BYTES / 4u; i++) ((volatile u32 *)b)[i] = src[i];
-            pb[1] = r == 2u ? (720u << 16) : 332u;     /* area offset (x, y) */
-            pb[2] = pb[3] = pb[4] = r == 2u ? 0u : 332u;   /* trim row (x, y) x 3 */
-            pb[5] = r == 2u ? 0x0202u : 0x0103u;       /* kind | ratio << 8 */
+            /* A82: the whole block from the stash (offset 0, the crop in the trim row, kind | ratio, the Adobe
+             * crop text, the descriptor override); the text pointer is this copy's own */
+            const volatile u32 *ps = (const volatile u32 *)(b + (r == 2u ? A43_PRM233 : A43_PRM43));
+            for (i = 1u; i < A82_PRM_BYTES / 4u; i++) pb[i] = ps[i];
+            pb[6] = b + (r == 2u ? A43_XMP233 : A43_XMP43);
             __asm__ volatile ("dsb sy" ::: "memory");
             pb[0] = 0x50544152u;                       /* 'RATP' */
             t->a43_loaded = r;

@@ -1710,12 +1710,17 @@ IMG_FN static void hub_labels(cm_t *c)
 
 #ifdef ASPECT43_FX
 #include "aspect43_fx_tables.inc"
-#include "aspect233_tables.inc"     /* A81 */
+#include "aspect_a82.inc"           /* A82: stock-plane tables, parameter blocks, Adobe crop texts */
 #define A43_PTRS      0xC18C7554u
 #define A43_LOG_OFF   0x36A00u
 #define A43_COPY_OFF  0x36A40u
-#define A43_COPY_BYTES 0x480u /* A68: groups, firmware log from +224; A81: parameter block +0x200, table sets for
-                                * 4:3 at +0x280 and 2.33:1 at +0x380 (the active groups are copied from them) */
+#define A43_COPY_BYTES 0x880u /* A68: groups, firmware log from +224; A81: parameter block +0x200, table sets for
+                                * 4:3 at +0x280 and 2.33:1 at +0x380 (the active groups are copied from them);
+                                * A82: parameter blocks at +0x460 / +0x4C0, Adobe crop texts at +0x520 / +0x6C0 */
+#define A43_PRM43     0x460u
+#define A43_PRM233    0x4C0u
+#define A43_XMP43     0x520u
+#define A43_XMP233    0x6C0u
 #define A43_STASH43   0x280u
 #define A43_STASH233  0x380u
 #include "aspect_menu.inc"     /* A69: image code (a43_apply, a43_watch, the "照片画幅" page) */
@@ -2349,11 +2354,14 @@ static u32 install_fx43(cm_t *c)
         if (!copy) status = 4u;
     }
     if (status == 1u) {
-        for (g = 0; g < A43_COPY_BYTES; g++) copy[g] = g < A43_GROUPS * A43_GROUP_BYTES ? a43_tables[g] : 0u;
-        for (g = 0; g < A43_GROUPS * A43_GROUP_BYTES; g++) {   /* A81: both table sets for runtime switching */
-            copy[A43_STASH43 + g] = a43_tables[g];
-            copy[A43_STASH233 + g] = a233_tables[g];
+        for (g = 0; g < A43_COPY_BYTES; g++) copy[g] = g < A43_GROUPS * A43_GROUP_BYTES ? a82_tables43[g] : 0u;
+        for (g = 0; g < A43_GROUPS * A43_GROUP_BYTES; g++) {   /* A81/A82: both table sets (stock FX RAW plane) */
+            copy[A43_STASH43 + g] = a82_tables43[g];
+            copy[A43_STASH233 + g] = a82_tables233[g];
         }
+        for (g = 0; g < A82_PRM_BYTES; g++) { copy[A43_PRM43 + g] = a82_params43[g]; copy[A43_PRM233 + g] = a82_params233[g]; }
+        for (g = 0; g < sizeof(a82_xmp43) && g < 0x1A0u; g++) copy[A43_XMP43 + g] = (u8)a82_xmp43[g];
+        for (g = 0; g < sizeof(a82_xmp233) && g < 0x1A0u; g++) copy[A43_XMP233 + g] = (u8)a82_xmp233[g];
         BTP(c)->a43_copy = (u32)copy;
         BTP(c)->a43_loaded = 1u;                               /* the active groups hold 4:3 */
     }

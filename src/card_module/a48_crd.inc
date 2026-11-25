@@ -96,6 +96,16 @@ IMG_FN static void a48_crd(cm_t *c, u32 *r)
                 wrote = 2u; h[9] += 1u;
             }
         }
+        /* A82: Adobe crop of the selected photo aspect (Z30 v44): the A82 block holds the text (+24) and its
+         * length (+28); it closes the crd description and opens a crs: one that the stock closer ends. */
+        u32 p = *(volatile const u32 *)0xC18C7598u;
+        if (p >= RAM_LO && p < RAM_HI - 0x400u) {
+            volatile const u32 *pb = (volatile const u32 *)(p - 32u + 0x200u);
+            if (pb[0] == 0x50544152u && pb[6] && w[2] == 0u && w[1] > pb[7] + 1u) {
+                ((void (*)(u32, const char *, ...))0x101BCFC1u)((u32)w, (const char *)pb[6]);
+                wrote |= 4u;
+            }
+        }
         after = w[1];
     }
     e = a48_event(h);
