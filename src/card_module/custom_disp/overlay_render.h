@@ -75,6 +75,31 @@ Z5_IMAGE(custom_disp_image) static u32 overlay_source_descriptor(void)
     u32 slot = Z5_PRESENT_SLOT(1u);
     return slot < 3u ? Z5_PRESENT_POOL + slot * 0xea8u + 0x84u : 0u;
 }
+/* A90 readout (A89 wrote into the module's parameter copy; with that build the mask vanished on the camera, so
+ * the counting now stays inside overlay_state.a90, see overlay_state.h). code: 0 painted, 1 mask-only painted, else
+ * the refusal reason. Only while the aspect mask is on. */
+Z5_IMAGE(custom_disp_image) static void aspect_mask_diag(overlay_state *s, u32 code)
+{
+    u32 why, key, n, k;
+    if (!aspect_mask_ratio()) return;
+    if (s->a90[0] != 0x414B534Du) { s->a90[0] = 0x414B534Du; s->a90[1] = sizeof(overlay_state); }  /* 'MSKA' */
+    s->a90[2]++;
+    if (code == 1u) { s->a90[4]++; s->a90[15] = Z5_FULL_TICK; s->a90[14] = Z5_FULL_TICK; }
+    else if (!code) { s->a90[3]++; s->a90[14] = Z5_FULL_TICK; }
+    else {
+        k = code == 2u ? 5u : code == 4u ? 6u : code == 8u ? 7u : code == 16u ? 8u : code == 32u ? 9u :
+            code == 64u ? 10u : code == 128u ? 11u : 12u;
+        s->a90[k]++;
+    }
+    why = overlay_reason();
+    key = (code & 0xFFu) | (why & 0xFFu) << 8 | (s->active ? 1u : 0u) << 16;
+    n = s->a90[13];
+    if (n && s->a90[16u + ((n - 1u) & 15u) * 3u + 1u] == key) return;
+    k = 16u + (n & 15u) * 3u;
+    s->a90[k] = Z5_FULL_TICK; s->a90[k + 1u] = key; s->a90[k + 2u] = s->a90[2];
+    s->a90[13] = n + 1u;
+}
+
 
 Z5_IMAGE(custom_disp_image) static u32 overlay_source_descriptor_matches(u32 output,
     const volatile u32 *d, u32 native, u32 width, u32 height)
@@ -83,39 +108,6 @@ Z5_IMAGE(custom_disp_image) static u32 overlay_source_descriptor_matches(u32 out
     return d && d[0] == 1u && d[1] == 1u && !d[0x4cu / 4u] &&
         d[0x48u / 4u] == 1u && d[2] == ((height << 16) | width) &&
         !d[0x38u / 4u] && d[0x28u / 4u] == native;
-}
-
-/* A89 readout: every tail-paint decision while the aspect mask is on, in the module's parameter copy past its
- * end (copy + 0x9C0 = DIAG 0x37400, saved with the record). code: 0 painted, 1 mask-only painted, else the
- * refusal reason (2, 4, 8, 16, 32, 64, 128). Head [0] 'MSK9' [1] decisions [2] mask-only paints [3] normal paints
- * [4..11] refusals 2 / 4 / 8 / 16 / 32 / 64 / 128 / other [12] last paint ms [13] last mask-only ms [14] timeline
- * count; timeline at +0x40, 64 x 16 bytes, one entry per change of (code, overlay_reason, active, output):
- * ms, code | why << 8 | active << 16 | output << 24, decisions so far, the mask's pixels changed so far. */
-#define A89_MASK_DIAG 0x9C0u
-Z5_IMAGE(custom_disp_image) static void aspect_mask_diag(overlay_state *s, u32 code)
-{
-    u32 p = *(volatile const u32 *)A43_MASK_PTR, why, key, i;
-    volatile u32 *d;
-    if (p < 0xC1800000u || p >= 0xC8700000u - 0x1000u) return;
-    d = (volatile u32 *)(p - 32u + A89_MASK_DIAG);
-    if (d[0] != 0x394B534Du) {
-        for (i = 0; i < 0x440u / 4u; i++) d[i] = 0u;
-        d[0] = 0x394B534Du;                            /* 'MSK9' */
-    }
-    d[1]++;
-    if (code == 1u) { d[2]++; d[13] = Z5_FULL_TICK; d[12] = Z5_FULL_TICK; }
-    else if (!code) { d[3]++; d[12] = Z5_FULL_TICK; }
-    else d[code == 2u ? 4u : code == 4u ? 5u : code == 8u ? 6u : code == 16u ? 7u : code == 32u ? 8u :
-           code == 64u ? 9u : code == 128u ? 10u : 11u]++;
-    why = overlay_reason();
-    key = (code & 0xFFu) | (why & 0xFFu) << 8 | (s->active ? 1u : 0u) << 16 | (disp_output() & 0xFFu) << 24;
-    i = d[14];
-    if (i && d[16u + ((i - 1u) & 63u) * 4u + 1u] == key) return;
-    {
-        volatile u32 *e = d + 16u + (i & 63u) * 4u;
-        e[0] = Z5_FULL_TICK; e[1] = key; e[2] = d[1]; e[3] = s->mask_pixels;
-    }
-    d[14] = i + 1u;
 }
 
 Z5_IMAGE(custom_disp_image) static u32 overlay_source_refuse(overlay_state *s, u32 reason)

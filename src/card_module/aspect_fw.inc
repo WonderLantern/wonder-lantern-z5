@@ -34,6 +34,9 @@
  * (4:3: 688 columns of garbage on the right, 2.33: 1456 rows at the bottom). The type-1 decode descriptor + 32 / 36
  * comes from that table (0x10354FFA), so A86's "6016 x 4016" test never matched it. Now: 6040 x 4032 -> our JPEG
  * size + (24, 16), the plane-like size a stock FX NEF has around its 6016 x 4016 JPEG: 5376 x 4032 / 6040 x 2592.
+ * A90 (A89 camera snapshots): the last FX-sized value of our NEF files was the full-size image entry (kind 6,
+ * desc + 0x60) from 0x10355DCC (output-size table by the file's area code), filled after the preview hooks.
+ * Kind 27 (A90m stub) answers it with the record's main size for type-1 files whose main size is ours.
  * Same behaviour as the A84 firmware-only hooks (a84_fx43.S) with a parameter block present, which this module
  * always writes (a43_apply). "On" = area 8's group-1 pointer in RAM, as in the firmware. Only .text here (hook
  * image): no string literals or const tables. camera_verified: false. */
@@ -44,6 +47,7 @@
 #define AF_K_PLAY   23u
 #define AF_K_EXT    24u
 #define AF_K_NEF    25u
+#define AF_K_FULL   27u             /* A90: 0x10355DCC, full-size image size of the playback prep */
 #define AF_K_RAW    26u             /* A88: 0x1034F6DE, the join of the RAW paths ([r4] = 2) of the decode setup */
 #define AF_REVIEW_MS 6000u          /* A87: the shot whose instant review may stand in for the file service */
 #define AF_SVC      0x103BC7E0u     /* file service: (kind, type, handle, u16 out[2]) -> 0 = ok */
@@ -197,13 +201,13 @@ IMG_FN static u32 af_pvw(u32 kind, u32 *r, u32 *how, u32 *q)
 }
 
 #ifdef A83_TRACE
-/* A89 readout: a snapshot per new preview row (first 10 rows) at DIAG 0x3EC00, 0x200 bytes each, to compare a stock
+/* A89 readout: a snapshot per new preview row (first 10 rows) at DIAG 0x39840 (A90), 0x200 bytes each, to compare a stock
  * NEF with ours where instant review refuses zoom and the navigator shows a strip:
  *   +0x00 ms, caller, kind | type | class | small (row key), ctx, desc, rec, file entry, last shot's capture info
  *   +0x20 decode descriptor [ctx + 28] 0xA0 bytes   +0xC0 file record + 0x380, 0x40 bytes
  *   +0x100 ctx 0x40 bytes   +0x140 file entry 0x20 bytes   +0x160 capture info + 0x200, 0x40 bytes
  *   +0x1A0 the caller's stack, 24 words (frame + 40 on) */
-#define A89_SNAP_OFF  0x3EC00u
+#define A89_SNAP_OFF  0x39840u        /* A90: 10 x 0x200 up to 0x3A840 (A89 0x3EC00 was inside the live rings) */
 IMG_FN static void a89_copy(volatile u32 *dst, u32 src, u32 bytes)
 {
     u32 i;
@@ -290,6 +294,22 @@ IMG_FN static void af_play(u32 *r)
     if (ratio == cls) r[AF_R0] = 8u;
 }
 
+/* A90 kind 27: 0x10355DCC(out, class, size) from the playback prep (callers 0x10355051 descriptor, 0x1034EA21
+ * file prep; r4 = the prep's file context). 0 = handled (wrote [out]). */
+IMG_FN static u32 af_full(u32 *r)
+{
+    u32 lr = r[AF_LR], ctx = r[AF_R4], rec, v;
+    if (lr != 0x10355051u && lr != 0x1034EA21u) return 1u;
+    if (ctx < RAM_LO || ctx >= RAM_HI - 0x40u || *(volatile const u8 *)(ctx + 4u) != 1u) return 1u;
+    rec = *(volatile const u32 *)(ctx + 12u);
+    if (rec < RAM_LO || rec >= RAM_HI - 0x400u) return 1u;
+    v = (u32)*(volatile const u16 *)(rec + 0x398u) | (u32)*(volatile const u16 *)(rec + 0x39Au) << 16;
+    if (!af_shape(v) || r[AF_R0] < RAM_LO || r[AF_R0] >= RAM_HI - 4u) return 1u;
+    *(volatile u16 *)r[AF_R0] = (u16)(v & 0xFFFFu);
+    *(volatile u16 *)(r[AF_R0] + 2u) = (u16)(v >> 16);
+    return 0u;
+}
+
 /* A87 kind 25: RAW branch of the playback decode setup; r[AF_R4] = decode info, caller [sp] = file entry */
 IMG_FN static u32 af_nef(u32 *r)
 {
@@ -328,6 +348,16 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
         if (!res) return 0u;
     } else if (kind == AF_K_PLAY) {
         af_play(r);
+    } else if (kind == AF_K_FULL) {
+        u32 res = af_full(r);
+#ifdef A83_TRACE
+        cm_t *c = cm_get();
+        if (c && c->dg_buf) {
+            volatile u32 *h = a83_head(c);
+            h[13] += res ? 0x10000u : 0x1000000u;   /* A90: [13] bits 16-23 kind 27 stock, bits 24-31 kind 27 handled */
+        }
+#endif
+        if (!res) return 0u;
     } else if (kind == AF_K_NEF || kind == AF_K_RAW) {
         u32 set = af_nef(r);
         (void)set;
@@ -337,7 +367,7 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
             volatile u32 *h = a83_head(c);
             u32 meta = r[AF_STACK];
             h[14] += set ? 0x10001u : 1u;      /* calls | area-8 stores << 16 (kinds 25 and 26) */
-            if (kind == AF_K_RAW) h[13] += 0x10000u;   /* A88: kind 26 calls in the high half of [13] */
+            (void)kind;                                /* A90: kind 26 has no stub; [13] high half is kind 27 */
             h[15] = meta >= RAM_LO && meta < RAM_HI - 0x20u ?
                 (u32)*(volatile const u16 *)(meta + 12u) | (u32)*(volatile const u16 *)(meta + 14u) << 16 : 0u;
         }

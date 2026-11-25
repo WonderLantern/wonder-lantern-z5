@@ -24,7 +24,7 @@
  * aspect_fw.inc kinds 22 (0x1034E5E4) / 24 (0x1034E692), one row per caller + type / class / small + main size:
  *   head [10] kind 22 calls [11] kind 24 calls [12] rows [13] rows dropped
  *   A87: head [14] kind 25 / 26 calls | area-8 stores << 16, [15] file entry + 12 / 14 (w | h << 16) of the last call
- *   A88: head [13] high half = kind 26 calls (low half: rows dropped); row [10] = decode descriptor + 32 / 36 and
+ *   A90: head [13] bits 16-23 kind 27 calls left stock, bits 24-31 kind 27 handled (low half: rows dropped); row [10] = decode descriptor + 32 / 36 and
  *   [11] = file entry + 12 / 14 at the row's first call (after the hook), [12..14] = service kinds 3..5
  *   row (64 bytes) [0] caller [1] kind | type << 8 | class << 16 | small << 24 [2] record + 0x398 (w | h << 16)
  *       [3] record + 0x39C at the first call [4] count [5] first ms [6] last ms [7] how (0 stock, 1 shape, 2 file
@@ -37,14 +37,14 @@
 #define A83_K_CLS     21u
 #define A83_OFF       0x38000u
 #define A83_MAGIC     0x54333841u     /* 'A83T' */
-#define A83_RCAP      256u            /* power of two; 0x38040 .. 0x3C040 */
-#define A83_DOFF      0x6400u
-#define A83_DCAP      64u             /* 0x3E400 .. 0x3EC00 */
+#define A83_RCAP      64u             /* A90: power of two; 0x38040 .. 0x39040 (was 256: ran into the live rings) */
+#define A83_DOFF      0x1040u         /* A90: rows 0x39040 .. 0x39840 (was 0x6400 = 0x3E400, inside the watch log) */
+#define A83_DCAP      64u             /* A90: 0x39040 .. 0x39840 (32 preview rows x 64 or 64 x 32) */
 #ifdef A84_FW
 /* A84m: kind 19 comes from aspect_fw.inc with the stub frame {r0-r6, r9, r12, lr}; 'A84T'; [5] byte 0 = info +
  * 0x220 (instead of info + 0), [6] = r2 (instead of info + 0xFC): the two values that pick the trim table */
 #undef A83_MAGIC
-#define A83_MAGIC     0x54393841u     /* 'A89T' (A84T, A86T-A88T before; a new tag clears stale rows) */
+#define A83_MAGIC     0x54303941u     /* 'A90T': new layout below 0x3B000 (VUI_DIAG_FOCUS rings from 0x3B000) */
 #define A83_LR        9u
 #else
 #define A83_LR        5u
@@ -54,7 +54,7 @@ IMG_FN static volatile u32 *a83_head(cm_t *c)
 {
     volatile u32 *h = (volatile u32 *)(c->dg_buf + A83_OFF);
     if (h[0] != A83_MAGIC) {
-        for (u32 i = 0; i < 0x8000u / 4u; i++) h[i] = 0u;    /* A89: up to the record end (snapshots at 0x3EC00) */
+        for (u32 i = 0; i < 0x3000u / 4u; i++) h[i] = 0u;    /* A90: 0x38000 .. 0x3B000 (key ring from 0x3B000) */
         h[2] = A83_RCAP; h[3] = 64u;
         h[0] = A83_MAGIC;
     }
