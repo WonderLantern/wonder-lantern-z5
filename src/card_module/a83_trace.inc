@@ -29,6 +29,15 @@
 #define A83_RCAP      256u            /* power of two; 0x38040 .. 0x3C040 */
 #define A83_DOFF      0x6400u
 #define A83_DCAP      64u             /* 0x3E400 .. 0x3EC00 */
+#ifdef A84_FW
+/* A84m: kind 19 comes from aspect_fw.inc with the stub frame {r0-r6, r9, r12, lr}; 'A84T'; [5] byte 0 = info +
+ * 0x220 (instead of info + 0), [6] = r2 (instead of info + 0xFC): the two values that pick the trim table */
+#undef A83_MAGIC
+#define A83_MAGIC     0x54343841u     /* 'A84T' */
+#define A83_LR        9u
+#else
+#define A83_LR        5u
+#endif
 
 IMG_FN static volatile u32 *a83_head(cm_t *c)
 {
@@ -77,7 +86,7 @@ IMG_FN static void a83_settle(volatile u32 *h)
 IMG_FN static void a83_trace(cm_t *c, u32 kind, u32 *r)
 {
     volatile u32 *h, *e;
-    u32 ms, lr = r[5], i;
+    u32 ms, lr = r[A83_LR], i;
     if (!c->dg_buf) return;
     h = a83_head(c);
     ms = *(volatile u32 *)CM_MS_CLOCK;
@@ -89,8 +98,13 @@ IMG_FN static void a83_trace(cm_t *c, u32 kind, u32 *r)
         if (a83_ram(r[1], 0x300u)) {
             volatile const u8 *info = (volatile const u8 *)r[1];
             e[0] = kind | (u32)info[0x200] << 8 | (u32)info[0x221] << 16;
+#ifdef A84_FW
+            e[5] = (u32)info[0x220] | (u32)info[0x21E] << 8 | (u32)info[0x221] << 16 | (u32)info[0x222] << 24;
+            e[6] = r[2];
+#else
             e[5] = (u32)info[0] | (u32)info[0x21E] << 8 | (u32)info[0x221] << 16 | (u32)info[0x222] << 24;
             e[6] = *(volatile const u32 *)(info + 0xFCu);
+#endif
         } else e[0] = kind;
         h[9] = i + 1u;
         return;

@@ -418,6 +418,11 @@ typedef u32 (*find_fn)(u32, u32);
 typedef void (*widget_fn)(u32, u32);
 
 #define FW(t, a) ((t)((a) | 1u))
+#ifdef A84_FW
+#define VUI_ENTRY vui_entry            /* A84m: kinds 19-23 to aspect_fw.inc, the rest to vui_hook */
+#else
+#define VUI_ENTRY vui_hook
+#endif
 #define IMG_FN __attribute__((section(".z5img.cm"), noinline, used, \
                               optimize("no-tree-loop-distribute-patterns")))
 
@@ -1727,6 +1732,9 @@ IMG_FN static void hub_labels(cm_t *c)
 #ifdef A83_TRACE
 #include "a83_trace.inc"       /* A83 readout: firmware trace kinds 19-21 -> DIAG 0x38000 */
 #endif
+#ifdef A84_FW
+#include "aspect_fw.inc"       /* A84m: the photo-aspect hook logic (firmware keeps stubs), kinds 19-23 */
+#endif
 #endif
 #include "burst_speed.inc"  /* image code: must stay before Z5_IMAGE_END */
 #include "vui_card.inc"   /* research/vertical-ui/vui_card.inc in the development tree */
@@ -2475,7 +2483,7 @@ static void first_run(cm_t *c)
     install_fx43(c);                           /* A69: 4:3 tables ready; the saved choice applied */
 #endif
     c->install = install_menu(c);
-    if (c->vui_install == 1u) { vui_label(c); focal_label(c); c->vui_fn = img_addr(c, vui_hook); }
+    if (c->vui_install == 1u) { vui_label(c); focal_label(c); c->vui_fn = img_addr(c, VUI_ENTRY); }
     hub_labels(c);                             /* group 116 */
 #ifdef ASPECT43_ROW
     install_area43(c);                         /* A60: label of the 4:3 row in "Choose image area" */

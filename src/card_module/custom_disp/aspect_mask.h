@@ -16,7 +16,9 @@
  * Limits (A74): only on pages the custom DISP overlay draws on; native redraws may briefly uncover a strip
  * until the next pass. camera_verified: false. */
 #define A43_MASK_PTR    0xC18C7598u
+#ifndef A43_MASK_COLOR                 /* A84 test: -DA43_MASK_COLOR=0xB3000000u (70%) */
 #define A43_MASK_COLOR  0xF0000000u    /* A79: near black (94%, premultiplied); A74 was 0x80000000 (50%) */
+#endif
 #define A43_MASK_SIDE   40u            /* 720 * 332 / 6016 = 39.7 */
 
 /* Bar width (4:3, left / right) for a supported surface, 0 = not drawn. */

@@ -1842,7 +1842,7 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
 #ifdef VUI_DIAG_FOCUS
     u8 *dge = 0;
 #endif
-#if defined(ASPECT43_FX) && defined(A83_TRACE)
+#if defined(ASPECT43_FX) && defined(A83_TRACE) && !defined(A84_FW)
     if (kind >= A83_K_CFG && kind <= A83_K_CLS) { if (c) a83_trace(c, kind, r); return; }   /* A83 readout */
 #endif
 #if defined(JPEG_LOG) && defined(VUI_DIAG_FOCUS)
@@ -2295,3 +2295,14 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
     if (kind == VUI_K_CLEAR && c->vui_hist_due && !(custom_current_flags(c) & 1u))
         vui_hist_draw(c, (s32_v *)r[0]);
 }
+
+#ifdef A84_FW
+/* A84m: the module entry behind vui_common. The photo-aspect stubs (kinds 19-23) get aspect_fw.inc's value back in
+ * r0 (hpvw: 0 = handled); every other kind goes to vui_hook as before (their stubs ignore r0). */
+IMG_FN static u32 vui_entry(u32 kind, u32 *r)
+{
+    if (kind >= AF_K_CFG && kind <= AF_K_PLAY) return af_hook(kind, r);
+    vui_hook(kind, r);
+    return kind;
+}
+#endif
