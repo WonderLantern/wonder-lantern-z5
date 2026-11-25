@@ -17,6 +17,11 @@
  * file itself reports through the native file service 0x103BC7E0 (kind 4 small / 5 large; the stock prep calls it
  * the same way at 0x1034EA38), used only when it is non-zero, within 640 x 480 / 1920 x 1080 and not 3:2 (stock
  * 3:2 files keep the stock path). Not the current shooting setting: old photos keep their own sizes.
+ * A86 (A85 camera, DIAG09-11): a NEF-only file (type 1) is recorded with the FX main size 6016 x 4016 (file record
+ * + 0x398, the file entry + 12 / 14 and the decode descriptor + 32 / 36 from the area table 0x10209328), while its
+ * full-size JPEG is 5352 x 4016 / 6016 x 2576: zoom shows the cut-off parts as garbage, 2.33 playback is shifted
+ * and hplay never matches it. When such a file's large preview (file service kind 5) is 1440 x 1080 or 1920 x 824,
+ * all three get our L size, the same values a 4:3 / 2.33 JPEG of ours carries. Only on the six checked callers.
  * Same behaviour as the A84 firmware-only hooks (a84_fx43.S) with a parameter block present, which this module
  * always writes (a43_apply). "On" = area 8's group-1 pointer in RAM, as in the firmware. Only .text here (hook
  * image): no string literals or const tables. camera_verified: false. */
@@ -102,23 +107,54 @@ IMG_FN static u32 af_query(u32 ctx, u32 q)
     return (u32)out[0] | (u32)out[1] << 16;
 }
 
-/* kinds 22 / 24: 0 = handled (wrote [r0]); *how = 1 shape, 2 file query, 0 stock; *q = the query result (or ~0) */
+/* A86: NEF-only main size (see the head). Returns 1 when it rewrote the sizes. meta = the file entry (caller's
+ * [sp + 12] in the descriptor prep 0x10354Dxx-0x103550xx, [sp] in the file prep 0x1034E7xx-0x1034EAxx). */
+IMG_FN static u32 af_nef_main(u32 kind, u32 *r, u32 ctx, u32 rec)
+{
+    u32 lr = r[AF_LR], v, w, h, meta, desc;
+    if (*(volatile const u8 *)(ctx + 4u) != 1u) return 0u;
+    if (*(volatile const u16 *)(rec + 0x398u) != 6016u || *(volatile const u16 *)(rec + 0x39Au) != 4016u) return 0u;
+    v = af_query(ctx, 5u);
+    if (v == (1440u | 1080u << 16)) { w = 5352u; h = 4016u; }
+    else if (v == (1920u | 824u << 16)) { w = 6016u; h = 2576u; }
+    else return 0u;
+    *(volatile u16 *)(rec + 0x398u) = (u16)w; *(volatile u16 *)(rec + 0x39Au) = (u16)h;
+    meta = lr == 0x1034E9CBu || lr == 0x1034E94Du ? r[AF_STACK] : r[AF_STACK + 3u];
+    if (meta >= RAM_LO && meta < RAM_HI - 0x20u &&
+        *(volatile const u16 *)(meta + 12u) == 6016u && *(volatile const u16 *)(meta + 14u) == 4016u) {
+        *(volatile u16 *)(meta + 12u) = (u16)w; *(volatile u16 *)(meta + 14u) = (u16)h;
+    }
+    if (lr != 0x1034E9CBu && lr != 0x1034E94Du) {
+        desc = *(volatile const u32 *)(ctx + 28u);
+        if (desc >= RAM_LO && desc < RAM_HI - 0x80u &&
+            *(volatile const u32 *)(desc + 32u) == 6016u && *(volatile const u32 *)(desc + 36u) == 4016u) {
+            *(volatile u32 *)(desc + 32u) = w; *(volatile u32 *)(desc + 36u) = h;
+        }
+    }
+    (void)kind;
+    return 1u;
+}
+
+/* kinds 22 / 24: 0 = handled (wrote [r0]); *how = 1 shape, 2 file query, 0 stock, | 4 when A86 rewrote the NEF
+ * main size; *q = the query result (or ~0) */
 IMG_FN static u32 af_pvw(u32 kind, u32 *r, u32 *how, u32 *q)
 {
-    u32 lr = r[AF_LR], ctx = r[AF_R4], rec, cls, v, w, h, small = r[AF_R2] != 0u, type;
+    u32 lr = r[AF_LR], ctx = r[AF_R4], rec, cls, v, w, h, small = r[AF_R2] != 0u, type, fixed;
     *how = 0u; *q = 0xFFFFFFFFu;
     if (!af_caller(kind, lr)) return 1u;
     if (ctx < RAM_LO || ctx >= RAM_HI - 0x40u) return 1u;
     rec = *(volatile const u32 *)(ctx + 12u);
     if (rec < RAM_LO || rec >= RAM_HI - 0x400u) return 1u;
+    fixed = af_nef_main(kind, r, ctx, rec) ? 4u : 0u;
+    *how = fixed;
     cls = af_shape((u32)*(volatile const u16 *)(rec + 0x398u) | (u32)*(volatile const u16 *)(rec + 0x39Au) << 16);
     if (cls == 1u) {
         *(volatile u32 *)r[AF_R0] = small ? (640u | 480u << 16) : (1440u | 1080u << 16);
-        *how = 1u; return 0u;
+        *how = fixed | 1u; return 0u;
     }
     if (cls == 2u) {
         *(volatile u32 *)r[AF_R0] = small ? (640u | 272u << 16) : (1920u | 824u << 16);
-        *how = 1u; return 0u;
+        *how = fixed | 1u; return 0u;
     }
     type = *(volatile const u8 *)(ctx + 4u);
     if (type != 1u && type != 2u) return 1u;

@@ -16,6 +16,7 @@ typedef struct {
     sparse_dirty sparse;
     u32 mask_owned[4], mask_next, mask_paints, mask_erases, mask_pixels;  /* A74 4:3 mask */
     u32 mask_ratio[4];                                                    /* A81: ratio painted per owned surface */
+    u32 mask_only_paints;                                                 /* A86: mask-only passes while busy */
 } overlay_state;
 
 Z5_IMAGE(custom_disp_image) static overlay_state *overlay_data(void)

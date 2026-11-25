@@ -107,7 +107,14 @@ static u32 overlay_source_paint_impl(u32 object)
         *(volatile u32 *)(disp_pre_widget(disp_output()) + 0x44u) = 1;
     if (!__sync_bool_compare_and_swap(&s->source_busy, 0u, 1u)) return 1u;
     u32 page = disp_logical_page(), flags = disp_flags();
-    if (m[18] || !m[4] || m[3] || !s->active || !disp_pass_matches(output) || overlay_reason() ||
+    /* A86: mask-only pass. After a shot the camera is busy (reason 4) and the overlay inactive until the next
+     * page entry (event 9, back from the review): native code clears and redraws icon rectangles meanwhile and the
+     * mask stayed open there for about a second (A85 video). While the aspect mask is on and the only refusal is
+     * busy / inactive, this pass paints the mask alone: no level, histogram or native level cleanup; every
+     * ordering, surface and descriptor check below still applies. */
+    u32 why = overlay_reason();
+    u32 mask_only = (why == 4u || (why == 0u && !s->active)) && aspect_mask_ratio();
+    if (m[18] || !m[4] || m[3] || (!s->active && !mask_only) || !disp_pass_matches(output) || (why && !mask_only) ||
         *(volatile const u32 *)(object + 0x4cu) != m[8]) return overlay_source_refuse(s, 2u);
     if (overlay_source_tail(object) != 1u) {
         s->late_frames++;
@@ -132,14 +139,15 @@ static u32 overlay_source_paint_impl(u32 object)
     level_state *l = (level_state *)m[22] + output;
     l->surface = mapped; l->width = width; l->height = height;
     /* Retire/move old histogram geometry using native cleanup, before the GPU fence. No statistics read. */
-    if (!output && s->before_level) ((void (*)(u32,u32,const u32 *,u16 *))s->before_level)(native, 0u, 0, 0);
+    if (!mask_only && !output && s->before_level)
+        ((void (*)(u32,u32,const u32 *,u16 *))s->before_level)(native, 0u, 0, 0);
     u32 start = Z5_FULL_TICK;
     level_sync();
     overlay_diag_cost(0u, Z5_FULL_TICK - start);
     /* The wait may yield. Revalidate before the first destructive store. */
     if (!disp_pass_matches(output) || disp_logical_page() != page || disp_flags() != flags ||
         !overlay_source_gui_gate() || overlay_source_tail(object) != 1u ||
-        Z5_LEVEL_FAST_BUFFER != native || overlay_reason() || !m[4] || m[20] ||
+        Z5_LEVEL_FAST_BUFFER != native || (mask_only ? (overlay_reason() & ~4u) : overlay_reason()) || !m[4] || m[20] ||
         Z5_LEVEL_FAST_SURFACE(native) != mapped ||
         size[0] != width || size[1] != height ||
         overlay_source_descriptor() != descriptor ||
@@ -148,7 +156,7 @@ static u32 overlay_source_paint_impl(u32 object)
         return overlay_source_refuse(s, 32u);
     }
     /* Pin a completed packet on either output. The producer never waits for GUI work. */
-    if ((flags & 4u) && (output || s->before_level)) {
+    if (!mask_only && (flags & 4u) && (output || s->before_level)) {
         u32 publication = m[12], index = publication & 3u;
         if (index) {
             m[11] = index;
@@ -181,8 +189,9 @@ static u32 overlay_source_paint_impl(u32 object)
     /* The leading callback retired this bank before native painters. Do not
      * erase or restore it here: native controls have just finished drawing. */
     s->drawing_image = mapped; s->drawing_bank = native; s->ready = 1u;
-    u32 painted = (flags & 2u) ? level_paint() : 1u;
+    u32 painted = (!mask_only && (flags & 2u)) ? level_paint() : 1u;
     aspect_mask_paint(s, mapped, width, height);   /* A74: 4:3 live-view mask (LCD); A79: EVF too */
+    if (mask_only) s->mask_only_paints++;
     s->ready = 0; s->drawing_image = s->drawing_bank = 0;
     if (!disp_pass_matches(output)) { m[18] = 0; return overlay_source_refuse(s, 32u); }
     overlay_diag_cost(1u, Z5_FULL_TICK - start);
@@ -194,7 +203,7 @@ static u32 overlay_source_paint_impl(u32 object)
     if (!painted || !published) return overlay_source_refuse(s, l->reason ? l->reason : 8u);
     s->paints++; s->source_reason = l->reason;
     overlay_refresh_completed(); overlay_diag_count(3u);
-    Z5_HBASE_DIRTY = 1;
+    if (!mask_only) Z5_HBASE_DIRTY = 1;
     __asm__ volatile ("dmb sy" ::: "memory");
     s->source_busy = 0;
     return 1u;
