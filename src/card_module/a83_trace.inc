@@ -20,6 +20,14 @@
  *     kind 21: [5] w | h << 16 of the pair   [6] [7] the two stack words above the frame   [8] call number of 19
  *   descriptor rows at +0x6400: A83_DCAP x 32 bytes: [0] caller [1] area | size << 8 [2] count [3] first ms
  *        [4] last ms [5] first kind-19 number [6] last kind-19 number [7] r0
+ * A85m (-DA84_FW, 'A84T' head): the descriptor-row area (kind 20 is gone) holds playback preview-size rows from
+ * aspect_fw.inc kinds 22 (0x1034E5E4) / 24 (0x1034E692), one row per caller + type / class / small + main size:
+ *   head [10] kind 22 calls [11] kind 24 calls [12] rows [13] rows dropped
+ *   row (64 bytes) [0] caller [1] kind | type << 8 | class << 16 | small << 24 [2] record + 0x398 (w | h << 16)
+ *       [3] record + 0x39C at the first call [4] count [5] first ms [6] last ms [7] how (0 stock, 1 shape, 2 file
+ *       query) of the last call [8] value written by the last call (0 = stock) [9] the decision's query result
+ *       (~0 = no query) [10..14] the file's sizes of service kinds 1..5 at the first call (types 1 / 2 only,
+ *       ~0 = failed) [15] kind-19 number at the first call
  * Only .text here (hook image): no string literals or const tables. camera_verified: false. */
 #define A83_K_CFG     19u
 #define A83_K_DESC    20u
@@ -140,3 +148,4 @@ IMG_FN static void a83_trace(cm_t *c, u32 kind, u32 *r)
         e[6] = r[6]; e[7] = r[7]; e[8] = h[6];
     }
 }
+

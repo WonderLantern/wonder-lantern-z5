@@ -2297,11 +2297,11 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
 }
 
 #ifdef A84_FW
-/* A84m: the module entry behind vui_common. The photo-aspect stubs (kinds 19-23) get aspect_fw.inc's value back in
+/* A84m: the module entry behind vui_common. The photo-aspect stubs (kinds 19-23, A85m 24) get aspect_fw.inc's value back in
  * r0 (hpvw: 0 = handled); every other kind goes to vui_hook as before (their stubs ignore r0). */
 IMG_FN static u32 vui_entry(u32 kind, u32 *r)
 {
-    if (kind >= AF_K_CFG && kind <= AF_K_PLAY) return af_hook(kind, r);
+    if (kind >= AF_K_CFG && kind <= AF_K_EXT) return af_hook(kind, r);
     vui_hook(kind, r);
     return kind;
 }
