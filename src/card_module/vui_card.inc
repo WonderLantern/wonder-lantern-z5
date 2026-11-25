@@ -2301,7 +2301,7 @@ IMG_FN static void vui_hook(u32 kind, u32 *r)
  * r0 (hpvw: 0 = handled); every other kind goes to vui_hook as before (their stubs ignore r0). */
 IMG_FN static u32 vui_entry(u32 kind, u32 *r)
 {
-    if (kind >= AF_K_CFG && kind <= AF_K_NEF) return af_hook(kind, r);
+    if (kind >= AF_K_CFG && kind <= AF_K_RAW) return af_hook(kind, r);
     vui_hook(kind, r);
     return kind;
 }

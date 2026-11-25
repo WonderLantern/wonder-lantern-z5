@@ -26,6 +26,14 @@
  * the file service gives 0 x 0: then, within AF_REVIEW_MS of the last remapped shot, the current ratio stands in for
  * the file's preview; (b) kind 25 (A87m stub 0x1034F65A): the playback decode setup's RAW branch skips hplay, so
  * NEF-only files were decoded with FX geometry (area 0); a file entry of the current ratio gets area 8 there.
+ * A88 (A87 camera, DIAG15-17 + video): kind 25 never ran; NEF decode takes the other RAW paths, which meet at
+ * 0x1034F6DE (kind 26). Same rule there. The zoom window (0x1034F56E) reads its main size / margins from the area
+ * table by [info + 0x200]: area 8 gives our L size and margins (344, 8) / (12, 728) instead of FX.
+ * A88 correction (Unicorn): 0x10209328 returns the RAW plane (FX 6040 x 4032) and area 8 uses the same plane, so
+ * the area does not change that window; the A87 video matches the full-size JPEG placed in a 6040 x 4032 canvas
+ * (4:3: 688 columns of garbage on the right, 2.33: 1456 rows at the bottom). The type-1 decode descriptor + 32 / 36
+ * comes from that table (0x10354FFA), so A86's "6016 x 4016" test never matched it. Now: 6040 x 4032 -> our JPEG
+ * size + (24, 16), the plane-like size a stock FX NEF has around its 6016 x 4016 JPEG: 5376 x 4032 / 6040 x 2592.
  * Same behaviour as the A84 firmware-only hooks (a84_fx43.S) with a parameter block present, which this module
  * always writes (a43_apply). "On" = area 8's group-1 pointer in RAM, as in the firmware. Only .text here (hook
  * image): no string literals or const tables. camera_verified: false. */
@@ -36,6 +44,7 @@
 #define AF_K_PLAY   23u
 #define AF_K_EXT    24u
 #define AF_K_NEF    25u
+#define AF_K_RAW    26u             /* A88: 0x1034F6DE, the join of the RAW paths ([r4] = 2) of the decode setup */
 #define AF_REVIEW_MS 6000u          /* A87: the shot whose instant review may stand in for the file service */
 #define AF_SVC      0x103BC7E0u     /* file service: (kind, type, handle, u16 out[2]) -> 0 = ok */
 #define AF_PTR      0xC18C7598u     /* area 8 group 1: the firmware's switch */
@@ -140,9 +149,13 @@ IMG_FN static u32 af_nef_main(u32 kind, u32 *r, u32 ctx, u32 rec)
     }
     if (lr != 0x1034E9CBu && lr != 0x1034E94Du) {
         desc = *(volatile const u32 *)(ctx + 28u);
-        if (desc >= RAM_LO && desc < RAM_HI - 0x80u &&
-            *(volatile const u32 *)(desc + 32u) == 6016u && *(volatile const u32 *)(desc + 36u) == 4016u) {
-            *(volatile u32 *)(desc + 32u) = w; *(volatile u32 *)(desc + 36u) = h;
+        if (desc >= RAM_LO && desc < RAM_HI - 0x80u) {
+            u32 dw = *(volatile const u32 *)(desc + 32u), dh = *(volatile const u32 *)(desc + 36u);
+            if (dw == 6040u && dh == 4032u) {          /* A88: the RAW plane, as the table gives it */
+                *(volatile u32 *)(desc + 32u) = w + 24u; *(volatile u32 *)(desc + 36u) = h + 16u;
+            } else if (dw == 6016u && dh == 4016u) {   /* A86 case kept */
+                *(volatile u32 *)(desc + 32u) = w; *(volatile u32 *)(desc + 36u) = h;
+            }
         }
     }
     (void)kind;
@@ -209,10 +222,18 @@ IMG_FN static void a85_pvw_log(cm_t *c, u32 kind, u32 *r, u32 how, u32 q)
         for (k = 0; k < 16u; k++) d[k] = 0u;
         d[0] = r[AF_LR]; d[1] = key1; d[2] = key2; d[5] = ms; d[15] = h[6];
         if (rec) d[3] = *(volatile const u32 *)(rec + 0x39Cu);
-        for (k = 0; k < 5u; k++) {
+        for (k = 2; k < 5u; k++) {             /* A88: kinds 1 / 2 were always 6040 x 4032 / 160 x 120 */
             u32 v = 0xFFFFFFFFu;
             if (type == 1u || type == 2u) { v = af_query(ctx, k + 1u); if (!v) v = 0xFFFFFFFFu; }
             d[10u + k] = v;
+        }
+        {
+            u32 desc = *(volatile const u32 *)(ctx + 28u), lr = r[AF_LR], meta;
+            d[10] = a83_ram(desc, 0x80u) ?
+                (*(volatile const u32 *)(desc + 32u) & 0xFFFFu) | *(volatile const u32 *)(desc + 36u) << 16 : 0u;
+            meta = lr == 0x1034E9CBu || lr == 0x1034E94Du ? r[AF_STACK] : r[AF_STACK + 3u];
+            d[11] = a83_ram(meta, 0x20u) ?
+                (u32)*(volatile const u16 *)(meta + 12u) | (u32)*(volatile const u16 *)(meta + 14u) << 16 : 0u;
         }
         h[12] = n + 1u;
     } else d += row * 16u;
@@ -272,7 +293,7 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
         if (!res) return 0u;
     } else if (kind == AF_K_PLAY) {
         af_play(r);
-    } else if (kind == AF_K_NEF) {
+    } else if (kind == AF_K_NEF || kind == AF_K_RAW) {
         u32 set = af_nef(r);
         (void)set;
 #ifdef A83_TRACE
@@ -280,7 +301,8 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
         if (c && c->dg_buf) {
             volatile u32 *h = a83_head(c);
             u32 meta = r[AF_STACK];
-            h[14] += set ? 0x10001u : 1u;      /* calls | area-8 stores << 16 */
+            h[14] += set ? 0x10001u : 1u;      /* calls | area-8 stores << 16 (kinds 25 and 26) */
+            if (kind == AF_K_RAW) h[13] += 0x10000u;   /* A88: kind 26 calls in the high half of [13] */
             h[15] = meta >= RAM_LO && meta < RAM_HI - 0x20u ?
                 (u32)*(volatile const u16 *)(meta + 12u) | (u32)*(volatile const u16 *)(meta + 14u) << 16 : 0u;
         }
