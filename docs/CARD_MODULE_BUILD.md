@@ -110,3 +110,15 @@ A52 的 `Z5_EXTRA` 再加 `-DFONT_EXT -DASPECT43_FX`，GCC 13.3.1 结果 `274c86
 ## 提交边界
 
 本地实验目录、构建结果、固件和转储都忽略；不要把这些文件强制加入 Git。正式源码、宿主测试、说明、插件和发布摘要才是维护入口。额外个人音效（例如 `6.WAV`）不在默认五个音效发布范围。用 `git diff --stat` 和 `git status --short` 核对本次变动后自行提交/推送 fork。
+
+## A91：只拍 NEF 的回放（发布版）
+
+A81 的 `Z5_EXTRA` 再加 `-DA83_TRACE -DA84_FW -DA43_MASK_COLOR=0xB3000000u`，即：
+
+```sh
+Z5_EXTRA='-DJPEG_LOG -DBURST_EXTRA_BITS=0x60u -DJPEG_A42 -DJPEG_A43=1 -DJPEG_A44 -DJPEG_A45 -DSETUP_SAVE_REOPEN -DLIGHTROOM_GRAIN -DA48_CRD -DJPEG_A50 -DBURST_BOOT_OFF -DA51_KERNEL2 -DFONT_EXT -DASPECT43_FX -DA83_TRACE -DA84_FW -DA43_MASK_COLOR=0xB3000000u' python src/card_module/build.py --sdk third_party/z5mod-sdk/sdk --firmware /path/to/current-main.BIN --legacy-firmware /path/to/legacy-main.BIN -o build/a91/Z5APP.BIN
+```
+
+GCC 13.3.1 结果 `1176e275fa2b3b928208ad51368e29f731e137bbfb40f8cdfeda2ac9da4e28cb`（作者实机测试的那一版）。`A84_FW`：照片画幅的判断逻辑在模块（`aspect_fw.inc`），固件只留跳转；
+`A83_TRACE`：照片画幅的诊断记录写入“保存测试记录”；遮罩为 70% 黑。配套固件 `1f838b83f624397182813ee68c4e9fb0b697b40c5a48843f5bb6081a5dcb5cca`，构建与检查见
+`src/firmware_hooks/z5_aspect43_a90m_fw.py`。实现见 [PHOTO_ASPECT.md](PHOTO_ASPECT.md)。

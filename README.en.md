@@ -23,7 +23,7 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 | Extensions menu | All switches in one row, "Extensions", at the end of the Setup menu | Yes |
 | Custom DISP | Per-page level, histogram and details with separate LCD and EVF page memory | User reported A39 worked; A52 tested on the author's camera |
 | Timed Bulb | Set hours, minutes, seconds, shot count and interval in the photo shooting menu. Start exits the menu and begins exposure about 1.5 seconds later. | **Tested on the author's camera** (series: A55) |
-| Photo aspect | 4:3 or 2.33:1 in the photo shooting menu; JPG and NEF are recorded in that shape, with a mask on the monitor and in the viewfinder (needs Custom DISP on). **The mask can show minor glitches in some situations; this is a known issue.** See [docs/PHOTO_ASPECT.md](docs/PHOTO_ASPECT.md) (Chinese) | **Tested on the author's camera** (A81) |
+| Photo aspect | 4:3 or 2.33:1 in the photo shooting menu; JPG and NEF are recorded in that shape, with a mask on the monitor and in the viewfinder (needs Custom DISP on). NEF-only shots also play back and zoom in the chosen shape in the camera (A91). **Known issues:** after a shot the mask shows empty boxes where the camera's icons are; with NEF only, the first zoom in the instant review is sometimes black or garbled; at 2.33:1 the small navigator window in zoomed playback is slightly distorted. See [docs/PHOTO_ASPECT.md](docs/PHOTO_ASPECT.md) (Chinese) | **Tested on the author's camera** (A91) |
 | Film grain FILM | FUJI400 / HP5, strength 1–6, on the JPG and the NEF's embedded preview; about 1.1 s per image. **Avoid high-speed bursts with grain on** (low-speed 3 fps ran 20+ frames without waiting; high speed waits 1–2 s after 4 frames). Implementation and parameters: [docs/FILM_GRAIN.md](docs/FILM_GRAIN.md) (Chinese) | **Tested on the author's camera** (A52) |
 | Lightroom grain inside the NEF | With "NEF write: On" the camera writes matching Lightroom grain into the NEF's own XMP; with Lightroom's raw default set to "Camera Settings" it applies on import, no sidecar files | **Tested on the author's camera** (Lightroom Classic 13.2) |
 | Faster photo listing over USB | Speeds up listing photos on a computer over USB (port of Z30 mtp-fast); on whenever the card module is installed | Ran on the author's camera, **effect not verified** |
@@ -32,9 +32,9 @@ This project is not affiliated with, authorised by, or supported by Nikon. **Fla
 
 The new features have not been checked separately in the viewfinder or in movie mode, and restoring stock behaviour by removing the card has not been rechecked on the latest build. See [PLAN.md](PLAN.md) for completed and future work and [docs/PROGRESS.md](docs/PROGRESS.md) for development notes (both in Chinese).
 
-**Current version A81** adds photo aspect 4:3 / 2.33:1, Bulb series with shot count and interval, separate electronic/mechanical shutter-sound switches and menus that follow the camera language (English or Simplified Chinese), and fixes the A50–A52 freeze on the FILM strength page after a shot. Tested on the author's camera (the USB listing speed-up's effect is still not verified).
+**Current version A91**: photo-aspect NEF files keep the stock RAW size (Lightroom opens them and shows the chosen crop), and NEF-only shots now display correctly in the camera's instant review, playback and zoom. The installer needs no Python and now comes in English as well. Since A81: photo aspect 4:3 / 2.33:1, Bulb series with shot count and interval, separate electronic/mechanical shutter-sound switches and menus that follow the camera language (English or Simplified Chinese). Tested on the author's camera (the USB listing speed-up's effect is still not verified).
 
-**Known issue: the aspect mask can show minor glitches in some situations** (for example a brief flicker near icons); the recorded photo is not affected. Playback zoom works only for photos in the currently selected aspect. See [docs/PHOTO_ASPECT.md](docs/PHOTO_ASPECT.md) (Chinese). Please avoid high-speed bursts with film grain on.
+**Known photo-aspect issues** (the recorded photo is not affected): after a shot the mask shows empty boxes where the camera's icons are; with NEF only, the first zoom in the instant review is sometimes black or garbled (pressing zoom again works); at 2.33:1 the small navigator window in zoomed playback is slightly distorted; playback zoom works only for photos in the currently selected aspect. See [docs/PHOTO_ASPECT.md](docs/PHOTO_ASPECT.md) (Chinese). Please avoid high-speed bursts with film grain on.
 
 **A39** combines the A19 timed Bulb menu with Custom DISP from PR #6. Enable Custom DISP under Setup Menu → Extensions → Custom DISP. Each of the four pages has its own level, histogram and detail settings. The LCD keeps a display-off position, and the EVF cycles the four visible pages.
 
@@ -42,11 +42,11 @@ The user reported that A39 worked in camera testing. Individual display scenario
 
 ## Windows tool (no installation)
 
-Download `Z5Extensions.exe` from the [A81 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a81-20261125). It generates the A81 firmware and card files from the official C 1.50 file. It is the only download: separate module files and update bundles are no longer provided, and bundle import has been removed. To update, download the new exe. The output includes Chinese instructions and the shutter sound converter. The tool's window is in Chinese: choose the official file, choose the output folder, then press the button at the bottom.
+Download `Z5Extensions-EN.exe` (English) or `Z5Extensions.exe` (Chinese) from the [A91 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a91-20261126). It generates the A91 firmware and card files from the official C 1.50 file. It is a standalone Windows program: Python does not need to be installed. These two programs are the only downloads: separate module files and update bundles are no longer provided. To update, download the new exe. The English program writes English instructions and an English shutter sound converter into the output.
 
 ## Usage
 
-**A81 needs new firmware** (photo aspect entries). Coming from any older version, including the A52 firmware (SHA-256 starting `a3704c6f`), flash it once as below and replace Z5APP.BIN on the card as well. Back up Z5APP.BIN and SHUTTER/MENU.DAT first; keep your MENU.DAT to keep your settings.
+**A91 needs new firmware** (entries for NEF-only playback). Coming from any older version, including the A81 firmware (SHA-256 starting `13525d9b`), flash it once as below and replace Z5APP.BIN on the card as well. Back up Z5APP.BIN and SHUTTER/MENU.DAT first; keep your MENU.DAT to keep your settings.
 
 ### 1. Prepare
 
@@ -72,7 +72,7 @@ output/card/SHUTTER/1-5.WAV      default test sounds (five)
 output/card/Z5LOG/DIAG01-20.BIN  20 empty test-record files
 ```
 
-The SHA-256 of `EG165050.BIN` should be `13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5` (A52 firmware + photo aspect entries). Do not redistribute this file.
+The SHA-256 of `EG165050.BIN` should be `1f838b83f624397182813ee68c4e9fb0b697b40c5a48843f5bb6081a5dcb5cca` (A52 firmware + photo aspect entries); `card/Z5APP.BIN` should be `1176e275fa2b3b928208ad51368e29f731e137bbfb40f8cdfeda2ac9da4e28cb`. Do not redistribute this file.
 
 ### 3. Flash (once)
 

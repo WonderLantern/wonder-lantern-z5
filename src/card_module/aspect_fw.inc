@@ -59,7 +59,6 @@
 #define AF_LR       9u
 #define AF_STACK    10u
 #define AF_SHOT     0x10143229u     /* the shot's first configuration call */
-#define AF_REVIEW   0x1014421Bu     /* A94: playback decode configuration (instant review uses the shot's info) */
 
 typedef void (*af_desc_fn)(u32, u32);
 typedef u32 (*af_svc_fn)(u32, u32, u32, u32);
@@ -88,18 +87,6 @@ IMG_FN static void af_cfg(u32 *r)
     log = (volatile u32 *)(p + 192u);          /* copy + 224: calls, remapped calls */
     log[0] += 1u;
     if ((u32)info < RAM_LO || (u32)info >= RAM_HI - 0x300u) return;
-    /* A94 (A91 camera, DIAG10): the instant review's decode configuration runs on the shot's own capture info,
-     * which the camera sometimes has already reset to area 0 (4 of 7 NEF-only shots): then the first zoom used FX
-     * geometry (black / garbage), the next one was fine. Same shot (info == log[4]), within AF_REVIEW_MS of our
-     * remap, NEF-only (k220 1), area 0: area 8 again, as in the reviews that worked (area 8, kind 0, k220 1). */
-    if (r[AF_LR] == AF_REVIEW) {
-        if (log[1] && (u32)info == log[4] && !info[0x200] && info[0x220] == 1u &&
-            !*(volatile const u32 *)(info + 0xFCu) && *(volatile const u32 *)CM_MS_CLOCK - log[2] <= AF_REVIEW_MS) {
-            info[0x200] = 8u;
-            log[5] += 1u;                            /* A94: reviews put back on area 8 */
-        }
-        return;
-    }
     if (info[0x200] || *(volatile const u32 *)(info + 0xFCu) || r[AF_LR] != AF_SHOT) return;
     info[0x200] = 8u;
     b = af_block();

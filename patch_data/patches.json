@@ -3,8 +3,8 @@
  "firmware": "C 1.50",
  "stock_package_sha256": "efc0ce70dcafdd96c64e95d8d50f6b7f0509fc0c2840b28d12b6f9e4877ee776",
  "stock_main_sha256": "1d9742a951ea8a8ebe695fa9bb1f29a3be73e16dfe4a8372d997e903bbc58e98",
- "output_sha256": "13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5",
- "card_module_sha256": "274c864d156920d93ef8d85567ab1c55db888c6d6a0dc998dc158bb60e014a89",
+ "output_sha256": "1f838b83f624397182813ee68c4e9fb0b697b40c5a48843f5bb6081a5dcb5cca",
+ "card_module_sha256": "1176e275fa2b3b928208ad51368e29f731e137bbfb40f8cdfeda2ac9da4e28cb",
  "z5mod": {
   "commit": "7321c663d4f8abf69c0f88b6b1cb6706c3e101f2",
   "files": {
@@ -347,121 +347,157 @@
    "replacement": "dff800f0610c1212"
   },
   {
-   "name": "a81 offset",
+   "name": "a90 offset",
    "offset": "0x1e933e",
    "expected": "694901eb80007047",
    "replacement": "b1f31db800bf00bf"
   },
   {
-   "name": "a81 offset",
+   "name": "a90 offset",
    "offset": "0x59a37c",
    "expected": "0000000000000000",
-   "replacement": "dff800f0650d1212"
+   "replacement": "dff800f0d90c1212"
   },
   {
-   "name": "a81 trim",
+   "name": "a90 trim",
    "offset": "0x123032",
    "expected": "95f80012fa4a95f8210201eb410102eb8101",
    "replacement": "77f0a7b100bf00bf00bf00bf00bf00bf00bf"
   },
   {
-   "name": "a81 trim",
+   "name": "a90 trim",
    "offset": "0x59a384",
    "expected": "0000000000000000",
-   "replacement": "dff800f0a50d1212"
+   "replacement": "dff800f0fd0c1212"
   },
   {
-   "name": "a81 cfg",
+   "name": "a90 cfg",
    "offset": "0x122a7c",
    "expected": "2de9f84f",
    "replacement": "77f086b4"
   },
   {
-   "name": "a81 cfg",
+   "name": "a90 cfg",
    "offset": "0x59a38c",
    "expected": "0000000000000000",
-   "replacement": "dff800f0ed0c1212"
+   "replacement": "dff800f0c10c1212"
   },
   {
-   "name": "a81 hpvw",
+   "name": "a90 hpvw",
    "offset": "0x32e5e4",
    "expected": "70b5eab1",
    "replacement": "6bf2d6be"
   },
   {
-   "name": "a81 hpvw",
+   "name": "a90 hpvw",
    "offset": "0x59a394",
    "expected": "0000000000000000",
-   "replacement": "dff800f0690e1212"
+   "replacement": "dff800f04f0d1212"
   },
   {
-   "name": "a81 hsel328",
-   "offset": "0x1e9328",
-   "expected": "10b16c48",
-   "replacement": "b1f338b8"
-  },
-  {
-   "name": "a81 hsel328",
-   "offset": "0x59a39c",
-   "expected": "0000000000000000",
-   "replacement": "dff800f0af0e1212"
-  },
-  {
-   "name": "a81 hplay",
+   "name": "a90 hplay",
    "offset": "0x32f6d4",
    "expected": "84f80002",
-   "replacement": "6af266be"
+   "replacement": "6af262be"
   },
   {
-   "name": "a81 hplay",
+   "name": "a90 hplay",
+   "offset": "0x59a39c",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0cd0d1212"
+  },
+  {
+   "name": "a90 trim2",
+   "offset": "0x122f6c",
+   "expected": "95f800021e4900eb400001eb8001",
+   "replacement": "77f01ab200bf00bf00bf00bf00bf"
+  },
+  {
+   "name": "a90 trim2",
    "offset": "0x59a3a4",
    "expected": "0000000000000000",
-   "replacement": "dff800f0d90e1212"
+   "replacement": "dff800f0170d1212"
   },
   {
-   "name": "a81 preview 640 (buf) kind 2",
+   "name": "a90 hext",
+   "offset": "0x32e692",
+   "expected": "10b5dab1",
+   "replacement": "6bf28bbe"
+  },
+  {
+   "name": "a90 hext",
+   "offset": "0x59a3ac",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0730d1212"
+  },
+  {
+   "name": "a90 hnef",
+   "offset": "0x32f65a",
+   "expected": "26700098",
+   "replacement": "6af2abbe"
+  },
+  {
+   "name": "a90 hnef",
+   "offset": "0x59a3b4",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0970d1212"
+  },
+  {
+   "name": "a90 hfull",
+   "offset": "0x335dcc",
+   "expected": "0b461146",
+   "replacement": "64f2f6ba"
+  },
+  {
+   "name": "a90 hfull",
+   "offset": "0x59a3bc",
+   "expected": "0000000000000000",
+   "replacement": "dff800f0af0d1212"
+  },
+  {
+   "name": "a90 preview 640 (buf) kind 2",
    "offset": "0x16289d4",
    "expected": "5802e001",
    "replacement": "80021001"
   },
   {
-   "name": "a81 preview 640 width x2 (buf) kind 2",
+   "name": "a90 preview 640 width x2 (buf) kind 2",
    "offset": "0x16289e8",
    "expected": "b0040000",
    "replacement": "00050000"
   },
   {
-   "name": "a81 preview 1920 (buf) kind 2",
+   "name": "a90 preview 1920 (buf) kind 2",
    "offset": "0x16289fc",
    "expected": "46053804",
    "replacement": "80073803"
   },
   {
-   "name": "a81 preview 1920 width x2 (buf) kind 2",
+   "name": "a90 preview 1920 width x2 (buf) kind 2",
    "offset": "0x1628a10",
    "expected": "8c0a0000",
    "replacement": "000f0000"
   },
   {
-   "name": "a81 preview 640 (sel) kind 2",
+   "name": "a90 preview 640 (sel) kind 2",
    "offset": "0x165b7ac",
    "expected": "5802e001",
    "replacement": "80021001"
   },
   {
-   "name": "a81 preview 1920 (sel) kind 2",
+   "name": "a90 preview 1920 (sel) kind 2",
    "offset": "0x165b7c0",
    "expected": "46053804",
    "replacement": "80073803"
   },
   {
-   "name": "a81 thumbnail (sel) kind 2",
+   "name": "a90 thumbnail (sel) kind 2",
    "offset": "0x165b7d4",
    "expected": "96007800",
    "replacement": "a0004400"
   },
   {
-   "name": "a81 preview 570-class (sel) kind 2",
+   "name": "a90 preview 570-class (sel) kind 2",
    "offset": "0x165b7e8",
    "expected": "d4017701",
    "replacement": "3a02f400"
@@ -491,7 +527,7 @@
   {
    "name": "aspect",
    "align": 8,
-   "data": "4a480068dff828c160450dd3dff824c1604509d200f5f070d0f800c002b446498c4502bc08bf7047002070472de9f0410c463e4d2d683e4fbd4204d33f4fbd4201d2012500e00025002d23d0374d2d68c0352f6801372f6094f80072d7b9d4f8fc70bfb9364fbe4514d1082784f800720fb4fff7c5ff032700b1077d84f81e726f6801376f6004f5007004f202212d4fb8470fbc00f002f8bde8f0812de9f84fdff8a4f02949082819d10cb51f4a12681f4b9a4204d3214b9a4201d2012200e00022002a08d0fff79bff10b104301f490cbd1f481d490cbdbde80c40082001eb8000704795f800121a4a95f82102082901eb410102eb810115d119b40b4b1b680b4ca34204d30d4ca34201d2012300e00023002b05d0fff773ff0f4908b100f1080119bc0b4adff834f0000098758cc1000080c100fc6fc852415450000070c829321410e9c31d10812a1410f4b76711200e121258826411240e1212453014104c0100004c0100004c0100004c0100003f4b41ea024c53f8080b18b16045fad153f8040c704700b5e3683a498b4209d339498b4206d2b3f89813b3f89a23fff7e7ff00bd002000bddff8d0c0e64507d0dff8ccc0e64503d0dff8c8c0e6450fd10fb5fff7e0ff48b102990138c00001b104302d4b1958009801600fbdbde80f4070b5002a01d0dff8a4f0dff8a4f0dff8a4c0e6450ad10fb5fff7c5ff20b1e06800f5667001b00ebdbde80f4010b1224808307047dff884f00fb521490968154a914204d31f4a914201d2012100e00021002917d0059b0f498b4213d31a498b4210d2b3f90c10b3f90e20fff791ff48b10246fff7d5fe012100b1417d914201d108200090bde80f4084f80002dff83cf0700f1212000080c100fc6fc8cbe93410ad4f3510e54f3510c00f1212e9e5341025e6341011503510e8b667113193201098758cc1000070c8c0ff6fc8d9f63410e814b00f01000000a80fc00b01000000680ad007010000000015c00f010000008017100a02000000a011900702000000c00b0805020000009817200a02000000a017200a020000000000000000000000a00538048002e0018007380380021001"
+   "data": "2de97f5213206946fff76efdbde87f522de9f84fdff80cf1082809d12de97f5214206946fff760fdbde87f52082803d13d4901eb800070473b49704795f800123a4a95f8210201eb410102eb810100f010f8dff8dcf095f80002364900eb400001eb8001b9f1020f98bf00f002f8dff8c8f001b595f80002082807d12de97f5215206946fff730fdbde87f5201bd2de97f5216206946fff727fd0028bde87f5208bf704770b5002a01d0dff890f0dff890f02de97f5218206946fff715fd0028bde87f5208bf704710b5002a01d0dff874f0dff874f02de97f5219206946fff703fdbde87f5226700098dff860f02de97f521b206946fff7f7fc0028bde87f5208bf70470b461146dff844f02de97f5217206946fff7e8fcbde87f5284f80002dff830f0812a1410f4b767115882641145301410ec8164117b2f1410e9e5341025e6341097e63410cfe634105ff63410d15d3510d9f63410"
   }
  ],
  "card_sounds": {

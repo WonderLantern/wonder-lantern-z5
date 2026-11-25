@@ -1,0 +1,88 @@
+Z5 Extensions instructions
+
+Camera: Nikon Z 5, firmware C 1.50.
+This project is not affiliated with Nikon. Flashing modified firmware can damage the camera. Read these instructions completely and decide for yourself whether to go ahead.
+
+A91: photo-aspect NEF files keep the stock RAW size (Lightroom opens them and shows the chosen crop), and NEF-only shots display correctly in the camera's instant review, playback and zoom. Since A81: photo aspect (4:3 / 2.33:1), Bulb series with shot count and interval, separate electronic / mechanical shutter-sound switches, and menus that follow the camera language (English or Simplified Chinese). Tested on the author's camera (the effect of the faster photo listing over USB is not verified). This program is a standalone Windows program; Python does not need to be installed.
+Photo aspect: Photo shooting menu -> Photo aspect, choose Off / 4:3 / 2.33:1; the image area must be FX. The live-view mask needs the Custom DISP master switch on.
+[Known issue] After a shot, when the camera returns from the instant review to live view, the mask shows empty boxes where the camera's icons are. The recorded photo is not affected.
+[Known issue] With NEF only, the first zoom in the instant review is sometimes black or garbled; pressing zoom again works.
+[Known issue] When a 2.33:1 photo is zoomed in playback, the small navigator window at the bottom right is slightly distorted.
+[Known issue] Playback zoom works only for photos in the currently selected aspect; with 2.33:1 selected, zooming a 4:3 photo may say it cannot be enlarged.
+FILM is under Setup menu -> Extensions -> FILM: FUJI400 / HP5, strength 1-6, NEF write. Each shot takes about 1.1 s more; with grain on, avoid high-speed bursts (low-speed 3 frames per second runs continuously).
+For Lightroom Classic to apply the grain automatically: Preferences -> Presets -> Raw Defaults -> Global, choose "Camera Settings".
+The burst speed-up is off at every power-on. "Save log" is the last row of the Setup menu.
+Portrait UI and portrait touch are still in testing. In portrait, the i-menu second and third level pages and touch were tested only with the 12 i-menu items set on the author's camera (Set Picture Control, ISO sensitivity, Flash mode, Silent photography, HDR, AF-area mode, White balance, Active D-Lighting, Metering, Choose image area, Vibration reduction, Focus mode); other items are not known to work. Known issue: after waking from standby, the battery and focal length appear only after a half-press.
+
+1. What the result contains
+
+EG165050.BIN                 camera firmware update file (do not redistribute)
+card\Z5APP.BIN               feature module
+card\SHUTTER\MENU.DAT        settings file, keep it
+card\SHUTTER\1.WAV to 5.WAV  the 5 test shutter sounds
+card\Z5LOG\DIAG01-20.BIN     20 empty test-record files, keep them
+
+2. Update the firmware (once, done by you on the camera)
+
+A91 needs new firmware (SHA-256 starting with 1f838b83). Coming from any older version you must update once, including from the A81 firmware (starting with 13525d9b).
+If the camera already has the 1f838b83 firmware, skip this section.
+First back up Z5APP.BIN and SHUTTER/MENU.DAT from the card. When upgrading, replace Z5APP.BIN in the card root and keep your settings and sounds.
+
+1. Make sure the battery is well charged; put EG165050.BIN in the root of the card, and only this update file in the root.
+2. On the camera go to Setup menu -> Firmware version -> Update and follow the on-screen prompts.
+3. Turn the camera off, remove the battery for a moment and put it back.
+4. Delete EG165050.BIN from the card.
+
+3. Install the card files
+
+Copy the contents of the card folder of the result to the root of the memory card. The result should look like this (the drive letter A: is only an example):
+
+A:\Z5APP.BIN
+A:\SHUTTER\MENU.DAT
+A:\SHUTTER\1.WAV
+A:\SHUTTER\2.WAV
+A:\SHUTTER\3.WAV
+A:\SHUTTER\4.WAV
+A:\SHUTTER\5.WAV
+A:\Z5LOG\DIAG01.BIN to DIAG20.BIN
+
+MENU.DAT and the 20 files in Z5LOG must already be on the card and must stay there. Files the camera creates itself are not saved reliably.
+
+4. Custom shutter sounds
+
+1. Prepare WAV files named 1.WAV, 2.WAV, 3.WAV, 4.WAV or 5.WAV.
+2. Put them in the SHUTTER folder in the root of the card; a file with the same name replaces that sound number. Up to 5 sounds; you do not need all five.
+3. Format: standard 44-byte WAV header, uncompressed PCM, 48 kHz, 16-bit, stereo; at least 2000 bytes; up to about 1.28 seconds is read. The sound should start right at the beginning of the file; leading silence makes the shutter sound late.
+4. In Setup menu -> Extensions -> Shutter sound, turn on the sound for the electronic or the mechanical shutter, choose the type (the file number) and the volume; after replacing a sound use "Reload".
+
+If a sound is not in the right format, double-click "ShutterSoundConverter.exe" in this folder: choose the WAV file and the sound number 1-5, choose where to save on the computer, and convert. The result is already named by its number; copy it to the SHUTTER folder on the card. The converter accepts WAV only (no MP3), never overwrites existing files and never writes to the card; to replace a file, copy it yourself and confirm. Converted sounds still need to be listened to on the camera (camera_verified: false).
+
+5. Extensions menu
+
+The last row of the Setup menu, "Extensions", holds:
+  Shutter sound    electronic shutter, mechanical shutter, type, volume, reload
+  Photo zebra      also turn on the stock highlight display pattern in Custom Settings group g
+  Portrait UI      the display turns upright when the camera is held vertically (on by default)
+  Portrait touch   touch in portrait; when off, touches in portrait are ignored, landscape is unaffected
+  Focal length     focal length for every CPU lens
+  Battery %        charge in percent inside the battery icon, red at 20 % and below
+  Custom DISP      turn the master switch on, then set level, histogram and details per page (off by default when upgrading from A19)
+  FILM             film grain type, strength, NEF write
+Save log: the last row of the Setup menu; when something goes wrong, press OK there to save a record (see section 7).
+Timed Bulb: Photo shooting menu -> Timed Bulb. Set hours, minutes, seconds, shot count and interval, then press "Start"; exposure begins about 1.5 seconds later.
+Framing grid: in Custom Setting d8 choose On (4x4), Off, 3x3 or 2x2.
+Histogram with level: press DISP to reach the virtual horizon page; "Apply settings to live view" must be on; it appears about 1 second after power-on or wake.
+Module status: the last row of MY MENU; "OK ..." means the module is working.
+
+6. Recovery
+
+If the camera hangs, the power switch and removing the card may not respond: remove the battery first, then remove the card or delete Z5APP.BIN from the card on a computer, put the battery back and turn the camera on. To restore completely, download the Z 5 C 1.50 firmware from Nikon's website and update with the official procedure.
+
+7. Reporting a problem
+
+1. Make the problem happen, stay on the screen where it shows, and take a photo of the screen with your phone.
+2. Immediately go to the last row of the Setup menu, "Save log", and press OK. The row shows a number such as "01"; write down the number and one sentence on what you did and what you saw (for example: held vertically, grip up, opened Picture Control in the i menu, dragging left did nothing).
+3. After 20 records the oldest is overwritten; back them up in time.
+4. Send back: the DIAG files written in Z5LOG on the card, the matching photos and your notes. The records contain only display drawing, touch, battery and similar state, no image content and no personal data. Do not format the card, or these files are deleted too.
+
+Test scope and limitations: see the project README. Project: https://github.com/WonderLantern/wonder-lantern-z5

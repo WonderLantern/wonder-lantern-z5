@@ -85,4 +85,4 @@ python3 -B -m unittest discover -s tools/windows_packager -p 'test_*.py'
 4. 重新构建 `Z5Extensions.exe`（`tools/windows_packager/build.py`）。发布页只提供这个程序，不再制作模块更新包。
 5. 最后检查 `git diff --check`、`git diff --stat` 和 `git status --short`，确认没有实验文件、私有输入或无关改动混入。
 
-A81 需要刷 A81 固件并同时替换卡模块；旧 EXE 不包含新插件，需下载新的 EXE。
+A91 需要刷 A91 固件（1f838b83）并同时替换卡模块；旧 EXE 不包含新插件，需下载新的 EXE。发布页提供中文 Z5Extensions.exe 和英文 Z5Extensions-EN.exe。
