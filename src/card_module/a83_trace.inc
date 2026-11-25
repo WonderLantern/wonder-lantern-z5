@@ -23,6 +23,7 @@
  * A85m (-DA84_FW, 'A84T' head): the descriptor-row area (kind 20 is gone) holds playback preview-size rows from
  * aspect_fw.inc kinds 22 (0x1034E5E4) / 24 (0x1034E692), one row per caller + type / class / small + main size:
  *   head [10] kind 22 calls [11] kind 24 calls [12] rows [13] rows dropped
+ *   A87: head [14] kind 25 calls | area-8 stores << 16, [15] file entry + 12 / 14 (w | h << 16) of the last call
  *   row (64 bytes) [0] caller [1] kind | type << 8 | class << 16 | small << 24 [2] record + 0x398 (w | h << 16)
  *       [3] record + 0x39C at the first call [4] count [5] first ms [6] last ms [7] how (0 stock, 1 shape, 2 file
  *       query; | 4 = A86 rewrote the NEF main size, [2] is then our size) of the last call [8] value written by the last call (0 = stock) [9] the decision's query result
@@ -41,7 +42,7 @@
 /* A84m: kind 19 comes from aspect_fw.inc with the stub frame {r0-r6, r9, r12, lr}; 'A84T'; [5] byte 0 = info +
  * 0x220 (instead of info + 0), [6] = r2 (instead of info + 0xFC): the two values that pick the trim table */
 #undef A83_MAGIC
-#define A83_MAGIC     0x54363841u     /* 'A86T' (A84T before A86; the new tag clears stale rows) */
+#define A83_MAGIC     0x54373841u     /* 'A87T' (A84T, A86T before; a new tag clears stale rows) */
 #define A83_LR        9u
 #else
 #define A83_LR        5u

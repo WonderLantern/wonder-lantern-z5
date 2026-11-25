@@ -22,6 +22,10 @@
  * full-size JPEG is 5352 x 4016 / 6016 x 2576: zoom shows the cut-off parts as garbage, 2.33 playback is shifted
  * and hplay never matches it. When such a file's large preview (file service kind 5) is 1440 x 1080 or 1920 x 824,
  * all three get our L size, the same values a 4:3 / 2.33 JPEG of ours carries. Only on the six checked callers.
+ * A87 (A86 camera, DIAG12-14): (a) instant review comes about 1 s after the shot, before the file is written, and
+ * the file service gives 0 x 0: then, within AF_REVIEW_MS of the last remapped shot, the current ratio stands in for
+ * the file's preview; (b) kind 25 (A87m stub 0x1034F65A): the playback decode setup's RAW branch skips hplay, so
+ * NEF-only files were decoded with FX geometry (area 0); a file entry of the current ratio gets area 8 there.
  * Same behaviour as the A84 firmware-only hooks (a84_fx43.S) with a parameter block present, which this module
  * always writes (a43_apply). "On" = area 8's group-1 pointer in RAM, as in the firmware. Only .text here (hook
  * image): no string literals or const tables. camera_verified: false. */
@@ -31,6 +35,8 @@
 #define AF_K_PVW    22u
 #define AF_K_PLAY   23u
 #define AF_K_EXT    24u
+#define AF_K_NEF    25u
+#define AF_REVIEW_MS 6000u          /* A87: the shot whose instant review may stand in for the file service */
 #define AF_SVC      0x103BC7E0u     /* file service: (kind, type, handle, u16 out[2]) -> 0 = ok */
 #define AF_PTR      0xC18C7598u     /* area 8 group 1: the firmware's switch */
 #define AF_R0       0u
@@ -73,6 +79,8 @@ IMG_FN static void af_cfg(u32 *r)
     b = af_block();
     info[0x21E] = b ? b[20] : 3u;
     log[1] += 1u;
+    log[2] = *(volatile const u32 *)CM_MS_CLOCK;     /* A87: last remapped shot, for the instant review */
+    log[3] = b ? b[21] : 1u;
     FW(af_desc_fn, 0x101DC3E8u)((u32)(info + 0x200), (u32)(info + 0x202));
     b = af_block();
     if (b && *(volatile const u16 *)(b + 32u)) {
@@ -115,6 +123,12 @@ IMG_FN static u32 af_nef_main(u32 kind, u32 *r, u32 ctx, u32 rec)
     if (*(volatile const u8 *)(ctx + 4u) != 1u) return 0u;
     if (*(volatile const u16 *)(rec + 0x398u) != 6016u || *(volatile const u16 *)(rec + 0x39Au) != 4016u) return 0u;
     v = af_query(ctx, 5u);
+    if (!v) {                                  /* A87: not written yet (instant review): the shot just taken */
+        u32 p = af_on();
+        volatile const u32 *log = (volatile const u32 *)(p + 192u);
+        if (!p || !log[1] || *(volatile const u32 *)CM_MS_CLOCK - log[2] > AF_REVIEW_MS) return 0u;
+        v = log[3] == 2u ? (1920u | 824u << 16) : (1440u | 1080u << 16);
+    }
     if (v == (1440u | 1080u << 16)) { w = 5352u; h = 4016u; }
     else if (v == (1920u | 824u << 16)) { w = 6016u; h = 2576u; }
     else return 0u;
@@ -220,6 +234,22 @@ IMG_FN static void af_play(u32 *r)
     if (ratio == cls) r[AF_R0] = 8u;
 }
 
+/* A87 kind 25: RAW branch of the playback decode setup; r[AF_R4] = decode info, caller [sp] = file entry */
+IMG_FN static u32 af_nef(u32 *r)
+{
+    u32 meta = r[AF_STACK], info = r[AF_R4], cls, ratio;
+    volatile u8 *b;
+    if (!af_on() || meta < RAM_LO || meta >= RAM_HI - 0x20u || info < RAM_LO || info >= RAM_HI - 0x300u) return 0u;
+    cls = af_shape((u32)(int)*(volatile const s16 *)(meta + 12u) |
+                   (u32)(int)*(volatile const s16 *)(meta + 14u) << 16);
+    if (!cls) return 0u;
+    b = af_block();
+    ratio = b ? b[21] : 1u;
+    if (ratio != cls) return 0u;
+    *(volatile u8 *)(info + 0x200u) = 8u;
+    return 1u;
+}
+
 IMG_FN static u32 af_hook(u32 kind, u32 *r)
 {
     volatile u8 *b;
@@ -242,6 +272,19 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
         if (!res) return 0u;
     } else if (kind == AF_K_PLAY) {
         af_play(r);
+    } else if (kind == AF_K_NEF) {
+        u32 set = af_nef(r);
+        (void)set;
+#ifdef A83_TRACE
+        cm_t *c = cm_get();
+        if (c && c->dg_buf) {
+            volatile u32 *h = a83_head(c);
+            u32 meta = r[AF_STACK];
+            h[14] += set ? 0x10001u : 1u;      /* calls | area-8 stores << 16 */
+            h[15] = meta >= RAM_LO && meta < RAM_HI - 0x20u ?
+                (u32)*(volatile const u16 *)(meta + 12u) | (u32)*(volatile const u16 *)(meta + 14u) << 16 : 0u;
+        }
+#endif
     }
     return kind;
 }
