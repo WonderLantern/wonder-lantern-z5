@@ -1724,6 +1724,9 @@ IMG_FN static void hub_labels(cm_t *c)
 #define A43_STASH43   0x280u
 #define A43_STASH233  0x380u
 #include "aspect_menu.inc"     /* A69: image code (a43_apply, a43_watch, the "照片画幅" page) */
+#ifdef A83_TRACE
+#include "a83_trace.inc"       /* A83 readout: firmware trace kinds 19-21 -> DIAG 0x38000 */
+#endif
 #endif
 #include "burst_speed.inc"  /* image code: must stay before Z5_IMAGE_END */
 #include "vui_card.inc"   /* research/vertical-ui/vui_card.inc in the development tree */
