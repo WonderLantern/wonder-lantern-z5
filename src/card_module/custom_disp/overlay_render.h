@@ -85,8 +85,42 @@ Z5_IMAGE(custom_disp_image) static u32 overlay_source_descriptor_matches(u32 out
         !d[0x38u / 4u] && d[0x28u / 4u] == native;
 }
 
+/* A89 readout: every tail-paint decision while the aspect mask is on, in the module's parameter copy past its
+ * end (copy + 0x9C0 = DIAG 0x37400, saved with the record). code: 0 painted, 1 mask-only painted, else the
+ * refusal reason (2, 4, 8, 16, 32, 64, 128). Head [0] 'MSK9' [1] decisions [2] mask-only paints [3] normal paints
+ * [4..11] refusals 2 / 4 / 8 / 16 / 32 / 64 / 128 / other [12] last paint ms [13] last mask-only ms [14] timeline
+ * count; timeline at +0x40, 64 x 16 bytes, one entry per change of (code, overlay_reason, active, output):
+ * ms, code | why << 8 | active << 16 | output << 24, decisions so far, the mask's pixels changed so far. */
+#define A89_MASK_DIAG 0x9C0u
+Z5_IMAGE(custom_disp_image) static void aspect_mask_diag(overlay_state *s, u32 code)
+{
+    u32 p = *(volatile const u32 *)A43_MASK_PTR, why, key, i;
+    volatile u32 *d;
+    if (p < 0xC1800000u || p >= 0xC8700000u - 0x1000u) return;
+    d = (volatile u32 *)(p - 32u + A89_MASK_DIAG);
+    if (d[0] != 0x394B534Du) {
+        for (i = 0; i < 0x440u / 4u; i++) d[i] = 0u;
+        d[0] = 0x394B534Du;                            /* 'MSK9' */
+    }
+    d[1]++;
+    if (code == 1u) { d[2]++; d[13] = Z5_FULL_TICK; d[12] = Z5_FULL_TICK; }
+    else if (!code) { d[3]++; d[12] = Z5_FULL_TICK; }
+    else d[code == 2u ? 4u : code == 4u ? 5u : code == 8u ? 6u : code == 16u ? 7u : code == 32u ? 8u :
+           code == 64u ? 9u : code == 128u ? 10u : 11u]++;
+    why = overlay_reason();
+    key = (code & 0xFFu) | (why & 0xFFu) << 8 | (s->active ? 1u : 0u) << 16 | (disp_output() & 0xFFu) << 24;
+    i = d[14];
+    if (i && d[16u + ((i - 1u) & 63u) * 4u + 1u] == key) return;
+    {
+        volatile u32 *e = d + 16u + (i & 63u) * 4u;
+        e[0] = Z5_FULL_TICK; e[1] = key; e[2] = d[1]; e[3] = s->mask_pixels;
+    }
+    d[14] = i + 1u;
+}
+
 Z5_IMAGE(custom_disp_image) static u32 overlay_source_refuse(overlay_state *s, u32 reason)
 {
+    aspect_mask_diag(s, reason);
     s->source_reason = reason;
     __asm__ volatile ("dmb sy" ::: "memory");
     s->source_busy = 0;
@@ -192,6 +226,7 @@ static u32 overlay_source_paint_impl(u32 object)
     u32 painted = (!mask_only && (flags & 2u)) ? level_paint() : 1u;
     aspect_mask_paint(s, mapped, width, height);   /* A74: 4:3 live-view mask (LCD); A79: EVF too */
     if (mask_only) s->mask_only_paints++;
+    aspect_mask_diag(s, mask_only ? 1u : 0u);
     s->ready = 0; s->drawing_image = s->drawing_bank = 0;
     if (!disp_pass_matches(output)) { m[18] = 0; return overlay_source_refuse(s, 32u); }
     overlay_diag_cost(1u, Z5_FULL_TICK - start);

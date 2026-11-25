@@ -90,6 +90,7 @@ IMG_FN static void af_cfg(u32 *r)
     log[1] += 1u;
     log[2] = *(volatile const u32 *)CM_MS_CLOCK;     /* A87: last remapped shot, for the instant review */
     log[3] = b ? b[21] : 1u;
+    log[4] = (u32)info;                              /* A89 readout: the shot's capture info */
     FW(af_desc_fn, 0x101DC3E8u)((u32)(info + 0x200), (u32)(info + 0x202));
     b = af_block();
     if (b && *(volatile const u16 *)(b + 32u)) {
@@ -196,6 +197,39 @@ IMG_FN static u32 af_pvw(u32 kind, u32 *r, u32 *how, u32 *q)
 }
 
 #ifdef A83_TRACE
+/* A89 readout: a snapshot per new preview row (first 10 rows) at DIAG 0x3EC00, 0x200 bytes each, to compare a stock
+ * NEF with ours where instant review refuses zoom and the navigator shows a strip:
+ *   +0x00 ms, caller, kind | type | class | small (row key), ctx, desc, rec, file entry, last shot's capture info
+ *   +0x20 decode descriptor [ctx + 28] 0xA0 bytes   +0xC0 file record + 0x380, 0x40 bytes
+ *   +0x100 ctx 0x40 bytes   +0x140 file entry 0x20 bytes   +0x160 capture info + 0x200, 0x40 bytes
+ *   +0x1A0 the caller's stack, 24 words (frame + 40 on) */
+#define A89_SNAP_OFF  0x3EC00u
+IMG_FN static void a89_copy(volatile u32 *dst, u32 src, u32 bytes)
+{
+    u32 i;
+    if (!a83_ram(src, bytes)) { for (i = 0; i < bytes / 4u; i++) dst[i] = 0xDEADDEADu; return; }
+    for (i = 0; i < bytes / 4u; i++) dst[i] = ((volatile const u32 *)src)[i];
+}
+
+IMG_FN static void a89_snap(cm_t *c, u32 *r, u32 ctx, u32 rec, u32 row)
+{
+    volatile u32 *z;
+    u32 lr = r[AF_LR], meta, info = 0, p = af_on(), i;
+    if (row >= 10u || !c->dg_buf) return;
+    z = (volatile u32 *)(c->dg_buf + A89_SNAP_OFF + row * 0x200u);
+    meta = lr == 0x1034E9CBu || lr == 0x1034E94Du ? r[AF_STACK] : r[AF_STACK + 3u];
+    if (p) info = ((volatile const u32 *)(p + 192u))[4];
+    z[0] = *(volatile u32 *)CM_MS_CLOCK; z[1] = lr;
+    z[2] = r[AF_R1] | (r[AF_R2] ? 1u : 0u) << 8; z[3] = ctx;
+    z[4] = a83_ram(ctx, 0x40u) ? *(volatile const u32 *)(ctx + 28u) : 0u; z[5] = rec; z[6] = meta; z[7] = info;
+    a89_copy(z + 0x20u / 4u, z[4], 0xA0u);
+    a89_copy(z + 0xC0u / 4u, rec ? rec + 0x380u : 0u, 0x40u);
+    a89_copy(z + 0x100u / 4u, ctx, 0x40u);
+    a89_copy(z + 0x140u / 4u, meta, 0x20u);
+    a89_copy(z + 0x160u / 4u, info ? info + 0x200u : 0u, 0x40u);
+    for (i = 0; i < 24u; i++) z[0x1A0u / 4u + i] = r[AF_STACK + i];
+}
+
 /* A85m readout rows (layout in a83_trace.inc) */
 IMG_FN static void a85_pvw_log(cm_t *c, u32 kind, u32 *r, u32 how, u32 q)
 {
@@ -236,6 +270,7 @@ IMG_FN static void a85_pvw_log(cm_t *c, u32 kind, u32 *r, u32 how, u32 q)
                 (u32)*(volatile const u16 *)(meta + 12u) | (u32)*(volatile const u16 *)(meta + 14u) << 16 : 0u;
         }
         h[12] = n + 1u;
+        a89_snap(c, r, ctx, rec, row);
     } else d += row * 16u;
     d[4] += 1u; d[6] = ms; d[7] = how; d[9] = q;
     d[8] = how && a83_ram(r[AF_R0], 4u) ? *(volatile const u32 *)r[AF_R0] : 0u;

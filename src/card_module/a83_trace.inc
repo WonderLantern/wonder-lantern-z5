@@ -44,7 +44,7 @@
 /* A84m: kind 19 comes from aspect_fw.inc with the stub frame {r0-r6, r9, r12, lr}; 'A84T'; [5] byte 0 = info +
  * 0x220 (instead of info + 0), [6] = r2 (instead of info + 0xFC): the two values that pick the trim table */
 #undef A83_MAGIC
-#define A83_MAGIC     0x54383841u     /* 'A88T' (A84T, A86T, A87T before; a new tag clears stale rows) */
+#define A83_MAGIC     0x54393841u     /* 'A89T' (A84T, A86T-A88T before; a new tag clears stale rows) */
 #define A83_LR        9u
 #else
 #define A83_LR        5u
@@ -54,7 +54,7 @@ IMG_FN static volatile u32 *a83_head(cm_t *c)
 {
     volatile u32 *h = (volatile u32 *)(c->dg_buf + A83_OFF);
     if (h[0] != A83_MAGIC) {
-        for (u32 i = 0; i < (A83_DOFF + A83_DCAP * 32u) / 4u; i++) h[i] = 0u;
+        for (u32 i = 0; i < 0x8000u / 4u; i++) h[i] = 0u;    /* A89: up to the record end (snapshots at 0x3EC00) */
         h[2] = A83_RCAP; h[3] = 64u;
         h[0] = A83_MAGIC;
     }

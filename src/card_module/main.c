@@ -1719,7 +1719,7 @@ IMG_FN static void hub_labels(cm_t *c)
 #define A43_PTRS      0xC18C7554u
 #define A43_LOG_OFF   0x36A00u
 #define A43_COPY_OFF  0x36A40u
-#define A43_COPY_BYTES 0x880u /* A68: groups, firmware log from +224; A81: parameter block +0x200, table sets for
+#define A43_COPY_BYTES 0xE00u /* A89: +0x9C0..+0xE00 = mask readout (overlay_render.h); was 0x880 */  /* A68: groups, firmware log from +224; A81: parameter block +0x200, table sets for
                                 * 4:3 at +0x280 and 2.33:1 at +0x380 (the active groups are copied from them);
                                 * A82: parameter blocks at +0x460 / +0x4C0, Adobe crop texts at +0x520 / +0x6C0 */
 #define A43_PRM43     0x460u
