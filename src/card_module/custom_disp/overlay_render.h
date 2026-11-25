@@ -75,31 +75,6 @@ Z5_IMAGE(custom_disp_image) static u32 overlay_source_descriptor(void)
     u32 slot = Z5_PRESENT_SLOT(1u);
     return slot < 3u ? Z5_PRESENT_POOL + slot * 0xea8u + 0x84u : 0u;
 }
-/* A90 readout (A89 wrote into the module's parameter copy; with that build the mask vanished on the camera, so
- * the counting now stays inside overlay_state.a90, see overlay_state.h). code: 0 painted, 1 mask-only painted, else
- * the refusal reason. Only while the aspect mask is on. */
-Z5_IMAGE(custom_disp_image) static void aspect_mask_diag(overlay_state *s, u32 code)
-{
-    u32 why, key, n, k;
-    if (!aspect_mask_ratio()) return;
-    if (s->a90[0] != 0x414B534Du) { s->a90[0] = 0x414B534Du; s->a90[1] = sizeof(overlay_state); }  /* 'MSKA' */
-    s->a90[2]++;
-    if (code == 1u) { s->a90[4]++; s->a90[15] = Z5_FULL_TICK; s->a90[14] = Z5_FULL_TICK; }
-    else if (!code) { s->a90[3]++; s->a90[14] = Z5_FULL_TICK; }
-    else {
-        k = code == 2u ? 5u : code == 4u ? 6u : code == 8u ? 7u : code == 16u ? 8u : code == 32u ? 9u :
-            code == 64u ? 10u : code == 128u ? 11u : 12u;
-        s->a90[k]++;
-    }
-    why = overlay_reason();
-    key = (code & 0xFFu) | (why & 0xFFu) << 8 | (s->active ? 1u : 0u) << 16;
-    n = s->a90[13];
-    if (n && s->a90[16u + ((n - 1u) & 15u) * 3u + 1u] == key) return;
-    k = 16u + (n & 15u) * 3u;
-    s->a90[k] = Z5_FULL_TICK; s->a90[k + 1u] = key; s->a90[k + 2u] = s->a90[2];
-    s->a90[13] = n + 1u;
-}
-
 
 Z5_IMAGE(custom_disp_image) static u32 overlay_source_descriptor_matches(u32 output,
     const volatile u32 *d, u32 native, u32 width, u32 height)
@@ -112,7 +87,6 @@ Z5_IMAGE(custom_disp_image) static u32 overlay_source_descriptor_matches(u32 out
 
 Z5_IMAGE(custom_disp_image) static u32 overlay_source_refuse(overlay_state *s, u32 reason)
 {
-    aspect_mask_diag(s, reason);
     s->source_reason = reason;
     __asm__ volatile ("dmb sy" ::: "memory");
     s->source_busy = 0;
@@ -218,7 +192,6 @@ static u32 overlay_source_paint_impl(u32 object)
     u32 painted = (!mask_only && (flags & 2u)) ? level_paint() : 1u;
     aspect_mask_paint(s, mapped, width, height);   /* A74: 4:3 live-view mask (LCD); A79: EVF too */
     if (mask_only) s->mask_only_paints++;
-    aspect_mask_diag(s, mask_only ? 1u : 0u);
     s->ready = 0; s->drawing_image = s->drawing_bank = 0;
     if (!disp_pass_matches(output)) { m[18] = 0; return overlay_source_refuse(s, 32u); }
     overlay_diag_cost(1u, Z5_FULL_TICK - start);

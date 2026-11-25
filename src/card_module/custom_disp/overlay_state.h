@@ -1,12 +1,6 @@
 /* Native detailed-page overlays and refresh diagnostics. */
 
 typedef struct {
-    /* A90 readout, kept first so the card module can find it from disp_state.metadata -> m[27] (stride [1]):
-     * [0] 'MSKA' [1] sizeof(overlay_state) [2] tail decisions [3] painted [4] mask-only painted [5..12] refusals
-     * 2 / 4 / 8 / 16 / 32 / 64 / 128 / other [13] timeline count [14] last paint ms [15] last mask-only ms
-     * [16..63] timeline, 16 x {ms, code | why << 8 | active << 16, decisions}: one entry per change. Counts only
-     * while the aspect mask is on. Written only here, inside this struct. */
-    u32 a90[64];
     u32 active, reason, entries, installs, restores;
     volatile u32 ready, paints, source_reason, source_busy, source_gate;
     u32 drawing_image, drawing_bank;

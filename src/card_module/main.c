@@ -660,27 +660,6 @@ IMG_FN static void diag_write(cm_t *c)
     for (i = 0; i < 0x14u / 4u; i++) b[0xC80u / 4u + i] = ((const volatile u32 *)DG_LAYERS)[i];
     b[13] = c->dg_frozen; b[14] = c->dg_left;
     b[15] = 119u;                              /* group 116: module group that wrote this record */
-#ifdef A83_TRACE
-    {   /* A90 readout: both outputs' overlay_state.a90 mask counters (custom_disp/overlay_state.h), 2 x 256 bytes at
-         * 0x37400 (after the 0x880-byte parameter copy at 0x36A40). Read only: owner -> disp_state.metadata
-         * (word 4) -> m[27] = &outputs[0], stride = a90[1]. */
-        u32 *z = b + 0x37400u / 4u, owner = (u32)c->custom_disp, meta, ov, stride, o, k;
-        for (k = 0; k < 128u; k++) z[k] = 0u;
-        if (!c->custom_disp_rc && owner >= RAM_LO && owner < RAM_HI - 0x40u) {
-            meta = ((const volatile u32 *)owner)[4];
-            ov = meta >= RAM_LO && meta < RAM_HI - 0x80u ? ((const volatile u32 *)meta)[27] : 0u;
-            stride = ov >= RAM_LO && ov < RAM_HI - 0x100u ? ((const volatile u32 *)ov)[1] : 0u;
-            if (!stride)                                   /* output 0 never counted: take the stride of output 1 */
-                stride = 0u;
-            for (o = 0; o < 2u; o++) {
-                u32 q = ov + o * (stride ? stride : 0u);
-                if (o && !stride) break;
-                if (q >= RAM_LO && q < RAM_HI - 0x100u && ((const volatile u32 *)q)[0] == 0x414B534Du)
-                    for (k = 0; k < 64u; k++) z[o * 64u + k] = ((const volatile u32 *)q)[k];
-            }
-        }
-    }
-#endif
     {   /* burst speed-up state, 6 words at 0xDA0 (free: layers end at 0xD94, ring counters start at 0xDF0):
          * q0 = 'BS' << 16 | list-A bits of the five holds << 11 | holds removed << 6 | silent byte (4 bits) << 2
          *      | switches (bit 0 mechanical, bit 1 electronic); q1 task result; q2 P + 0x14; q3 P + 0x18;

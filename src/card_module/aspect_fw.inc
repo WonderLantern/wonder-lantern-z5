@@ -274,7 +274,7 @@ IMG_FN static void a85_pvw_log(cm_t *c, u32 kind, u32 *r, u32 how, u32 q)
                 (u32)*(volatile const u16 *)(meta + 12u) | (u32)*(volatile const u16 *)(meta + 14u) << 16 : 0u;
         }
         h[12] = n + 1u;
-        a89_snap(c, r, ctx, rec, row);
+        (void)a89_snap;                        /* A91: snapshots off (A89/A90 found what they were for) */
     } else d += row * 16u;
     d[4] += 1u; d[6] = ms; d[7] = how; d[9] = q;
     d[8] = how && a83_ram(r[AF_R0], 4u) ? *(volatile const u32 *)r[AF_R0] : 0u;
