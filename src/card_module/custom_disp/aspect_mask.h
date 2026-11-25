@@ -54,13 +54,22 @@ Z5_IMAGE(custom_disp_image) static u32 aspect_mask_ratio(void)
 }
 
 /* draw: 1 = fill transparent pixels of the ratio's bars, 0 = erase the mask colour anywhere on the surface.
- * Returns the number of pixels changed; marks changed rows for the sparse publish. */
+ * Returns the number of pixels changed; marks changed rows for the sparse publish.
+ * A92 (2026-11-25): "transparent" = alpha 0, not only the value 0. After a shot the native code clears icon
+ * rectangles; the boxes stayed open in front of the live view (A85 / A91 videos), which a 0-only rule explains if
+ * the cleared pixels carry colour with alpha 0 (premultiplied: they add light). Pixels with any alpha (native UI,
+ * also its semi-transparent parts) are still left alone.
+ * A92 readout (st, overlay_state.a92, no calls): [4] filled this pass [5] foreign (not ours, alpha > 0 or our
+ * fill rule did not take it) [6] alpha-0-with-colour filled [7] alpha 1..0x3F [8] 0x40..0x7F [9] 0x80..0xFE
+ * [10] 0xFF, [11] alpha-0-with-colour filled since power-on, [12..27] up to 8 distinct values with alpha < 0x40
+ * and their counts, this pass. */
 Z5_IMAGE(custom_disp_image) __attribute__((optimize("no-if-conversion,no-if-conversion2")))
-static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw, u32 ratio)
+static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw, u32 ratio, volatile u32 *st)
 {
     volatile u32 *px = (volatile u32 *)surface;
     u32 changed = 0, bar = aspect_mask_side(width, height), band = aspect_mask_band(width, height);
     if (!bar || !band || !surface || (surface & 3u)) return 0;
+    if (st && draw) for (u32 i = 4u; i < 28u; i++) if (i != 11u) st[i] = 0u;
     for (u32 y = 0; y < height; y++) {
         volatile u32 *row = px + y * width;
         u32 x0a = 0, x1a = 0, x0b = 0, x1b = 0;               /* up to two column ranges in this row */
@@ -71,7 +80,27 @@ static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw, u32 r
             u32 a = k ? x0b : x0a, e = k ? x1b : x1a, first = 0xffffu, last = 0;
             for (u32 x = a; x < e; x++) {
                 u32 v = row[x];
-                if (draw ? v != 0u : v != A43_MASK_COLOR) continue;
+                if (draw) {
+                    if (v == A43_MASK_COLOR) continue;
+                    if (v >> 24) {                                  /* native UI: leave it, count it */
+                        if (st) {
+                            u32 al = v >> 24;
+                            st[5]++;
+                            if (al < 0x40u) {
+                                st[7]++;
+                                for (u32 j = 12u; j < 28u; j += 2u) {
+                                    if (st[j + 1u] && st[j] != v) continue;
+                                    st[j] = v; st[j + 1u]++;
+                                    break;
+                                }
+                            } else if (al < 0x80u) st[8]++;
+                            else if (al < 0xFFu) st[9]++;
+                            else st[10]++;
+                        }
+                        continue;
+                    }
+                    if (v && st) { st[6]++; st[11]++; }             /* alpha 0 with colour: ours to fill */
+                } else if (v != A43_MASK_COLOR) continue;
                 row[x] = draw ? A43_MASK_COLOR : 0u;
                 if (x < first) first = x;
                 last = x;
@@ -83,6 +112,7 @@ static u32 aspect_mask_apply(u32 surface, u32 width, u32 height, u32 draw, u32 r
             }
         }
     }
+    if (st && draw) st[4] = changed;
     return changed;
 }
 
@@ -99,13 +129,15 @@ Z5_IMAGE(custom_disp_image) static void aspect_mask_paint(overlay_state *s, u32 
             s->mask_owned[slot] = surface;
             s->mask_ratio[slot] = ratio;
         } else if (s->mask_ratio[slot] != ratio) {
-            s->mask_pixels += aspect_mask_apply(surface, width, height, 0u, 0u);
+            s->mask_pixels += aspect_mask_apply(surface, width, height, 0u, 0u, 0);
             s->mask_ratio[slot] = ratio;
         }
-        s->mask_pixels += aspect_mask_apply(surface, width, height, 1u, ratio);
+        if (s->a92[0] != 0x424B534Du) { s->a92[0] = 0x424B534Du; s->a92[1] = sizeof(overlay_state); }  /* 'MSKB' */
+        s->a92[2]++; s->a92[3] = Z5_FULL_TICK; s->a92[28] = width | height << 16; s->a92[29] = ratio;
+        s->mask_pixels += aspect_mask_apply(surface, width, height, 1u, ratio, s->a92);
         s->mask_paints++;
     } else if (slot != 4u) {
-        s->mask_pixels += aspect_mask_apply(surface, width, height, 0u, 0u);
+        s->mask_pixels += aspect_mask_apply(surface, width, height, 0u, 0u, 0);
         s->mask_owned[slot] = 0;
         s->mask_erases++;
     }

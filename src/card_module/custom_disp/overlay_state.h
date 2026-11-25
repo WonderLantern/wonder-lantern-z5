@@ -1,6 +1,10 @@
 /* Native detailed-page overlays and refresh diagnostics. */
 
 typedef struct {
+    /* A92 mask readout, first so the card module finds it from disp_state.metadata -> m[27] (stride [1]); written
+     * only by aspect_mask_paint / aspect_mask_apply with plain stores (no calls): [0] 'MSKB' [1] sizeof [2] draw
+     * passes [3] last pass ms [4..27] see aspect_mask_apply [28] surface w | h << 16 [29] ratio */
+    u32 a92[32];
     u32 active, reason, entries, installs, restores;
     volatile u32 ready, paints, source_reason, source_busy, source_gate;
     u32 drawing_image, drawing_bank;
