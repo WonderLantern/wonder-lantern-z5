@@ -31,6 +31,21 @@ IMG_FN static u32 a43_is_on(void)
     return g1 >= RAM_LO && g1 < RAM_HI;
 }
 
+#ifdef B2_LVSZ
+/* B3: our 4:3 size of image size `size` (0 L, 1 M, 2 S) from the 4:3 stash's group 1 (the table the area size
+ * selector 0x102092A6 reads), while 4:3 is chosen and prepared; 0 otherwise. Independent of the area-8 switch. */
+IMG_FN static u32 a43_lv_pair(u32 size)
+{
+    cm_t *c = cm_get();
+    bt_t *t = c ? BTP(c) : 0;
+    const volatile u16 *s;
+    if (!t || t->a43_status != 1u || t->a43_sel != 1u || !t->a43_copy || size > 2u) return 0u;
+    s = (const volatile u16 *)(t->a43_copy + A43_STASH43 + A43_GROUP_BYTES);
+    if (s[0] != 5352u || s[1] != 4016u) return 0u;
+    return (u32)(s + 2u * size);
+}
+#endif
+
 IMG_FN static void a43_apply(cm_t *c)
 {
     bt_t *t = BTP(c);
