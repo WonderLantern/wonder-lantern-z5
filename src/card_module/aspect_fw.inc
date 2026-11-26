@@ -386,7 +386,10 @@ IMG_FN static void af_lvmsg(u32 *r)
     volatile const u16 *fit = (volatile const u16 *)0xC23802F4u;
     u32 inj = 0u, i, f, fh, m0 = 0u, m1 = 0u, m2 = 0u;
     if ((u32)msg < RAM_LO || (u32)msg >= RAM_HI - 0x1A0u || (u32)blk != (u32)msg + 0x160u) return;
-    if (c && BTP(c) && BTP(c)->a43_lv_inject && AF_AREA_NOW == 0u && AF_LV43_PAIR(0u)) {
+    /* B13: also when 4:3 is turned off (no AF_LV43_PAIR then), and only while the manager is active (its context
+     * + 4; 0x1018D014 ignores the message otherwise, as at menu exit) */
+    if (c && BTP(c) && BTP(c)->a43_lv_inject && AF_AREA_NOW == 0u && r[AF_R0] >= RAM_LO && r[AF_R0] < RAM_HI - 8u &&
+        *(volatile const u8 *)(r[AF_R0] + 4u)) {
         msg[0x64u / 4u] = 1u;                  /* 0x1624 present */
         *(volatile u8 *)((u32)msg + 0x68u) = 0u;   /* = FX */
         BTP(c)->a43_lv_inject = 0u;
@@ -427,7 +430,9 @@ IMG_FN static void af_lvmsg(u32 *r)
         } else {
             p = (volatile u32 *)(c->dg_buf + AF_B12_OFF + 0x10u + (n & 15u) * 32u);
             p[0] = *(volatile u32 *)CM_MS_CLOCK; p[1] = m0; p[2] = m1; p[3] = m2;
-            p[4] = blk[0]; p[5] = blk[1]; p[6] = f; p[7] = fh << 16 | inj << 31;
+            p[4] = blk[0]; p[5] = blk[1]; p[6] = f;
+            p[7] = fh << 16 | inj << 31 |
+                   (c && BTP(c) && BTP(c)->a43_lv_inject ? 1u << 30 : 0u);   /* B13: injection still pending */
             h[3] = n + 1u;
         }
     }

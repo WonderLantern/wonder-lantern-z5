@@ -127,27 +127,30 @@ IMG_FN static void a43_watch(cm_t *c)      /* module task, every 50 ms: follow t
     if (!t || t->a43_status != 1u) return;
     if (a43_want(c) != a43_is_on()) a43_apply(c);
 #ifdef B2_LVSZ
+    /* B13 (B12 camera DIAG02-05: 0 injections): manager messages come only every 0.4-1 s, so B12's 0.45 s window
+     * missed them. a43_lv_poke = ticks since live view returned (bits 0-15) | injections asked (bits 16-23). After
+     * 2 settle ticks, while the fit does not match, ask for an injection (at most 3) and keep it pending until a
+     * message takes it (aspect_fw.inc af_lvmsg, only while the manager is active) or 6 s (120 ticks) pass. */
     if (t->a43_lv_poke) {
-        u32 tries = t->a43_lv_poke & 0xFu;
-        u32 wait = t->a43_lv_poke >> 4;
+        u32 ticks = t->a43_lv_poke & 0xFFFFu, asked = (t->a43_lv_poke >> 16) & 0xFFu;
         if (A43_AREA_NOW != 0u) {
             t->a43_lv_poke = 0u;
+            t->a43_lv_inject = 0u;
         } else if (A43_LV_GUI_ON != 1u) {
-            t->a43_lv_poke = tries;                      /* still in menu/playback: wait until LV returns */
+            t->a43_lv_poke = 1u | asked << 16;          /* menu / playback: wait until live view returns */
+            t->a43_lv_inject = 0u;
+        } else if (a43_fit_is43() == (t->a43_sel == 1u)) {
+            t->a43_lv_poke = 0u;                         /* the fit (black frame) matches the choice */
+            t->a43_lv_inject = 0u;
+        } else if (ticks >= 120u) {
+            t->a43_lv_poke = 0u;                         /* give up */
+            t->a43_lv_inject = 0u;
         } else {
-            if (a43_fit_is43() == (t->a43_sel == 1u)) {
-                t->a43_lv_poke = 0u;                     /* B12: the fit (black frame) already matches */
-                t->a43_lv_inject = 0u;
-            } else if (wait < 2u) {
-                t->a43_lv_poke = tries | ((wait + 1u) << 4);   /* let live view settle ~100 ms */
-            } else if (tries <= 3u) {
-                t->a43_lv_inject = 1u;                   /* B12: the next manager message carries 0x1624 = FX */
-                a43_notify_fx();                         /* B11 post, so that a message comes */
-                t->a43_lv_poke = tries + 1u;             /* retry up to 3 times if still settling */
-            } else {
-                t->a43_lv_poke = 0u;
-                t->a43_lv_inject = 0u;
+            if (ticks >= 3u && !t->a43_lv_inject && asked < 3u) {
+                t->a43_lv_inject = 1u;                   /* the next active manager message gets 0x1624 = FX */
+                asked += 1u;
             }
+            t->a43_lv_poke = (ticks + 1u) | asked << 16;
         }
     }
 #endif
