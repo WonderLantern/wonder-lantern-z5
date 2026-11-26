@@ -49,6 +49,16 @@
 #define AF_K_NEF    25u
 #define AF_K_FULL   27u             /* A90: 0x10355DCC, full-size image size of the playback prep */
 #define AF_K_RAW    26u             /* A88: 0x1034F6DE, the join of the RAW paths ([r4] = 2) of the decode setup */
+#define AF_K_LVSZ   28u             /* B2: 0x10197FFC / 0x1018B388, live-view window / fit area size query */
+#define AF_SIZE_SEL 0x102092A6u     /* area size selector (area, size) -> u16 (w, h) */
+#define AF_LV_WIN   0x10198001u     /* B2: return of the window updater's selected-area query */
+#define AF_LV_FIT   0x1018B38Du     /* B2: return of the display fit's area size query */
+#define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
+#ifdef B2_LVSZ
+#define AF_K_LAST   AF_K_LVSZ       /* B2 firmware (b2m_fx43.S) calls kind 28 */
+#else
+#define AF_K_LAST   AF_K_FULL
+#endif
 #define AF_REVIEW_MS 6000u          /* A87: the shot whose instant review may stand in for the file service */
 #define AF_SVC      0x103BC7E0u     /* file service: (kind, type, handle, u16 out[2]) -> 0 = ok */
 #define AF_PTR      0xC18C7598u     /* area 8 group 1: the firmware's switch */
@@ -326,6 +336,23 @@ IMG_FN static u32 af_nef(u32 *r)
     return 1u;
 }
 
+/* B2 (B1 camera, DIAG17 + b1_fit_replay.py): the stock live view letterboxes by the window's own aspect (16:9
+ * (0, 36, 720, 442), 1:1 (120, 0, 600, 480)); for 4:3 the stock fit gives (40, 0, 680, 480). While 4:3 is on (area
+ * 8's tables are our 4:3 copies, size 0 = 5352 x 4016), the two live-view queries of the FX size ask for area 8
+ * instead: the window updater then writes (332, 0, 5684, 4016) and the fit the pillarboxed rectangle. 2.33:1 is
+ * left stock (the fit puts it in the 16:9 class: stretched). Other callers of 0x102092A6 are not hooked. */
+#ifdef B2_LVSZ
+IMG_FN static u32 af_lvsz(u32 *r)
+{
+    const volatile u16 *s;
+    if (r[AF_R0] != 0u || (r[AF_LR] != AF_LV_WIN && r[AF_LR] != AF_LV_FIT) || !af_on() || !af_block()) return 0u;
+    s = (const volatile u16 *)FW(u32 (*)(u32, u32), AF_SIZE_SEL)(8u, r[AF_R1]);
+    if ((u32)s < 0x10000000u || s[0] != 5352u || s[1] != 4016u) return 0u;
+    r[AF_R0] = 8u;
+    return 1u;
+}
+#endif
+
 IMG_FN static u32 af_hook(u32 kind, u32 *r)
 {
     volatile u8 *b;
@@ -358,6 +385,21 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
         }
 #endif
         if (!res) return 0u;
+#ifdef B2_LVSZ
+    } else if (kind == AF_K_LVSZ) {
+        u32 set = af_lvsz(r);
+        (void)set;
+#if defined(A83_TRACE) && defined(B1_LVWIN)
+        cm_t *c = cm_get();
+        if (c && c->dg_buf) {
+            volatile u32 *q = (volatile u32 *)(c->dg_buf + AF_B2_OFF);
+            (void)a83_head(c);                 /* sets up 0x38000 .. 0x3B000 once, so it never clears these */
+            if (q[0] != 0x53483242u) { q[1] = 0u; q[2] = 0u; q[3] = 0u; q[0] = 0x53483242u; }   /* 'B2HS' */
+            q[3] += 1u;                        /* calls */
+            if (set) q[r[AF_LR] == AF_LV_WIN ? 1u : 2u] += 1u;   /* window / fit queries answered with area 8 */
+        }
+#endif
+#endif
     } else if (kind == AF_K_NEF || kind == AF_K_RAW) {
         u32 set = af_nef(r);
         (void)set;

@@ -13,7 +13,7 @@
  * Record at DIAG 0x39840 .. 0x3B000 (A91: the A89 snapshot area, unused; the VUI_DIAG_FOCUS rings start at 0x3B000):
  *   head [0] 'B1LW' [1] ticks [2] log words used [3] changes dropped (log full) [4] halfwords that went quiet
  *        (changed B1_NOISY times, no longer logged) [5] ms of the first tick [6] ms of the last tick
- *        [7] halfwords watched [8] layout 2 [9..15] ranges: address, length (bytes) pairs; R3's length is 16
+ *        [7] halfwords watched [8] layout 3 (B2: log ends at 0x3AFF0) [9..15] ranges: address, length (bytes) pairs; R3's length is 16
  *   +0x40          baseline: every watched halfword at the first tick
  *   +0x40 + 2n     shadow: the value last seen
  *   +0x40 + 4n     change count per halfword (u8, saturates at 255)
@@ -40,7 +40,8 @@
 #define B1_NHW        (B1_NHW_RAM + 1u)
 #define B1_NHW_PAD    ((B1_NHW + 3u) & ~3u)
 #define B1_EV_OFF     (0x40u + B1_NHW_PAD * 5u)
-#define B1_EV_CAP     ((B1_END - B1_OFF - B1_EV_OFF) / 4u)     /* words */
+#define B1_LOG_END    0x3AFF0u        /* B2 counters 0x3AFF0 .. 0x3B000 (aspect_fw.inc AF_B2_OFF) */
+#define B1_EV_CAP     ((B1_LOG_END - B1_OFF - B1_EV_OFF) / 4u)     /* words */
 #define B1_NOISY      8u
 
 IMG_FN static u32 b1_value(cm_t *c, u32 i)
@@ -74,8 +75,8 @@ IMG_FN static void b1_watch(cm_t *c)       /* module task, every 50 ms */
     count = (volatile u8 *)(shadow + B1_NHW_PAD);
     ms = *(volatile u32 *)CM_MS_CLOCK;
     if (h[0] != B1_MAGIC) {
-        for (i = 0; i < (B1_END - B1_OFF) / 4u; i++) h[i] = 0u;
-        h[7] = B1_NHW; h[8] = 2u;
+        for (i = 0; i < (B1_LOG_END - B1_OFF) / 4u; i++) h[i] = 0u;
+        h[7] = B1_NHW; h[8] = 3u;
         h[9] = B1_R0; h[10] = B1_R0_LEN; h[11] = B1_R1; h[12] = B1_R1_LEN; h[13] = B1_R2; h[14] = B1_R2_LEN;
         h[15] = B1_R3;                     /* B1_R3_LEN: the decoder knows it (16) */
         for (i = 0; i < B1_NHW; i++) { u32 v = b1_value(c, i); base[i] = (u16)v; shadow[i] = (u16)v; }
