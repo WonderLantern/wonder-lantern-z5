@@ -725,6 +725,9 @@ IMG_FN static void burst_task(u32 unused)
 #endif
 #ifdef ASPECT43_FX
         if (c) a43_watch(c);                   /* A69: 4:3 tables only while FX and chosen */
+#ifdef B1_LVWIN
+        if (c) b1_watch(c);                    /* B1 readout: read-only RAM watch */
+#endif
 #endif
 #ifdef BULB_MENU
         if (c && c->dg_buf && BTP(c)) for (u32 i = 0u; i < 12u; i++) ((volatile u32 *)(c->dg_buf + 0xDC0u))[i] = BTP(c)->q[i];

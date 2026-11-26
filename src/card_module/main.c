@@ -1735,6 +1735,9 @@ IMG_FN static void hub_labels(cm_t *c)
 #ifdef A84_FW
 #include "aspect_fw.inc"       /* A84m: the photo-aspect hook logic (firmware keeps stubs), kinds 19-23 */
 #endif
+#ifdef B1_LVWIN
+#include "b1_lvwin.inc"       /* B1 readout: stock live-view window / fit rectangles -> DIAG 0x39840 */
+#endif
 #endif
 #include "burst_speed.inc"  /* image code: must stay before Z5_IMAGE_END */
 #include "vui_card.inc"   /* research/vertical-ui/vui_card.inc in the development tree */
