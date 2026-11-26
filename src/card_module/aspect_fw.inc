@@ -58,6 +58,11 @@
                                      * mode change; it wrote B7's 3 back to 0) */
 #define AF_LV_CROP  0x10190625u     /* B4: return of the live-view area crop's size query (0x10190598, rect ->
                                      * 0x10188C28, LV state + 0x128; stock 1:1 (1000, 0, 5016, 4016)) */
+#define AF_LV_ELBY1 0x101464CFu     /* B9: ELBY_fill (0x101460F2) call sites (kind 0x1b, sensor crop + warp out) */
+#define AF_LV_ELBY2 0x1014659Fu
+#define AF_LV_ELBY3 0x101465D7u
+#define AF_LV_LVCROP 0x101455CBu    /* B9: LV_crop_tbl (0x10145354) call site (sensor crop helper) */
+#define AF_LV_ELBR  0x10146BA7u     /* B9: ELBR 0x1020949A(area, 2) call site (1024x680 / 768x768 -> 896x672) */
 #define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
 #ifndef AF_AREA_NOW
 #define AF_AREA_NOW (*(volatile const u32 *)0xC25043A4u)   /* actual image area (setting 0x169E) */
@@ -82,6 +87,7 @@
 #define AF_SHOT     0x10143229u     /* the shot's first configuration call */
 
 typedef void (*af_desc_fn)(u32, u32);
+typedef void (*af_elby_fn)(u32, u32, u32);
 typedef u32 (*af_svc_fn)(u32, u32, u32, u32);
 
 IMG_FN static u32 af_on(void)
@@ -358,14 +364,53 @@ IMG_FN static u32 af_nef(u32 *r)
 #ifdef B2_LVSZ
 IMG_FN static u32 af_lvsz(u32 *r)
 {
-    u32 p;
-    if (r[AF_LR] == AF_LV_CLASS || r[AF_LR] == AF_LV_CLASS2) {   /* B7 / B8: FX live view, 4:3 chosen -> class 3 */
+    u32 lr = r[AF_LR], p;
+    if (lr == AF_LV_CLASS || lr == AF_LV_CLASS2) {   /* B7 / B8: FX live view, 4:3 chosen -> class 3 */
         if (r[AF_R0] != 0u || AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
         r[AF_R0] = 3u;
         return 1u;
     }
-    if (r[AF_R0] != 0u || (r[AF_LR] != AF_LV_WIN && r[AF_LR] != AF_LV_FIT && r[AF_LR] != AF_LV_CROP)) return 0u;
-    if (r[AF_LR] == AF_LV_CROP && AF_AREA_NOW != 0u) return 0u;   /* B4: DX also queries FX there (sensor mode) */
+    if (lr == AF_LV_ELBY1 || lr == AF_LV_ELBY2 || lr == AF_LV_ELBY3) {   /* B9: ELBY_fill 4:3 crop + warp out */
+        u32 desc = r[AF_R0], info = r[AF_R1];
+        if (AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
+        if (desc < RAM_LO || desc >= RAM_HI - 0x80u || info < RAM_LO || info >= RAM_HI - 0x500u) return 0u;
+        if (*(volatile const u8 *)info || *(volatile const u8 *)(info + 1u) ||
+            *(volatile const u32 *)(info + 0x10u) || *(volatile const u8 *)(info + 0x4CCu)) return 0u;
+        FW(af_elby_fn, 0x101460F2u)(desc, info, r[AF_R2]);
+        if (*(volatile const u16 *)(desc + 0x1Eu) != 1508u || *(volatile const u16 *)(desc + 0x20u) != 1006u)
+            return 1u;
+        *(volatile u16 *)(desc + 0x1Au) = 1344u;
+        *(volatile u16 *)(desc + 0x1Cu) = 1344u;
+        *(volatile u16 *)(desc + 0x1Eu) = 1340u; *(volatile u16 *)(desc + 0x20u) = 1006u;
+        *(volatile u16 *)(desc + 0x22u) = 1340u; *(volatile u16 *)(desc + 0x24u) = 1006u;
+        *(volatile u16 *)(desc + 0x26u) = 84u;   *(volatile u16 *)(desc + 0x28u) = 0u;
+        *(volatile u16 *)(desc + 0x38u) = 3u;    *(volatile u16 *)(desc + 0x3Au) = 3u;
+        *(volatile u16 *)(desc + 0x3Cu) = 1334u; *(volatile u16 *)(desc + 0x3Eu) = 1000u;
+        *(volatile u16 *)(desc + 0x44u) = 1536u; *(volatile u16 *)(desc + 0x46u) = 1152u;
+        *(volatile u32 *)(desc + 0x30u) = (*(volatile const u32 *)(desc + 0x2Cu) + 1344u * 1006u + 15u) & ~15u;
+        return 1u;
+    }
+    if (lr == AF_LV_LVCROP) {                        /* B9: LV_crop_tbl (0x10145354) 4:3 crop */
+        u32 info = r[AF_R0], out_sz = r[AF_R1], out_rect = r[AF_R2];
+        if (AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u) || !out_sz || !out_rect) return 0u;
+        if (info < RAM_LO || info >= RAM_HI - 0x500u) return 0u;
+        if (*(volatile const u8 *)info || *(volatile const u8 *)(info + 1u) ||
+            *(volatile const u32 *)(info + 0x10u) || *(volatile const u8 *)(info + 0x4CCu)) return 0u;
+        FW(af_elby_fn, 0x10145354u)(info, out_sz, out_rect);
+        if (*(volatile const u16 *)out_sz != 1508u || *(volatile const u16 *)(out_sz + 2u) != 1006u) return 1u;
+        *(volatile u16 *)(out_sz + 0u) = 1340u;  *(volatile u16 *)(out_sz + 2u) = 1006u;
+        *(volatile u16 *)(out_rect + 0u) = 87u;  *(volatile u16 *)(out_rect + 2u) = 3u;
+        *(volatile u16 *)(out_rect + 4u) = 1421u; *(volatile u16 *)(out_rect + 6u) = 1003u;
+        return 1u;
+    }
+    if (lr == AF_LV_ELBR) {                          /* B9: ELBR 0x1020949A(0, 2) -> 896 x 672 (exact 4:3) */
+        if (r[AF_R0] != 0u || r[AF_R1] != 2u || AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
+        r[AF_STACK + 4u] = 896u | (672u << 16);      /* caller's [sp + 0x10]: read right after bl returns */
+        r[AF_R0] = (u32)&r[AF_STACK + 4u];
+        return 1u;
+    }
+    if (r[AF_R0] != 0u || (lr != AF_LV_WIN && lr != AF_LV_FIT && lr != AF_LV_CROP)) return 0u;
+    if (lr == AF_LV_CROP && AF_AREA_NOW != 0u) return 0u;   /* B4: DX also queries FX there (sensor mode) */
     p = AF_LV43_PAIR(r[AF_R1]);
     if (!p) return 0u;
     r[AF_R0] = p;
@@ -419,6 +464,17 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
                 q6[1] = r[AF_STACK + 3u]; q6[2] += 1u; q6[3] = *(volatile u32 *)CM_MS_CLOCK;
             }
         }
+        if (set && (r[AF_LR] == AF_LV_ELBY1 || r[AF_LR] == AF_LV_ELBY2 || r[AF_LR] == AF_LV_ELBY3 ||
+                    r[AF_LR] == AF_LV_ELBR || r[AF_LR] == AF_LV_LVCROP)) {
+            cm_t *c9 = cm_get();
+            if (c9 && c9->dg_buf) {
+                volatile u32 *q9 = (volatile u32 *)(c9->dg_buf + 0x37D10u);
+                if (q9[0] != 0x54433942u) { q9[1] = 0u; q9[2] = 0u; q9[3] = 0u; q9[0] = 0x54433942u; }   /* 'B9CT' */
+                if (r[AF_LR] == AF_LV_ELBR) q9[2] += 1u;
+                else if (r[AF_LR] == AF_LV_LVCROP) q9[3] += 1u;
+                else q9[1] += 1u;
+            }
+        }
 #endif
 #if defined(A83_TRACE) && defined(B1_LVWIN)
         cm_t *c = cm_get();
@@ -427,10 +483,11 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
             (void)a83_head(c);                 /* sets up 0x38000 .. 0x3B000 once, so it never clears these */
             if (q[0] != 0x53483242u) { q[1] = 0u; q[2] = 0u; q[3] = 0u; q[0] = 0x53483242u; }   /* 'B2HS' */
             q[3] += 1u;                        /* calls */
-            if (set) {                         /* answered with our 4:3: [1] window | crop << 16 (B4), [2] fit */
+            if (set) {                         /* answered with our 4:3: [1] window | crop << 16 (B4), [2] fit | cls << 16 */
                 if (r[AF_LR] == AF_LV_FIT) q[2] += 1u;
                 else if (r[AF_LR] == AF_LV_CLASS || r[AF_LR] == AF_LV_CLASS2) q[2] += 0x10000u;   /* B7 / B8 */
-                else q[1] += r[AF_LR] == AF_LV_CROP ? 0x10000u : 1u;
+                else if (r[AF_LR] == AF_LV_CROP) q[1] += 0x10000u;
+                else if (r[AF_LR] == AF_LV_WIN) q[1] += 1u;
             }
         }
 #endif
