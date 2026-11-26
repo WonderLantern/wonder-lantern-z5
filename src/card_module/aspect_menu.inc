@@ -53,6 +53,15 @@ IMG_FN static u32 a43_lv_pair(u32 size)
 /* B12 (B11 camera DIAG01): the black frame is the fit (0xC23802F4: x0, y0, x1, y1), not the source window, which
  * stays 0 even after an EVF switch draws the 4:3 frame (LCD (40, 0, 680, 480), EVF (72, 54, 1208, 906)). */
 #define A43_LV_FIT     ((volatile const u16 *)0xC23802F4u)
+/* B14 (B13 camera DIAG07): turning 4:3 off, the menu-exit refresh put the fit back to FX (0, 0, 720, 480) but the
+ * source window stayed (332, 0, 5684, 4016) and B13, seeing the fit, stopped; the user then got a card warning. Done
+ * only when both match: 4:3 = 4:3 fit and window x0 332; off = not a 4:3 fit and window x0 0. */
+IMG_FN static u32 a43_fit_is43(void);
+IMG_FN static u32 a43_lv_matches(u32 want43)
+{
+    if (want43) return a43_fit_is43() && A43_LV_SRC_X0 == 332u;
+    return !a43_fit_is43() && A43_LV_SRC_X0 == 0u;
+}
 IMG_FN static u32 a43_fit_is43(void)
 {
     u32 w, h;
@@ -139,8 +148,8 @@ IMG_FN static void a43_watch(cm_t *c)      /* module task, every 50 ms: follow t
         } else if (A43_LV_GUI_ON != 1u) {
             t->a43_lv_poke = 1u | asked << 16;          /* menu / playback: wait until live view returns */
             t->a43_lv_inject = 0u;
-        } else if (a43_fit_is43() == (t->a43_sel == 1u)) {
-            t->a43_lv_poke = 0u;                         /* the fit (black frame) matches the choice */
+        } else if (a43_lv_matches(t->a43_sel == 1u)) {
+            t->a43_lv_poke = 0u;                         /* the fit (black frame) and the window match the choice */
             t->a43_lv_inject = 0u;
         } else if (ticks >= 120u) {
             t->a43_lv_poke = 0u;                         /* give up */
@@ -254,7 +263,7 @@ IMG_FN static u32 a43_pick(u32 sel)
         BTP(c)->a43_sel = sel;
         a43_apply(c);
 #ifdef B2_LVSZ
-        if (A43_AREA_NOW == 0u && ((old_sel == 1u) != (sel == 1u) || (sel == 1u && !a43_fit_is43())))
+        if (A43_AREA_NOW == 0u && ((old_sel == 1u) != (sel == 1u) || (sel == 1u && !a43_lv_matches(1u))))
             BTP(c)->a43_lv_poke = 1u;                    /* B11: rebuild LV window/fit/pipeline on menu exit */
 #endif
         save_cfg(c);
