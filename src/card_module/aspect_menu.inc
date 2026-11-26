@@ -50,6 +50,17 @@ IMG_FN static u32 a43_lv_pair(u32 size)
  * defers this until after exiting the menu (or after boot) until source window x0 (0xC2380326) matches. */
 #define A43_LV_GUI_ON  (*(volatile const u16 *)0xC1D61388u)
 #define A43_LV_SRC_X0  (*(volatile const u16 *)0xC2380326u)
+/* B12 (B11 camera DIAG01): the black frame is the fit (0xC23802F4: x0, y0, x1, y1), not the source window, which
+ * stays 0 even after an EVF switch draws the 4:3 frame (LCD (40, 0, 680, 480), EVF (72, 54, 1208, 906)). */
+#define A43_LV_FIT     ((volatile const u16 *)0xC23802F4u)
+IMG_FN static u32 a43_fit_is43(void)
+{
+    u32 w, h;
+    if (A43_LV_FIT[2] <= A43_LV_FIT[0] || A43_LV_FIT[3] <= A43_LV_FIT[1]) return 0u;
+    w = (u32)A43_LV_FIT[2] - A43_LV_FIT[0];
+    h = (u32)A43_LV_FIT[3] - A43_LV_FIT[1];
+    return 3u * w + 8u >= 4u * h && 3u * w <= 4u * h + 8u;
+}
 typedef u32 (*a43_batch_alloc_fn)(u32);
 typedef void (*a43_batch_add_fn)(u32, u32, u32);
 typedef u32 (*a43_batch_post_fn)(u32);
@@ -124,16 +135,18 @@ IMG_FN static void a43_watch(cm_t *c)      /* module task, every 50 ms: follow t
         } else if (A43_LV_GUI_ON != 1u) {
             t->a43_lv_poke = tries;                      /* still in menu/playback: wait until LV returns */
         } else {
-            u32 want_x0 = t->a43_sel == 1u ? 332u : 0u;
-            if (A43_LV_SRC_X0 == want_x0) {
-                t->a43_lv_poke = 0u;                     /* source window already matches target ratio */
+            if (a43_fit_is43() == (t->a43_sel == 1u)) {
+                t->a43_lv_poke = 0u;                     /* B12: the fit (black frame) already matches */
+                t->a43_lv_inject = 0u;
             } else if (wait < 2u) {
                 t->a43_lv_poke = tries | ((wait + 1u) << 4);   /* let live view settle ~100 ms */
             } else if (tries <= 3u) {
-                a43_notify_fx();
+                t->a43_lv_inject = 1u;                   /* B12: the next manager message carries 0x1624 = FX */
+                a43_notify_fx();                         /* B11 post, so that a message comes */
                 t->a43_lv_poke = tries + 1u;             /* retry up to 3 times if still settling */
             } else {
                 t->a43_lv_poke = 0u;
+                t->a43_lv_inject = 0u;
             }
         }
     }
@@ -238,7 +251,7 @@ IMG_FN static u32 a43_pick(u32 sel)
         BTP(c)->a43_sel = sel;
         a43_apply(c);
 #ifdef B2_LVSZ
-        if (A43_AREA_NOW == 0u && ((old_sel == 1u) != (sel == 1u) || (sel == 1u && A43_LV_SRC_X0 != 332u)))
+        if (A43_AREA_NOW == 0u && ((old_sel == 1u) != (sel == 1u) || (sel == 1u && !a43_fit_is43())))
             BTP(c)->a43_lv_poke = 1u;                    /* B11: rebuild LV window/fit/pipeline on menu exit */
 #endif
         save_cfg(c);

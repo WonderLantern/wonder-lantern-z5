@@ -59,6 +59,7 @@ typedef struct {
     u32 a43_loaded;                 /* A81: ratio whose tables are in the active groups (1 4:3, 2 2.33:1) */
 #ifdef B2_LVSZ
     u32 a43_lv_poke;                /* B11: pending FX live-view refresh (tries | settle_ticks << 4) */
+    u32 a43_lv_inject;              /* B12: mark 0x1624 present in the next live-view manager message (aspect_fw.inc) */
 #endif
 } bt_t;
 #define BTP(c)        ((bt_t *)(c)->burst_viewall_off)

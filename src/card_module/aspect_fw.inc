@@ -65,6 +65,7 @@
 #define AF_LV_ELBY5 0x10146E5Fu     /* B10: ELBY_fill kind 0x2b refill (0x10146E50, live view) */
 #define AF_LV_LVCROP 0x101455CBu    /* B9: LV_crop_tbl (0x10145354) call site (sensor crop helper) */
 #define AF_LV_ELBR  0x10146BA7u     /* B9: ELBR 0x1020949A(area, 2) call site (1024x680 / 768x768 -> 896x672) */
+#define AF_LV_MSG   0x101904ADu     /* B12: 0x101904A8 bl 0x1018D014 (live-view manager; r0 ctx, r1 message, r2 block) */
 #define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
 #ifndef AF_AREA_NOW
 #define AF_AREA_NOW (*(volatile const u32 *)0xC25043A4u)   /* actual image area (setting 0x169E) */
@@ -364,6 +365,81 @@ IMG_FN static u32 af_nef(u32 *r)
  * 1, independent of the switch), and the B3 stub returns it directly (module returns 0 = handled, frame r0 = the
  * pair). 2.33:1 stays stock (the fit puts it in the 16:9 class). Other callers of 0x102092A6 are not hooked. */
 #ifdef B2_LVSZ
+/* B12: live-view manager message (0x101904A8 -> 0x1018D014; r1 = message, 0x160 bytes, r2 = block right after it).
+ * Its builder 0x1018CF28 reads "0x1624 present" at msg + 0x64 (value byte + 0x68) and then sets flag bit 3, which
+ * makes 0x1018D014 rebuild the fit (0x1018B4A2) and the window, as on a DX -> FX switch. After a 4:3 toggle
+ * a43_watch sets a43_lv_inject; the next message in FX gets 0x1624 = 0 (FX) marked present.
+ * Readout (DIAG 0x37400 .. 0x37BA0, decode_b12.py): header 'B12M', [1] calls, [2] injections (bit 16: next keep
+ * slot), [3] entries written; a ring of 16 entries of 8 words from 0x37410 (ms, nonzero-word masks of message words 0-31 /
+ * 32-63 / 64-87, block[0], block[1], fit x0 | x1 << 16 at the call, repeats | fit h << 16 | injected << 31; equal
+ * consecutive entries are counted as repeats); the last message + block at 0x37690 (0x1A0 bytes, then its fit x0|x1,
+ * fit h, ms); whenever the fit changed since the previous message, that previous message is kept in one of two
+ * slots (0x37840 / 0x379F0: 'B12K', its ms, fit x0 | x1 before, fit x0 | x1 after, then the 0x1A0 bytes). */
+#define AF_B12_OFF   0x37400u
+#define AF_B12_LAST  0x37690u
+#define AF_B12_END   0x37BA0u
+IMG_FN static void af_lvmsg(u32 *r)
+{
+#ifdef ASPECT43_FX                             /* the card module (not the offline harness, which has no cm_t) */
+    cm_t *c = cm_get();
+    volatile u32 *msg = (volatile u32 *)r[AF_R1], *blk = (volatile u32 *)r[AF_R2];
+    volatile const u16 *fit = (volatile const u16 *)0xC23802F4u;
+    u32 inj = 0u, i, f, fh, m0 = 0u, m1 = 0u, m2 = 0u;
+    if ((u32)msg < RAM_LO || (u32)msg >= RAM_HI - 0x1A0u || (u32)blk != (u32)msg + 0x160u) return;
+    if (c && BTP(c) && BTP(c)->a43_lv_inject && AF_AREA_NOW == 0u && AF_LV43_PAIR(0u)) {
+        msg[0x64u / 4u] = 1u;                  /* 0x1624 present */
+        *(volatile u8 *)((u32)msg + 0x68u) = 0u;   /* = FX */
+        BTP(c)->a43_lv_inject = 0u;
+        inj = 1u;
+    }
+    if (!c || !c->dg_buf) return;
+    volatile u32 *h = (volatile u32 *)(c->dg_buf + AF_B12_OFF);
+    volatile u32 *last = (volatile u32 *)(c->dg_buf + AF_B12_LAST);
+    if (h[0] != 0x4D323142u) {                 /* 'B12M' */
+        for (i = 1u; i < (AF_B12_END - AF_B12_OFF) / 4u; i++) h[i] = 0u;
+        h[0] = 0x4D323142u;
+    }
+    for (i = 0u; i < 88u; i++) {
+        if (!msg[i]) continue;
+        if (i < 32u) m0 |= 1u << i;
+        else if (i < 64u) m1 |= 1u << (i - 32u);
+        else m2 |= 1u << (i - 64u);
+    }
+    f = (u32)fit[0] | (u32)fit[2] << 16;
+    fh = fit[3] > fit[1] ? ((u32)fit[3] - fit[1]) & 0x7FFFu : 0u;
+    if (h[1] && (last[0x1A0u / 4u] != f || last[0x1A4u / 4u] != fh)) {   /* the previous message changed the fit */
+        volatile u32 *kp = (volatile u32 *)(c->dg_buf + ((h[2] >> 16) & 1u ? 0x379F0u : 0x37840u));
+        kp[1] = last[0x1A8u / 4u];
+        kp[2] = last[0x1A0u / 4u];
+        kp[3] = f;
+        for (i = 0u; i < 0x1A0u / 4u; i++) kp[4u + i] = last[i];
+        kp[0] = 0x4B323142u;                   /* 'B12K' */
+        h[2] ^= 0x10000u;
+    }
+    h[1] += 1u;
+    h[2] += inj;
+    {
+        u32 n = h[3];
+        volatile u32 *p = (volatile u32 *)(c->dg_buf + AF_B12_OFF + 0x10u + ((n - 1u) & 15u) * 32u);
+        if (n && !inj && !(p[7] >> 31) && p[1] == m0 && p[2] == m1 && p[3] == m2 && p[4] == blk[0] &&
+            p[5] == blk[1] && p[6] == f && ((p[7] >> 16) & 0x7FFFu) == fh) {
+            if ((p[7] & 0xFFFFu) != 0xFFFFu) p[7] += 1u;
+        } else {
+            p = (volatile u32 *)(c->dg_buf + AF_B12_OFF + 0x10u + (n & 15u) * 32u);
+            p[0] = *(volatile u32 *)CM_MS_CLOCK; p[1] = m0; p[2] = m1; p[3] = m2;
+            p[4] = blk[0]; p[5] = blk[1]; p[6] = f; p[7] = fh << 16 | inj << 31;
+            h[3] = n + 1u;
+        }
+    }
+    for (i = 0u; i < 0x1A0u / 4u; i++) last[i] = msg[i];   /* message + block (contiguous), after the injection */
+    last[0x1A0u / 4u] = f;
+    last[0x1A4u / 4u] = fh;
+    last[0x1A8u / 4u] = *(volatile u32 *)CM_MS_CLOCK;
+#else
+    (void)r;
+#endif
+}
+
 IMG_FN static u32 af_lvsz(u32 *r)
 {
     u32 lr = r[AF_LR], p;
@@ -456,6 +532,10 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
         if (!res) return 0u;
 #ifdef B2_LVSZ
     } else if (kind == AF_K_LVSZ) {
+        if (r[AF_LR] == AF_LV_MSG) {           /* B12: never handled: the stub always runs the stock manager */
+            af_lvmsg(r);
+            return kind;
+        }
         u32 set = af_lvsz(r);
         (void)set;
 #ifdef B6_LVSNAP
