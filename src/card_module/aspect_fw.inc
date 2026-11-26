@@ -52,7 +52,12 @@
 #define AF_K_LVSZ   28u             /* B2: 0x10197FFC / 0x1018B388, live-view window / fit area size query */
 #define AF_LV_WIN   0x10198001u     /* B2: return of the window updater's selected-area query */
 #define AF_LV_FIT   0x1018B38Du     /* B2: return of the display fit's area size query */
+#define AF_LV_CROP  0x10190625u     /* B4: return of the live-view area crop's size query (0x10190598, rect ->
+                                     * 0x10188C28, LV state + 0x128; stock 1:1 (1000, 0, 5016, 4016)) */
 #define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
+#ifndef AF_AREA_NOW
+#define AF_AREA_NOW (*(volatile const u32 *)0xC25043A4u)   /* actual image area (setting 0x169E) */
+#endif
 #ifndef AF_LV43_PAIR
 #define AF_LV43_PAIR(size) a43_lv_pair(size)   /* B3: aspect_menu.inc; the firmware check has a stand-in */
 #endif
@@ -350,7 +355,8 @@ IMG_FN static u32 af_nef(u32 *r)
 IMG_FN static u32 af_lvsz(u32 *r)
 {
     u32 p;
-    if (r[AF_R0] != 0u || (r[AF_LR] != AF_LV_WIN && r[AF_LR] != AF_LV_FIT)) return 0u;
+    if (r[AF_R0] != 0u || (r[AF_LR] != AF_LV_WIN && r[AF_LR] != AF_LV_FIT && r[AF_LR] != AF_LV_CROP)) return 0u;
+    if (r[AF_LR] == AF_LV_CROP && AF_AREA_NOW != 0u) return 0u;   /* B4: DX also queries FX there (sensor mode) */
     p = AF_LV43_PAIR(r[AF_R1]);
     if (!p) return 0u;
     r[AF_R0] = p;
@@ -401,7 +407,10 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
             (void)a83_head(c);                 /* sets up 0x38000 .. 0x3B000 once, so it never clears these */
             if (q[0] != 0x53483242u) { q[1] = 0u; q[2] = 0u; q[3] = 0u; q[0] = 0x53483242u; }   /* 'B2HS' */
             q[3] += 1u;                        /* calls */
-            if (set) q[r[AF_LR] == AF_LV_WIN ? 1u : 2u] += 1u;   /* window / fit queries answered with our 4:3 */
+            if (set) {                         /* answered with our 4:3: [1] window | crop << 16 (B4), [2] fit */
+                if (r[AF_LR] == AF_LV_FIT) q[2] += 1u;
+                else q[1] += r[AF_LR] == AF_LV_CROP ? 0x10000u : 1u;
+            }
         }
 #endif
         if (set) return 0u;                    /* B3: handled, frame r0 = the size pair */
