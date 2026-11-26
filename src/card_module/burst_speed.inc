@@ -728,6 +728,9 @@ IMG_FN static void burst_task(u32 unused)
 #ifdef B1_LVWIN
         if (c) b1_watch(c);                    /* B1 readout: read-only RAM watch */
 #endif
+#ifdef B5_RAMDUMP
+        if (c) b5_step(c);                     /* B5 readout: RAM image after a saved record */
+#endif
 #endif
 #ifdef BULB_MENU
         if (c && c->dg_buf && BTP(c)) for (u32 i = 0u; i < 12u; i++) ((volatile u32 *)(c->dg_buf + 0xDC0u))[i] = BTP(c)->q[i];

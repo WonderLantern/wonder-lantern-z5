@@ -1541,12 +1541,18 @@ IMG_FN static void diag_save(cm_t *c)
 #if defined(BULB_TIMER_MS) && !defined(BULB_MENU)
 IMG_FN static void bulb_arm(cm_t *c);          /* A12, burst_speed.inc */
 #endif
+#ifdef B5_RAMDUMP
+IMG_FN static void b5_request(cm_t *c);        /* B5 readout, b5_ramdump.inc */
+#endif
 IMG_FN static u32 save_ok(u32 a0, u32 a1, u32 a2, u32 a3)
 {
     cm_t *c = cm_get();
     (void)a0; (void)a1; (void)a2; (void)a3;
     if (!c) return 0;
     diag_save(c);
+#ifdef B5_RAMDUMP
+    if (c->dg_res == 0u) b5_request(c);       /* B5: the module task writes the RAM image next */
+#endif
 #if defined(BULB_TIMER_MS) && !defined(BULB_MENU)
     bulb_arm(c);                               /* A12: in Bulb, arm the timed remote Bulb */
 #endif
@@ -1737,6 +1743,9 @@ IMG_FN static void hub_labels(cm_t *c)
 #endif
 #ifdef B1_LVWIN
 #include "b1_lvwin.inc"       /* B1 readout: stock live-view window / fit rectangles -> DIAG 0x39840 */
+#endif
+#ifdef B5_RAMDUMP
+#include "b5_ramdump.inc"     /* B5 readout: 16 MiB RAM image to A:\Z5LOG\RAMDn.BIN after each saved record */
 #endif
 #endif
 #include "burst_speed.inc"  /* image code: must stay before Z5_IMAGE_END */
@@ -2719,7 +2728,12 @@ int z5_main(z5_ctx *ctx)
             pos = z5_putdec(line, TEXT_CHARS, pos, c->vui_af);
             {   /* draw-call recorder (patch_card_78.py) */
 #ifdef VUI_DIAG_AUTOWRITE
-                if (!c->dg_writes && c->dg_res == 0u) diag_write(c);   /* emulator only */
+                if (!c->dg_writes && c->dg_res == 0u) {
+                    diag_write(c);                 /* emulator only */
+#ifdef B5_RAMDUMP
+                    b5_request(c);         /* B5: exercise the RAM image in the emulator (record path unmapped there) */
+#endif
+                }
 #endif
                 pos = z5_puts(line, TEXT_CHARS, pos, " W");
                 pos = z5_putdec(line, TEXT_CHARS, pos, c->dg_writes);
