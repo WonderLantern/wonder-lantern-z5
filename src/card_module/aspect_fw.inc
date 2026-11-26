@@ -61,6 +61,8 @@
 #define AF_LV_ELBY1 0x101464CFu     /* B9: ELBY_fill (0x101460F2) call sites (kind 0x1b, sensor crop + warp out) */
 #define AF_LV_ELBY2 0x1014659Fu
 #define AF_LV_ELBY3 0x101465D7u
+#define AF_LV_ELBY4 0x10146E4Du     /* B10: ELBY_fill kind 0x2b alloc (0x10146E26, live view) */
+#define AF_LV_ELBY5 0x10146E5Fu     /* B10: ELBY_fill kind 0x2b refill (0x10146E50, live view) */
 #define AF_LV_LVCROP 0x101455CBu    /* B9: LV_crop_tbl (0x10145354) call site (sensor crop helper) */
 #define AF_LV_ELBR  0x10146BA7u     /* B9: ELBR 0x1020949A(area, 2) call site (1024x680 / 768x768 -> 896x672) */
 #define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
@@ -370,7 +372,8 @@ IMG_FN static u32 af_lvsz(u32 *r)
         r[AF_R0] = 3u;
         return 1u;
     }
-    if (lr == AF_LV_ELBY1 || lr == AF_LV_ELBY2 || lr == AF_LV_ELBY3) {   /* B9: ELBY_fill 4:3 crop + warp out */
+    if (lr == AF_LV_ELBY1 || lr == AF_LV_ELBY2 || lr == AF_LV_ELBY3 ||
+        lr == AF_LV_ELBY4 || lr == AF_LV_ELBY5) {   /* B9 / B10: ELBY_fill 4:3 crop + warp out (0x1b & 0x2b) */
         u32 desc = r[AF_R0], info = r[AF_R1];
         if (AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
         if (desc < RAM_LO || desc >= RAM_HI - 0x80u || info < RAM_LO || info >= RAM_HI - 0x500u) return 0u;
@@ -387,7 +390,8 @@ IMG_FN static u32 af_lvsz(u32 *r)
         *(volatile u16 *)(desc + 0x38u) = 3u;    *(volatile u16 *)(desc + 0x3Au) = 3u;
         *(volatile u16 *)(desc + 0x3Cu) = 1334u; *(volatile u16 *)(desc + 0x3Eu) = 1000u;
         *(volatile u16 *)(desc + 0x44u) = 1536u; *(volatile u16 *)(desc + 0x46u) = 1152u;
-        *(volatile u32 *)(desc + 0x30u) = (*(volatile const u32 *)(desc + 0x2Cu) + 1344u * 1006u + 15u) & ~15u;
+        if (r[AF_R2] != 0x2Bu)                      /* B10: kind 0x2b keeps stock plane_y + 0x8000 at +0x30 */
+            *(volatile u32 *)(desc + 0x30u) = (*(volatile const u32 *)(desc + 0x2Cu) + 1344u * 1006u + 15u) & ~15u;
         return 1u;
     }
     if (lr == AF_LV_LVCROP) {                        /* B9: LV_crop_tbl (0x10145354) 4:3 crop */
@@ -465,6 +469,7 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
             }
         }
         if (set && (r[AF_LR] == AF_LV_ELBY1 || r[AF_LR] == AF_LV_ELBY2 || r[AF_LR] == AF_LV_ELBY3 ||
+                    r[AF_LR] == AF_LV_ELBY4 || r[AF_LR] == AF_LV_ELBY5 ||
                     r[AF_LR] == AF_LV_ELBR || r[AF_LR] == AF_LV_LVCROP)) {
             cm_t *c9 = cm_get();
             if (c9 && c9->dg_buf) {
