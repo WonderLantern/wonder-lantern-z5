@@ -44,6 +44,24 @@ IMG_FN static u32 a43_lv_pair(u32 size)
     if (s[0] != 5352u || s[1] != 4016u) return 0u;
     return (u32)(s + 2u * size);
 }
+
+/* B11: post a settings-bus notification for {0x169E: 0, 0x1624: 0} (FX) without altering any stored setting.
+ * The live-view manager (0x1018D014) runs only when live view is active (GUI layer 0xC1D61388 == 1), so a43_watch
+ * defers this until after exiting the menu (or after boot) until source window x0 (0xC2380326) matches. */
+#define A43_LV_GUI_ON  (*(volatile const u16 *)0xC1D61388u)
+#define A43_LV_SRC_X0  (*(volatile const u16 *)0xC2380326u)
+typedef u32 (*a43_batch_alloc_fn)(u32);
+typedef void (*a43_batch_add_fn)(u32, u32, u32);
+typedef u32 (*a43_batch_post_fn)(u32);
+
+IMG_FN static void a43_notify_fx(void)
+{
+    u32 batch = FW(a43_batch_alloc_fn, 0x1006622Au)(0u);     /* non-blocking: 0 if pool empty */
+    if (!batch) return;
+    FW(a43_batch_add_fn, 0x1006F926u)(batch, 0x169Eu, 0u);   /* photo image area = FX */
+    FW(a43_batch_add_fn, 0x1006F926u)(batch, 0x1624u, 0u);   /* effective LV area = FX */
+    FW(a43_batch_post_fn, 0x10208F5Cu)(batch);               /* enqueue & wake settings bus */
+}
 #endif
 
 IMG_FN static void a43_apply(cm_t *c)
@@ -94,7 +112,32 @@ IMG_FN static void a43_apply(cm_t *c)
 
 IMG_FN static void a43_watch(cm_t *c)      /* module task, every 50 ms: follow the area and the choice */
 {
-    if (BTP(c) && BTP(c)->a43_status == 1u && a43_want(c) != a43_is_on()) a43_apply(c);
+    bt_t *t = BTP(c);
+    if (!t || t->a43_status != 1u) return;
+    if (a43_want(c) != a43_is_on()) a43_apply(c);
+#ifdef B2_LVSZ
+    if (t->a43_lv_poke) {
+        u32 tries = t->a43_lv_poke & 0xFu;
+        u32 wait = t->a43_lv_poke >> 4;
+        if (A43_AREA_NOW != 0u) {
+            t->a43_lv_poke = 0u;
+        } else if (A43_LV_GUI_ON != 1u) {
+            t->a43_lv_poke = tries;                      /* still in menu/playback: wait until LV returns */
+        } else {
+            u32 want_x0 = t->a43_sel == 1u ? 332u : 0u;
+            if (A43_LV_SRC_X0 == want_x0) {
+                t->a43_lv_poke = 0u;                     /* source window already matches target ratio */
+            } else if (wait < 2u) {
+                t->a43_lv_poke = tries | ((wait + 1u) << 4);   /* let live view settle ~100 ms */
+            } else if (tries <= 3u) {
+                a43_notify_fx();
+                t->a43_lv_poke = tries + 1u;             /* retry up to 3 times if still settling */
+            } else {
+                t->a43_lv_poke = 0u;
+            }
+        }
+    }
+#endif
 }
 
 IMG_FN static void a43_row_kind(volatile u32 *r, u32 hans)
@@ -189,8 +232,15 @@ IMG_FN static u32 a43_pick(u32 sel)
 {
     cm_t *c = cm_get();
     if (c && BTP(c) && BTP(c)->a43_status == 1u && cfg_ready(c) && sel <= A43_PROFILES) {
+#ifdef B2_LVSZ
+        u32 old_sel = BTP(c)->a43_sel;
+#endif
         BTP(c)->a43_sel = sel;
         a43_apply(c);
+#ifdef B2_LVSZ
+        if (A43_AREA_NOW == 0u && ((old_sel == 1u) != (sel == 1u) || (sel == 1u && A43_LV_SRC_X0 != 332u)))
+            BTP(c)->a43_lv_poke = 1u;                    /* B11: rebuild LV window/fit/pipeline on menu exit */
+#endif
         save_cfg(c);
         a43_entry_ok(0u, 0u, 0u, 0u);          /* show the page again with the new mark */
     }

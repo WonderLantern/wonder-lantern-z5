@@ -57,6 +57,9 @@ typedef struct {
     u32 a43_copy, a43_hdr;          /* A69: 4:3 table copies (record buffer 0x36A40); "照片画幅" page header */
     u32 a43_entry_row;              /* A69: the photo-menu row, for its text kind */
     u32 a43_loaded;                 /* A81: ratio whose tables are in the active groups (1 4:3, 2 2.33:1) */
+#ifdef B2_LVSZ
+    u32 a43_lv_poke;                /* B11: pending FX live-view refresh (tries | settle_ticks << 4) */
+#endif
 } bt_t;
 #define BTP(c)        ((bt_t *)(c)->burst_viewall_off)
 #endif
@@ -986,7 +989,12 @@ IMG_FN static u32 cfg_load(cm_t *c)
             c->custom_control = (c->custom_flags & CUSTOM_ENABLE_MASK) ? CUSTOM_CONTROL_ON : 0u;
         c->custom_flags = CUSTOM_NORMALIZE(c->custom_flags | CUSTOM_ENABLE_MASK);
 #ifdef BULB_MENU
-        if (BTP(c)) BTP(c)->a43_sel = length == 20u ? (data[4] >> 12) & 15u : 0u;   /* A69: photo aspect */
+        if (BTP(c)) {
+            BTP(c)->a43_sel = length == 20u ? (data[4] >> 12) & 15u : 0u;   /* A69: photo aspect */
+#ifdef B2_LVSZ
+            if (BTP(c)->a43_sel == 1u) BTP(c)->a43_lv_poke = 1u;            /* B11: apply native 4:3 after boot */
+#endif
+        }
 #endif
 #ifdef JPEG_A44
         /* FILM (A52): word 1 bit 7 marks bits 1-2 style, 3-5 strength, 6 NEF write; the shutter-sound switch
