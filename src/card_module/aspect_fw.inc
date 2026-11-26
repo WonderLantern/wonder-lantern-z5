@@ -52,6 +52,8 @@
 #define AF_K_LVSZ   28u             /* B2: 0x10197FFC / 0x1018B388, live-view window / fit area size query */
 #define AF_LV_WIN   0x10198001u     /* B2: return of the window updater's selected-area query */
 #define AF_LV_FIT   0x1018B38Du     /* B2: return of the display fit's area size query */
+#define AF_LV_CLASS 0x101905C1u     /* B7: return of 0x10190598's area -> aspect class query (0x10190576; capture info
+                                     * + 0x4E0, read by the ISP config 0x100C0C4A: class 3 -> ISP mode 4) */
 #define AF_LV_CROP  0x10190625u     /* B4: return of the live-view area crop's size query (0x10190598, rect ->
                                      * 0x10188C28, LV state + 0x128; stock 1:1 (1000, 0, 5016, 4016)) */
 #define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
@@ -355,6 +357,11 @@ IMG_FN static u32 af_nef(u32 *r)
 IMG_FN static u32 af_lvsz(u32 *r)
 {
     u32 p;
+    if (r[AF_LR] == AF_LV_CLASS) {             /* B7: FX live view with 4:3 chosen -> class 3 (4:3) */
+        if (r[AF_R0] != 0u || AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
+        r[AF_R0] = 3u;
+        return 1u;
+    }
     if (r[AF_R0] != 0u || (r[AF_LR] != AF_LV_WIN && r[AF_LR] != AF_LV_FIT && r[AF_LR] != AF_LV_CROP)) return 0u;
     if (r[AF_LR] == AF_LV_CROP && AF_AREA_NOW != 0u) return 0u;   /* B4: DX also queries FX there (sensor mode) */
     p = AF_LV43_PAIR(r[AF_R1]);
@@ -420,6 +427,7 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
             q[3] += 1u;                        /* calls */
             if (set) {                         /* answered with our 4:3: [1] window | crop << 16 (B4), [2] fit */
                 if (r[AF_LR] == AF_LV_FIT) q[2] += 1u;
+                else if (r[AF_LR] == AF_LV_CLASS) q[2] += 0x10000u;   /* B7: class 3 answers in the high half */
                 else q[1] += r[AF_LR] == AF_LV_CROP ? 0x10000u : 1u;
             }
         }
