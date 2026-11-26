@@ -91,13 +91,17 @@ TB12  phase=3  start=23573 ms  start=0x20010000  end=0  after500ms=0x102/0x100  
 
 ```mermaid
 stateDiagram-v2
-    [*] --> 等待开始: 菜单“开始”（1.5 秒后）
-    等待开始 --> 曝光中: 仍是 B 门 → pc_mode(1) + bulb_exec()
-    等待开始 --> 结束: 已不是 B 门（0xBAD…）
-    曝光中 --> 两张之间: 到设定时间 → 结束 B 门 + pc_mode(0)，还有下一张
-    曝光中 --> 结束: 最后一张 / 用户再按“开始”（0x5E…）
-    两张之间 --> 等待开始: 已过间隔且 ≥2 秒，相机连续两次不忙
-    两张之间 --> 结束: 用户按“开始”（0x5E…）/ 离开 B 门（0xBAD…）/ 超时（0xB5…）
+    state "1 等待开始" as armed
+    state "2 曝光中" as open
+    state "4 两张之间" as gap
+    state "3 结束" as done
+    [*] --> armed: 菜单“开始”，1.5 秒后
+    armed --> open: 仍是 B 门，pc_mode(1) + bulb_exec()
+    armed --> done: 已不是 B 门 0xBAD…
+    open --> gap: 到设定时间，结束 B 门 + pc_mode(0)，还有下一张
+    open --> done: 最后一张，或再按“开始” 0x5E…
+    gap --> armed: 已过间隔且至少 2 秒，相机连续两次不忙
+    gap --> done: 按“开始” 0x5E…，离开 B 门 0xBAD…，超时 0xB5…
 ```
 
 曝光中再按一次“开始”会提前结束这一张，并结束整组。
