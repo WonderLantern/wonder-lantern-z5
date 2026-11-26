@@ -761,6 +761,29 @@ IMG_FN static void diag_write(cm_t *c)
         __asm__ volatile ("dsb sy" ::: "memory");
     }
 #endif
+#ifdef B6_LVSNAP
+    {   /* B6 (2026-11-26, readout only): small RAM snapshots in the saved record (as A57's AF_RAMDUMP, event ring part
+           0x4000-0x30000, after the file is open) to compare stock FX, stock 1:1 and our 4:3 live view: the live-view
+           pipeline parameters 0xC18EC000 (1536 -> 1024 wide in 1:1, B5), the live-view state that 0x10190598 works on
+           (pointer from the kind-28 crop call, DIAG 0x37D00), the display descriptors, the view block. Header 'B6SN'
+           at 0x4000: {magic, ms, n, then (source, length, record offset) x n}; a block whose source is not in RAM is
+           recorded with length 0. B5's 16 MiB file image is not used (B5 camera: a card error during the third). */
+        u32 *h = b + 0x4000u / 4u, off = 0x4100u, a, k, s, n, st = ((const volatile u32 *)(b + 0x37D00u / 4u))[0] == 0x54503642u ?
+                 ((const volatile u32 *)(b + 0x37D00u / 4u))[1] : 0u;
+        h[0] = 0x4E533642u; h[1] = *(volatile u32 *)CM_MS_CLOCK; h[2] = 8u;
+        for (k = 0; k < 8u; k++) {   /* no constant table: the module runs from a copied image */
+            s = k == 0u ? 0xC18EC000u : k == 1u ? st : k == 2u ? 0xC1885000u : k == 3u ? 0xC1D9A000u :
+                k == 4u ? 0xC1D5B000u : k == 5u ? 0xC236F000u : k == 6u ? 0xC2380000u : 0xC18A6000u;
+            n = k == 0u ? 0x3000u : k == 1u ? 0x3000u : 0x1000u;
+            if (s < RAM_LO || s > RAM_HI - n) n = 0u;
+            h[3u + 3u * k] = s; h[4u + 3u * k] = n; h[5u + 3u * k] = off;
+            for (i = 0; i < n / 4u; i++) b[off / 4u + i] = ((const volatile u32 *)s)[i];
+            off += n ? n : 0u;
+        }
+        for (a = (u32)b & ~31u; a < (u32)b + DG_SIZE; a += 32u) __asm__ volatile ("mcr p15, 0, %0, c7, c10, 1" :: "r"(a) : "memory");
+        __asm__ volatile ("dsb sy" ::: "memory");
+    }
+#endif
 #ifdef VUI_DIAG_RAMDUMP
     {   /* group 104/105 probe: two RAM blocks for the focus-distance search, over the draw-call ring; copied only
            after the file is open (camera: R2 when copied before), then the cache is left as it was found */

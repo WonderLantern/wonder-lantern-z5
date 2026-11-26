@@ -400,6 +400,17 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
     } else if (kind == AF_K_LVSZ) {
         u32 set = af_lvsz(r);
         (void)set;
+#ifdef B6_LVSNAP
+        if (r[AF_LR] == AF_LV_CROP) {          /* B6: the live-view state 0x10190598 works on (caller's r4, pushed
+                                                * at its entry; [sp + 12] of that frame = r[AF_STACK + 3]) */
+            cm_t *c6 = cm_get();
+            if (c6 && c6->dg_buf) {
+                volatile u32 *q6 = (volatile u32 *)(c6->dg_buf + 0x37D00u);
+                if (q6[0] != 0x54503642u) { q6[1] = 0u; q6[2] = 0u; q6[3] = 0u; q6[0] = 0x54503642u; }   /* 'B6PT' */
+                q6[1] = r[AF_STACK + 3u]; q6[2] += 1u; q6[3] = *(volatile u32 *)CM_MS_CLOCK;
+            }
+        }
+#endif
 #if defined(A83_TRACE) && defined(B1_LVWIN)
         cm_t *c = cm_get();
         if (c && c->dg_buf) {
