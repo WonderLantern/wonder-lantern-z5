@@ -42,7 +42,7 @@ The user reported that A39 worked in camera testing. Individual display scenario
 
 ## Windows tool (no installation)
 
-Download `Z5Extensions-EN.exe` (English) or `Z5Extensions.exe` (Chinese) from the [A91 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a91-20261126). It generates the A91 firmware and card files from the official C 1.50 file. It is a standalone Windows program: Python does not need to be installed. These two programs are the only downloads: separate module files and update bundles are no longer provided. To update, download the new exe. The English program writes English instructions and an English shutter sound converter into the output.
+Download `Z5Extensions-EN.exe` (English) or `Z5Extensions.exe` (Chinese) from the [A91 release](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a91-20261126). It generates the A91 firmware and card files from the official C 1.50 file. It is a standalone Windows program: Python does not need to be installed. These two programs are the only downloads: separate module files and update bundles are no longer provided. To update, download the new exe. The English program writes English instructions and an English shutter sound converter into the output. If the decoder download fails (for example behind a GitHub accelerator, a proxy or antivirus HTTPS scanning), the program shows a link: download the decoder archive in a browser and choose it in the program; every file is still checked against its fixed SHA-256.
 
 ## Usage
 

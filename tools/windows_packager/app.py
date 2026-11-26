@@ -6,7 +6,10 @@ listed in REQUIRED and bundled explicitly; `--selftest` imports them all from th
 
 Command line (also used by the build's self-check):
     Z5Extensions.exe --selftest --result-file <file>
-    Z5Extensions.exe --source Z_5_0150.bin --output-dir <folder> [--result-file <file>]
+    Z5Extensions.exe --source Z_5_0150.bin --output-dir <folder> [--result-file <file>] [--decoder-archive <zip>]
+The decoder download verifies certificates against the Windows store plus the bundled certifi roots, never without
+verification. When it still fails (proxy, accelerator, antivirus), the user downloads the pinned z5mod archive in a
+browser and imports it; every decoder file is checked against its pinned SHA-256.
 Without arguments the window opens. The interface language (zh / en) is fixed at build time (lang.txt).
 """
 import ctypes
@@ -16,8 +19,13 @@ import importlib.util
 import os
 import shutil
 import sys
+import ssl
+import tarfile
 import tempfile
 import threading
+import urllib.error
+import urllib.request
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -29,7 +37,9 @@ VERSION = 'A91'
 # so PyInstaller cannot see their imports; build.py passes these as hidden imports and --selftest checks them.
 REQUIRED = ('__future__', 'argparse', 'binascii', 'dataclasses', 'gzip', 'hashlib', 'importlib', 'importlib.util',
             'io', 'json', 'pathlib', 'shutil', 'ssl', 'struct', 'tarfile', 'tempfile', 'urllib.error',
-            'urllib.request', 'zlib')
+            'urllib.request', 'zipfile', 'zlib')
+# Root certificates from certifi (bundled as cacert.pem); used together with the Windows certificate store.
+CA_BUNDLE = ROOT / 'cacert.pem'
 
 
 def language():
@@ -51,7 +61,13 @@ TEXT = {
         warning='实验性项目；仅适用于 Z 5 C 1.50。刷入修改固件可能损坏相机。',
         no_parent='请选择已存在的输出位置。', no_name='无法创建不重名的结果文件夹。', no_source='请选择原厂 Z_5_0150.bin 文件。',
         dest_exists='输出文件夹已经存在，请选择新的文件夹。', not_fixed='请选择电脑本地固定磁盘，不能选择移动存储设备。',
-        decoder_bad='本地解码器校验失败：', guide='使用说明.txt', guide_out='使用说明.txt',
+        decoder_bad='本地解码器校验失败：',
+        download_failed='无法从 GitHub 下载解码器（{error}）。\n\n常见原因：GitHub 加速器、代理或 VPN、杀毒软件的'
+                        ' HTTPS 扫描，或电脑的系统时间不对。可以关掉它们再试，也可以手动导入：\n'
+                        '1. 用浏览器打开下面的链接，下载解码器压缩包：\n{url}\n'
+                        '2. 回到本程序，选择下载好的压缩包。程序会逐个核对文件的 SHA-256，之后生成不再需要联网。',
+        ask_import='\n\n链接已复制到剪贴板。现在选择已下载的压缩包吗？', import_title='选择解码器压缩包',
+        archive_files='压缩包', archive_bad='这个压缩包不是所需版本的解码器：', guide='使用说明.txt', guide_out='使用说明.txt',
         copies=(('AudioConverter.exe', '快门声音转换工具.exe'), ('make_snd_wav.py', '音频转换工具源码.py'),
                 ('audio_app.py', '音频转换界面源码.py'), ('GPL-2.0.txt', '音频转换工具-GPL-2.0.txt'))),
     'en': dict(
@@ -66,6 +82,14 @@ TEXT = {
         no_parent='Choose an existing output location.', no_name='Could not create a new result folder.',
         no_source='Choose the official Z_5_0150.bin file.', dest_exists='The output folder already exists; choose a new one.',
         not_fixed='Choose a fixed local disk, not a removable drive.', decoder_bad='Local decoder check failed: ',
+        download_failed='Could not download the decoder from GitHub ({error}).\n\nCommon causes: a GitHub accelerator,'
+                        ' proxy or VPN, HTTPS scanning by antivirus software, or a wrong system clock. Turn them off and'
+                        ' try again, or import it by hand:\n1. Open this link in a browser and download the decoder'
+                        ' archive:\n{url}\n2. Come back to this program and choose the downloaded archive. Every file'
+                        ' is checked against its SHA-256; after that, generating needs no internet.',
+        ask_import='\n\nThe link has been copied to the clipboard. Choose the downloaded archive now?',
+        import_title='Choose the decoder archive', archive_files='Archives',
+        archive_bad='This archive is not the required decoder version: ',
         guide='Instructions.txt', guide_out='Instructions.txt',
         copies=(('AudioConverter.exe', 'ShutterSoundConverter.exe'), ('make_snd_wav.py', 'sound_converter_source.py'),
                 ('audio_app.py', 'sound_converter_ui_source.py'), ('GPL-2.0.txt', 'ShutterSoundConverter-GPL-2.0.txt'))),
@@ -76,6 +100,61 @@ T = TEXT[LANG]
 def fixed_disk(path):
     root = Path(path).resolve().anchor
     return os.name != 'nt' or ctypes.windll.kernel32.GetDriveTypeW(root) == 3
+
+
+class DecoderDownloadError(Exception):
+    def __init__(self, error, url):
+        super().__init__(T['download_failed'].format(error=error, url=url))
+        self.url = url
+
+
+def https_context():
+    """Verify certificates against the Windows store plus the bundled certifi roots (never unverified)."""
+    context = ssl.create_default_context()
+    if CA_BUNDLE.exists():
+        context.load_verify_locations(cafile=str(CA_BUNDLE))
+    return context
+
+
+def decoder_pin():
+    import json
+    return json.loads((ASSETS / 'patch_data' / 'patches.json').read_text(encoding='utf-8'))['z5mod']
+
+
+def decoder_url(pin=None):
+    return 'https://github.com/youyli03/z5mod/archive/%s.zip' % (pin or decoder_pin())['commit']
+
+
+def import_decoder(archive, pin=None):
+    """Install the pinned decoder files from a z5mod archive (.zip or .tar.gz) the user downloaded."""
+    pin = pin or decoder_pin()
+    wanted, found = pin['files'], {}
+    archive = Path(archive)
+    try:
+        if zipfile.is_zipfile(archive):
+            with zipfile.ZipFile(archive) as z:
+                for info in z.infolist():
+                    relative = info.filename.split('/', 1)[-1]
+                    if relative in wanted and not info.is_dir():
+                        found[relative] = z.read(info)
+        else:
+            with tarfile.open(archive, mode='r:*') as tar:
+                for member in tar.getmembers():
+                    relative = member.name.split('/', 1)[-1]
+                    if relative in wanted and member.isfile():
+                        found[relative] = tar.extractfile(member).read()
+    except (OSError, zipfile.BadZipFile, tarfile.TarError) as e:
+        raise ValueError(T['archive_bad'] + str(e)) from e
+    missing = sorted(set(wanted) - set(found))
+    if missing:
+        raise ValueError(T['archive_bad'] + ', '.join(missing))
+    bad = sorted(name for name, data in found.items() if hashlib.sha256(data).hexdigest() != wanted[name])
+    if bad:
+        raise ValueError(T['archive_bad'] + ', '.join(bad))
+    for relative, data in found.items():
+        path = USER / 'decoder' / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
 
 
 def new_output(parent):
@@ -113,6 +192,14 @@ def generate(source, dest):
                 raise ValueError(T['decoder_bad'] + name)
         return original_load(args, pin)
     patch.load_decoder = checked_load
+    original_fetch = patch.fetch_z5mod
+    def fetch(pin):
+        urllib.request.install_opener(urllib.request.build_opener(urllib.request.HTTPSHandler(context=https_context())))
+        try:
+            return original_fetch(pin)
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ssl.SSLError) as e:  # certificates, network
+            raise DecoderDownloadError(getattr(e, 'reason', e), decoder_url(pin)) from e
+    patch.fetch_z5mod = fetch
     # Keep upstream's pinned decoder and original-byte/hash validation.
     dest.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix='.z5-build-', dir=dest.parent))
@@ -140,7 +227,7 @@ def selftest():
         except Exception as e:                      # noqa: BLE001 - report every failure
             missing.append(f'{name}: {e}')
     for path in (ASSETS / 'patch.py', ASSETS / 'patch_data' / 'patches.json', ASSETS / 'card' / 'Z5APP.BIN',
-                 ROOT / T['guide']) + tuple(ROOT / src for src, _ in T['copies']):
+                 ROOT / T['guide'], CA_BUNDLE) + tuple(ROOT / src for src, _ in T['copies']):
         if not path.exists():
             missing.append(f'missing file: {path.name}')
     return missing
@@ -153,6 +240,7 @@ def command_line(argv):
     parser.add_argument('--source')
     parser.add_argument('--output-dir')
     parser.add_argument('--result-file')
+    parser.add_argument('--decoder-archive', help='install the decoder from a downloaded z5mod archive first')
     args = parser.parse_args(argv)
     lines, code = [f'Z5Extensions {VERSION} {LANG} frozen={bool(getattr(sys, "frozen", False))}'], 0
     try:
@@ -161,6 +249,8 @@ def command_line(argv):
             lines += missing or ['selftest ok']
             code = 1 if missing else 0
         else:
+            if args.decoder_archive:
+                import_decoder(args.decoder_archive)
             result = new_output(args.output_dir)
             generate(args.source, result)
             lines.append(f'ok {result}')
@@ -211,12 +301,26 @@ def main():
             try:
                 result = new_output(selected_dest)
                 generate(selected_source, result)
-                msg, ok = T['success'] + str(result), True
+                msg, ok, url = T['success'] + str(result), True, None
             except (Exception, SystemExit) as e:
-                msg, ok = str(e), False
+                msg, ok, url = str(e), False, getattr(e, 'url', None)
             def done():
                 button.state(['!disabled'])
                 status.set(T['done'] if ok else T['failed'])
+                if url:
+                    root.clipboard_clear()
+                    root.clipboard_append(url)
+                    if messagebox.askyesno(T['result_title'], msg + T['ask_import'], icon='error'):
+                        archive = filedialog.askopenfilename(title=T['import_title'], filetypes=[
+                            (T['archive_files'], '*.zip *.tar.gz *.tgz'), (T['all_files'], '*.*')])
+                        if archive:
+                            try:
+                                import_decoder(archive)
+                            except Exception as e:     # noqa: BLE001
+                                messagebox.showerror(T['result_title'], str(e))
+                            else:
+                                build()
+                    return
                 (messagebox.showinfo if ok else messagebox.showerror)(T['result_title'], msg)
             root.after(0, done)
         threading.Thread(target=run, daemon=True).start()

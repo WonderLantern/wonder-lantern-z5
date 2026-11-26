@@ -58,7 +58,7 @@ Windows 工具 `Z5Extensions.exe` 和它附带的使用说明目前只有中文�
 
 ## Windows 免安装工具
 
-从 [A91 发布页](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a91-20261126) 下载 `Z5Extensions.exe`（中文界面）或 `Z5Extensions-EN.exe`（英文界面），选择自备的原厂 `Z_5_0150.bin`，即可在电脑上生成 A91 固件和卡上文件。程序是独立的 Windows 程序，电脑上不需要安装 Python。发布页只提供这两个程序，不再提供单独的模块或版本更新包；更新时下载新的 exe 重新生成即可。结果中包含说明和快门声音转换工具（中文版为中文，英文版为英文）。首次生成需联网下载并校验解码器。
+从 [A91 发布页](https://github.com/WonderLantern/wonder-lantern-z5/releases/tag/a91-20261126) 下载 `Z5Extensions.exe`（中文界面）或 `Z5Extensions-EN.exe`（英文界面），选择自备的原厂 `Z_5_0150.bin`，即可在电脑上生成 A91 固件和卡上文件。程序是独立的 Windows 程序，电脑上不需要安装 Python。发布页只提供这两个程序，不再提供单独的模块或版本更新包；更新时下载新的 exe 重新生成即可。结果中包含说明和快门声音转换工具（中文版为中文，英文版为英文）。首次生成需联网下载并校验解码器；下载失败（例如开了 GitHub 加速器、代理或杀毒软件的 HTTPS 扫描）时，程序会给出链接，用浏览器下载解码器压缩包后在程序里选择它即可，每个文件仍按固定的 SHA-256 核对。
 
 ## 使用
 

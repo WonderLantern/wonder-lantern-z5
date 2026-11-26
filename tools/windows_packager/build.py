@@ -77,6 +77,8 @@ def main():
                            ('README.md', 'assets'), ('README.en.md', 'assets'), ('licenses', 'assets/licenses')]:
         command.extend(['--add-data', str(repo / source) + ';' + target])
     command.extend(['--add-data', str(HERE / GUIDE[args.lang]) + ';.', '--add-data', str(lang_file) + ';.'])
+    import certifi  # build dependency: its root certificates are bundled as cacert.pem
+    command.extend(['--add-data', certifi.where() + ';.'])
     for path in (out / 'sound-dist' / 'AudioConverter.exe', sound_source, HERE / 'audio_app.py', HERE / 'GPL-2.0.txt'):
         command.extend(['--add-data', str(path) + ';.'])
     command.append(str(HERE / 'app.py'))
