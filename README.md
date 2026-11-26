@@ -22,7 +22,7 @@
 | 电量百分比 | 电池图标里显示剩余电量百分比，可关闭 | 通过 |
 | 扩展功能菜单 | 所有开关集中在设定菜单最后一行“扩展功能” | 通过 |
 | 自定义 DISP | DISP0～DISP3 可分别设置水平线、直方图和详细信息，后屏和取景器分别记忆页号 | 用户反馈 A39 测试正常；A52 作者实机测试通过 |
-| B 门定时 | 在照片拍摄菜单设时、分、秒、张数和间隔，按「开始」退出菜单，约 1.5 秒后曝光 | **作者实机测试通过**（多张和间隔为 A55） |
+| B 门定时 | 在照片拍摄菜单设时、分、秒、张数和间隔，按「开始」退出菜单，约 1.5 秒后曝光；实现方法和实测数据见[说明](docs/TIMED_BULB.md) | **作者实机测试通过**（多张和间隔为 A55） |
 | 照片画幅 | 照片拍摄菜单选 4:3 或 2.33:1，JPG 和 NEF 按该比例记录，背屏和取景器有遮幅（需打开自定义 DISP）。只拍 NEF 时机内回放、放大也按所选比例显示（A91）。**已知问题**：拍后遮罩在原厂图标处出现空框、只拍 NEF 时即时回放第一次放大偶尔黑屏或花屏、2.33:1 放大时导航小窗有形变，见[说明](docs/PHOTO_ASPECT.md) | **作者实机测试通过**（A91） |
 | 胶片颗粒 FILM | FUJI400 / HP5、强度 1–6，加在 JPG 和 NEF 内嵌预览上；每张约 1.1 秒。**开着颗粒时不建议高速连拍**（低速每秒 3 张连拍 20 多张不卡；高速连拍 4 张后等 1–2 秒）。实现方法与参数见[说明](docs/FILM_GRAIN.md) | **作者实机测试通过**（A52） |
 | NEF 内写入 Lightroom 颗粒 | “NEF写入：开”时相机把颗粒设置写进 NEF 自带的 XMP；Lightroom 原始默认设置选“相机设置”，导入即自动带颗粒，不产生额外文件 | **作者实机测试通过**（Lightroom Classic 13.2） |
@@ -176,7 +176,7 @@ python tools/make_snd_wav.py 你的声音.wav --out 转换结果
 | `src/` | 卡上模块和固件钩子的源码 |
 | `tools/` | 音频转换工具 |
 | `PLAN.md` | 已完成的内容和未来计划 |
-| `docs/` | [照片画幅](docs/PHOTO_ASPECT.md)、[胶片颗粒](docs/FILM_GRAIN.md)、[连拍提速](docs/BURST_SPEED.md)、开发进度、[自定义 DISP 交接](docs/CUSTOM_DISP_HANDOFF.md)和[卡模块构建](docs/CARD_MODULE_BUILD.md) |
+| `docs/` | [照片画幅](docs/PHOTO_ASPECT.md)、[胶片颗粒](docs/FILM_GRAIN.md)、[B 门定时](docs/TIMED_BULB.md)、[连拍提速](docs/BURST_SPEED.md)、开发进度、[自定义 DISP 交接](docs/CUSTOM_DISP_HANDOFF.md)和[卡模块构建](docs/CARD_MODULE_BUILD.md) |
 | `tests/card_module/` | 显示许可、设置兼容（含 FILM 设置）、刷新间隔和直方图栅格宿主测试 |
 
 卡模块可按[构建说明](docs/CARD_MODULE_BUILD.md)用固定 SDK 和自备 MAIN 重建；普通用户只需要 `patch.py` 或预编译插件。
