@@ -49,8 +49,8 @@ Z5_IMAGE(custom_disp_image) static u32 aspect_mask_ratio(void)
     if (p < 0xC1800000u || p >= 0xC8700000u - 0x400u) return 0u;
     volatile const u32 *b = (volatile const u32 *)(p - 32u + 0x200u);
 #ifdef B2_LVSZ
-    if (b[0] != 0x50544152u) return 0u;
-    return ((b[5] >> 8) & 255u) == 2u ? 2u : 0u;   /* B10: 4:3 uses native live-view crop/bars; 2.33:1 keeps mask */
+    (void)b;
+    return 0u;                                     /* B10 / B15: 4:3 and 2.33:1 use the native live-view crop/bars */
 #else
     if (b[0] != 0x50544152u) return 1u;
     u32 r = (b[5] >> 8) & 255u;

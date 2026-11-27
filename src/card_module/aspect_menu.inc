@@ -33,16 +33,30 @@ IMG_FN static u32 a43_is_on(void)
 
 #ifdef B2_LVSZ
 /* B3: our 4:3 size of image size `size` (0 L, 1 M, 2 S) from the 4:3 stash's group 1 (the table the area size
- * selector 0x102092A6 reads), while 4:3 is chosen and prepared; 0 otherwise. Independent of the area-8 switch. */
+ * selector 0x102092A6 reads), while 4:3 is chosen and prepared; 0 otherwise. Independent of the area-8 switch.
+ * B15: also 2.33:1 (the 2.33 stash, L 6016 x 2576). */
 IMG_FN static u32 a43_lv_pair(u32 size)
 {
     cm_t *c = cm_get();
     bt_t *t = c ? BTP(c) : 0;
     const volatile u16 *s;
-    if (!t || t->a43_status != 1u || t->a43_sel != 1u || !t->a43_copy || size > 2u) return 0u;
-    s = (const volatile u16 *)(t->a43_copy + A43_STASH43 + A43_GROUP_BYTES);
-    if (s[0] != 5352u || s[1] != 4016u) return 0u;
+    if (!t || t->a43_status != 1u || !t->a43_copy || size > 2u) return 0u;
+    if (t->a43_sel == 1u) {
+        s = (const volatile u16 *)(t->a43_copy + A43_STASH43 + A43_GROUP_BYTES);
+        if (s[0] != 5352u || s[1] != 4016u) return 0u;
+    } else if (t->a43_sel == 2u && A43_HAS_233) {
+        s = (const volatile u16 *)(t->a43_copy + A43_STASH233 + A43_GROUP_BYTES);
+        if (s[0] != 6016u || s[1] != 2576u) return 0u;
+    } else {
+        return 0u;
+    }
     return (u32)(s + 2u * size);
+}
+
+IMG_FN static u32 a43_lv_ratio(void)     /* B15: 1 = 4:3, 2 = 2.33:1 chosen and prepared, 0 = none */
+{
+    cm_t *c = cm_get();
+    return a43_lv_pair(0u) && c && BTP(c) ? BTP(c)->a43_sel : 0u;
 }
 
 /* B11: post a settings-bus notification for {0x169E: 0, 0x1624: 0} (FX) without altering any stored setting.
@@ -56,11 +70,18 @@ IMG_FN static u32 a43_lv_pair(u32 size)
 /* B14 (B13 camera DIAG07): turning 4:3 off, the menu-exit refresh put the fit back to FX (0, 0, 720, 480) but the
  * source window stayed (332, 0, 5684, 4016) and B13, seeing the fit, stopped; the user then got a card warning. Done
  * only when both match: 4:3 = 4:3 fit and window x0 332; off = not a 4:3 fit and window x0 0. */
+#define A43_LV_SRC_Y0  (*(volatile const u16 *)0xC2380328u)
 IMG_FN static u32 a43_fit_is43(void);
-IMG_FN static u32 a43_lv_matches(u32 want43)
+IMG_FN static u32 a43_lv_matches(u32 sel)  /* B15: sel 0 off (3:2, window at 0, 0), 1 4:3, 2 2.33:1 (6016 x 2576) */
 {
-    if (want43) return a43_fit_is43() && A43_LV_SRC_X0 == 332u;
-    return !a43_fit_is43() && A43_LV_SRC_X0 == 0u;
+    u32 w, h;
+    if (A43_LV_FIT[2] <= A43_LV_FIT[0] || A43_LV_FIT[3] <= A43_LV_FIT[1]) return 0u;
+    w = (u32)A43_LV_FIT[2] - A43_LV_FIT[0];
+    h = (u32)A43_LV_FIT[3] - A43_LV_FIT[1];
+    if (sel == 1u) return a43_fit_is43() && A43_LV_SRC_X0 == 332u;
+    if (sel == 2u) return w * 2576u + ((w * 2576u) >> 6) >= h * 6016u && w * 2576u <= h * 6016u + ((h * 6016u) >> 6) &&
+                          A43_LV_SRC_X0 == 0u && A43_LV_SRC_Y0 != 0u;
+    return 2u * w + 8u >= 3u * h && 2u * w <= 3u * h + 8u && A43_LV_SRC_X0 == 0u && A43_LV_SRC_Y0 == 0u;
 }
 IMG_FN static u32 a43_fit_is43(void)
 {
@@ -148,7 +169,7 @@ IMG_FN static void a43_watch(cm_t *c)      /* module task, every 50 ms: follow t
         } else if (A43_LV_GUI_ON != 1u) {
             t->a43_lv_poke = 1u | asked << 16;          /* menu / playback: wait until live view returns */
             t->a43_lv_inject = 0u;
-        } else if (a43_lv_matches(t->a43_sel == 1u)) {
+        } else if (a43_lv_matches(t->a43_sel)) {
             t->a43_lv_poke = 0u;                         /* the fit (black frame) and the window match the choice */
             t->a43_lv_inject = 0u;
         } else if (ticks >= 120u) {
@@ -263,7 +284,7 @@ IMG_FN static u32 a43_pick(u32 sel)
         BTP(c)->a43_sel = sel;
         a43_apply(c);
 #ifdef B2_LVSZ
-        if (A43_AREA_NOW == 0u && ((old_sel == 1u) != (sel == 1u) || (sel == 1u && !a43_lv_matches(1u))))
+        if (A43_AREA_NOW == 0u && (old_sel != sel || !a43_lv_matches(sel)))
             BTP(c)->a43_lv_poke = 1u;                    /* B11: rebuild LV window/fit/pipeline on menu exit */
 #endif
         save_cfg(c);

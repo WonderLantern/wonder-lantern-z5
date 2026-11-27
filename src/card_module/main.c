@@ -993,7 +993,7 @@ IMG_FN static u32 cfg_load(cm_t *c)
         if (BTP(c)) {
             BTP(c)->a43_sel = length == 20u ? (data[4] >> 12) & 15u : 0u;   /* A69: photo aspect */
 #ifdef B2_LVSZ
-            if (BTP(c)->a43_sel == 1u) BTP(c)->a43_lv_poke = 1u;            /* B11: apply native 4:3 after boot */
+            if (BTP(c)->a43_sel) BTP(c)->a43_lv_poke = 1u;                      /* B11: apply native 4:3 after boot */
 #endif
         }
 #endif

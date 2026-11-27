@@ -65,6 +65,7 @@
 #define AF_LV_ELBY5 0x10146E5Fu     /* B10: ELBY_fill kind 0x2b refill (0x10146E50, live view) */
 #define AF_LV_LVCROP 0x101455CBu    /* B9: LV_crop_tbl (0x10145354) call site (sensor crop helper) */
 #define AF_LV_ELBR  0x10146BA7u     /* B9: ELBR 0x1020949A(area, 2) call site (1024x680 / 768x768 -> 896x672) */
+#define AF_LV_FITCALL 0x1018D26Du   /* B15: 0x1018D268 bl 0x1018B4A2 (the manager's only fit call; r0 frame, r1 flags) */
 #define AF_LV_MSG   0x101904ADu     /* B12: 0x101904A8 bl 0x1018D014 (live-view manager; r0 ctx, r1 message, r2 block) */
 #define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
 #ifndef AF_AREA_NOW
@@ -72,6 +73,9 @@
 #endif
 #ifndef AF_LV43_PAIR
 #define AF_LV43_PAIR(size) a43_lv_pair(size)   /* B3: aspect_menu.inc; the firmware check has a stand-in */
+#define AF_LV_RATIO() a43_lv_ratio()          /* B15: 1 4:3, 2 2.33:1 */
+#else
+#define AF_LV_RATIO() (AF_LV43_PAIR(0u) ? 1u : 0u)   /* offline harness: 4:3 only */
 #endif
 #ifdef B2_LVSZ
 #define AF_K_LAST   AF_K_LVSZ       /* B2 / B3 firmware (b2m / b3m_fx43.S) calls kind 28 */
@@ -445,52 +449,90 @@ IMG_FN static void af_lvmsg(u32 *r)
 #endif
 }
 
+typedef void (*af_fit_fn)(u32, u32);
+/* B15: a 16:9-class fit rectangle (x0, y0, x1, y1) -> 2.33:1 (6016 x 2576) of the same width, same centre.
+ * 2576 / 6016 = 0.42819 ~ 28062 / 65536 (no division on this core). */
+IMG_FN static void af_fit233(u32 a)
+{
+    volatile s16 *q = (volatile s16 *)a;
+    int w = q[2] - q[0], h = q[3] - q[1], nh, cy, d;
+    if (w <= 0 || h <= 0) return;
+    d = 9 * w - 16 * h;
+    if (d > 48 || d < -48) return;                   /* not the 16:9 class shape (already done, or another class) */
+    nh = (int)(((u32)w * 28062u) >> 16) & ~1;
+    cy = (q[1] + q[3]) >> 1;
+    q[1] = (s16)(cy - (nh >> 1));
+    q[3] = (s16)(cy - (nh >> 1) + nh);
+}
+
 IMG_FN static u32 af_lvsz(u32 *r)
 {
-    u32 lr = r[AF_LR], p;
-    if (lr == AF_LV_CLASS || lr == AF_LV_CLASS2) {   /* B7 / B8: FX live view, 4:3 chosen -> class 3 */
-        if (r[AF_R0] != 0u || AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
-        r[AF_R0] = 3u;
+    u32 lr = r[AF_LR], p, q;
+    if (lr == AF_LV_FITCALL) {                       /* B15: 2.33:1 frame (the stock fit makes it 16:9) */
+        if (AF_AREA_NOW != 0u || AF_LV_RATIO() != 2u) return 0u;
+        FW(af_fit_fn, 0x1018B4A2u)(r[AF_R0], r[AF_R1]);
+        af_fit233(0xC23802F4u);                      /* LCD / EVF rectangle and its copy */
+        af_fit233(0xC2380678u);
+        af_fit233(0xC2380314u);                      /* 1920 x 1080 rectangle and its copy */
+        af_fit233(0xC2380684u);
+        if (*(volatile const u8 *)(0xC3B34558u + 0x4CCu) == 0u)
+            af_fit233(0xC3B34558u + 0xC4u);          /* capture info's copy (ELBL size), if already taken */
+        return 1u;
+    }
+    if (lr == AF_LV_CLASS || lr == AF_LV_CLASS2) {   /* B7 / B8: FX live view, 4:3 -> class 3; B15: 2.33:1 -> 1 (16:9) */
+        if (r[AF_R0] != 0u || AF_AREA_NOW != 0u || !(q = AF_LV_RATIO())) return 0u;
+        r[AF_R0] = q == 2u ? 1u : 3u;
         return 1u;
     }
     if (lr == AF_LV_ELBY1 || lr == AF_LV_ELBY2 || lr == AF_LV_ELBY3 ||
-        lr == AF_LV_ELBY4 || lr == AF_LV_ELBY5) {   /* B9 / B10: ELBY_fill 4:3 crop + warp out (0x1b & 0x2b) */
-        u32 desc = r[AF_R0], info = r[AF_R1];
-        if (AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
+        lr == AF_LV_ELBY4 || lr == AF_LV_ELBY5) {   /* B9 / B10: ELBY_fill crop + warp out (0x1b & 0x2b) */
+        u32 desc = r[AF_R0], info = r[AF_R1], w, h, x0, y0, iw, ih, ow, oh, st;
+        if (AF_AREA_NOW != 0u || !(q = AF_LV_RATIO())) return 0u;
         if (desc < RAM_LO || desc >= RAM_HI - 0x80u || info < RAM_LO || info >= RAM_HI - 0x500u) return 0u;
         if (*(volatile const u8 *)info || *(volatile const u8 *)(info + 1u) ||
             *(volatile const u32 *)(info + 0x10u) || *(volatile const u8 *)(info + 0x4CCu)) return 0u;
         FW(af_elby_fn, 0x101460F2u)(desc, info, r[AF_R2]);
         if (*(volatile const u16 *)(desc + 0x1Eu) != 1508u || *(volatile const u16 *)(desc + 0x20u) != 1006u)
             return 1u;
-        *(volatile u16 *)(desc + 0x1Au) = 1344u;
-        *(volatile u16 *)(desc + 0x1Cu) = 1344u;
-        *(volatile u16 *)(desc + 0x1Eu) = 1340u; *(volatile u16 *)(desc + 0x20u) = 1006u;
-        *(volatile u16 *)(desc + 0x22u) = 1340u; *(volatile u16 *)(desc + 0x24u) = 1006u;
-        *(volatile u16 *)(desc + 0x26u) = 84u;   *(volatile u16 *)(desc + 0x28u) = 0u;
+        if (q == 2u) {                               /* B15: 2.33:1: 1508 x 650 from row 178, 1502 x 644 in, 1792 x 768 */
+            w = 1508u; h = 650u; x0 = 0u; y0 = 178u; iw = 1502u; ih = 644u; ow = 1792u; oh = 768u; st = 1536u;
+        } else {
+            w = 1340u; h = 1006u; x0 = 84u; y0 = 0u; iw = 1334u; ih = 1000u; ow = 1536u; oh = 1152u; st = 1344u;
+        }
+        *(volatile u16 *)(desc + 0x1Au) = (u16)st;
+        *(volatile u16 *)(desc + 0x1Cu) = (u16)st;
+        *(volatile u16 *)(desc + 0x1Eu) = (u16)w; *(volatile u16 *)(desc + 0x20u) = (u16)h;
+        *(volatile u16 *)(desc + 0x22u) = (u16)w; *(volatile u16 *)(desc + 0x24u) = (u16)h;
+        *(volatile u16 *)(desc + 0x26u) = (u16)x0; *(volatile u16 *)(desc + 0x28u) = (u16)y0;
         *(volatile u16 *)(desc + 0x38u) = 3u;    *(volatile u16 *)(desc + 0x3Au) = 3u;
-        *(volatile u16 *)(desc + 0x3Cu) = 1334u; *(volatile u16 *)(desc + 0x3Eu) = 1000u;
-        *(volatile u16 *)(desc + 0x44u) = 1536u; *(volatile u16 *)(desc + 0x46u) = 1152u;
+        *(volatile u16 *)(desc + 0x3Cu) = (u16)iw; *(volatile u16 *)(desc + 0x3Eu) = (u16)ih;
+        *(volatile u16 *)(desc + 0x44u) = (u16)ow; *(volatile u16 *)(desc + 0x46u) = (u16)oh;
         if (r[AF_R2] != 0x2Bu)                      /* B10: kind 0x2b keeps stock plane_y + 0x8000 at +0x30 */
-            *(volatile u32 *)(desc + 0x30u) = (*(volatile const u32 *)(desc + 0x2Cu) + 1344u * 1006u + 15u) & ~15u;
+            *(volatile u32 *)(desc + 0x30u) = (*(volatile const u32 *)(desc + 0x2Cu) + st * h + 15u) & ~15u;
         return 1u;
     }
-    if (lr == AF_LV_LVCROP) {                        /* B9: LV_crop_tbl (0x10145354) 4:3 crop */
+    if (lr == AF_LV_LVCROP) {                        /* B9: LV_crop_tbl (0x10145354) crop */
         u32 info = r[AF_R0], out_sz = r[AF_R1], out_rect = r[AF_R2];
-        if (AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u) || !out_sz || !out_rect) return 0u;
+        if (AF_AREA_NOW != 0u || !(q = AF_LV_RATIO()) || !out_sz || !out_rect) return 0u;
         if (info < RAM_LO || info >= RAM_HI - 0x500u) return 0u;
         if (*(volatile const u8 *)info || *(volatile const u8 *)(info + 1u) ||
             *(volatile const u32 *)(info + 0x10u) || *(volatile const u8 *)(info + 0x4CCu)) return 0u;
         FW(af_elby_fn, 0x10145354u)(info, out_sz, out_rect);
         if (*(volatile const u16 *)out_sz != 1508u || *(volatile const u16 *)(out_sz + 2u) != 1006u) return 1u;
-        *(volatile u16 *)(out_sz + 0u) = 1340u;  *(volatile u16 *)(out_sz + 2u) = 1006u;
-        *(volatile u16 *)(out_rect + 0u) = 87u;  *(volatile u16 *)(out_rect + 2u) = 3u;
-        *(volatile u16 *)(out_rect + 4u) = 1421u; *(volatile u16 *)(out_rect + 6u) = 1003u;
+        if (q == 2u) {                               /* B15: 2.33:1 */
+            *(volatile u16 *)(out_sz + 0u) = 1508u;  *(volatile u16 *)(out_sz + 2u) = 650u;
+            *(volatile u16 *)(out_rect + 0u) = 3u;   *(volatile u16 *)(out_rect + 2u) = 181u;
+            *(volatile u16 *)(out_rect + 4u) = 1505u; *(volatile u16 *)(out_rect + 6u) = 825u;
+        } else {
+            *(volatile u16 *)(out_sz + 0u) = 1340u;  *(volatile u16 *)(out_sz + 2u) = 1006u;
+            *(volatile u16 *)(out_rect + 0u) = 87u;  *(volatile u16 *)(out_rect + 2u) = 3u;
+            *(volatile u16 *)(out_rect + 4u) = 1421u; *(volatile u16 *)(out_rect + 6u) = 1003u;
+        }
         return 1u;
     }
-    if (lr == AF_LV_ELBR) {                          /* B9: ELBR 0x1020949A(0, 2) -> 896 x 672 (exact 4:3) */
-        if (r[AF_R0] != 0u || r[AF_R1] != 2u || AF_AREA_NOW != 0u || !AF_LV43_PAIR(0u)) return 0u;
-        r[AF_STACK + 4u] = 896u | (672u << 16);      /* caller's [sp + 0x10]: read right after bl returns */
+    if (lr == AF_LV_ELBR) {                          /* B9: ELBR 0x1020949A(0, 2) -> 896 x 672 (4:3); B15 896 x 384 */
+        if (r[AF_R0] != 0u || r[AF_R1] != 2u || AF_AREA_NOW != 0u || !(q = AF_LV_RATIO())) return 0u;
+        r[AF_STACK + 4u] = 896u | ((q == 2u ? 384u : 672u) << 16);   /* caller's [sp + 0x10], read after the bl */
         r[AF_R0] = (u32)&r[AF_STACK + 4u];
         return 1u;
     }
