@@ -67,15 +67,28 @@
 #define AF_LV_ELBR  0x10146BA7u     /* B9: ELBR 0x1020949A(area, 2) call site (1024x680 / 768x768 -> 896x672) */
 #define AF_LV_FITCALL 0x1018D26Du   /* B15: 0x1018D268 bl 0x1018B4A2 (the manager's only fit call; r0 frame, r1 flags) */
 #define AF_LV_MSG   0x101904ADu     /* B12: 0x101904A8 bl 0x1018D014 (live-view manager; r0 ctx, r1 message, r2 block) */
+#define AF_PVW_S0   0x10209301u     /* B18: preview selector 0x102092FA (small 640: 600x480 for 5:4) */
+#define AF_PVW_S1   0x1020930Bu     /* B18: preview selector 0x10209304 (large 1920: 1350x1080 for 5:4, incl. fit 0x1018B3A0) */
+#define AF_PVW_S2   0x10209315u     /* B18: preview selector 0x1020930E (thumb 160: 150x120 for 5:4) */
+#define AF_PVW_S3   0x1020931Fu     /* B18: preview selector 0x10209318 (disp 570: 468x375 for 5:4) */
+#define AF_PVW_B1   0x10143577u     /* B18: capture buffer init small preview table load */
+#define AF_PVW_B2   0x101435D9u     /* B18: capture buffer init large preview table load */
+#define AF_PVW_B3   0x10143F33u     /* B18: secondary capture buffer init large preview table load */
 #define AF_B2_OFF   0x3AFF0u        /* B2 counters (below the B1 record's end, -DB1_LVWIN) */
 #ifndef AF_AREA_NOW
 #define AF_AREA_NOW (*(volatile const u32 *)0xC25043A4u)   /* actual image area (setting 0x169E) */
 #endif
 #ifndef AF_LV43_PAIR
 #define AF_LV43_PAIR(size) a43_lv_pair(size)   /* B3: aspect_menu.inc; the firmware check has a stand-in */
-#define AF_LV_RATIO() a43_lv_ratio()          /* B15: 1 4:3, 2 2.33:1 */
+#define AF_LV_RATIO() a43_lv_ratio()          /* B15/B18: 1 4:3, 2 2.33:1, 3 5:4 */
+#define AF_PVW54(idx) a43_pvw54(idx)          /* B18: stock Nikon 5:4 preview entries */
 #else
-#define AF_LV_RATIO() (AF_LV43_PAIR(0u) ? 1u : 0u)   /* offline harness: 4:3 only */
+#ifndef AF_LV_RATIO
+#define AF_LV_RATIO() (AF_LV43_PAIR(0u) ? 1u : 0u)   /* offline harness default: 4:3 */
+#endif
+#ifndef AF_PVW54
+#define AF_PVW54(idx) 0u
+#endif
 #endif
 #ifdef B2_LVSZ
 #define AF_K_LAST   AF_K_LVSZ       /* B2 / B3 firmware (b2m / b3m_fx43.S) calls kind 28 */
@@ -144,6 +157,9 @@ IMG_FN static u32 af_shape(u32 v)
 {
     if (v == (5352u | 4016u << 16) || v == (4008u | 3008u << 16) || v == (2664u | 2000u << 16)) return 1u;
     if (v == (6016u | 2576u << 16) || v == (4512u | 1936u << 16) || v == (3008u | 1288u << 16)) return 2u;
+#ifdef B2_LVSZ
+    if (v == (5016u | 4016u << 16) || v == (3760u | 3008u << 16) || v == (2496u | 2000u << 16)) return 3u;
+#endif
     return 0u;
 }
 
@@ -175,10 +191,17 @@ IMG_FN static u32 af_nef_main(u32 kind, u32 *r, u32 ctx, u32 rec)
         u32 p = af_on();
         volatile const u32 *log = (volatile const u32 *)(p + 192u);
         if (!p || !log[1] || *(volatile const u32 *)CM_MS_CLOCK - log[2] > AF_REVIEW_MS) return 0u;
+#ifdef B2_LVSZ
+        v = log[3] == 2u ? (1920u | 824u << 16) : log[3] == 3u ? (1350u | 1080u << 16) : (1440u | 1080u << 16);
+#else
         v = log[3] == 2u ? (1920u | 824u << 16) : (1440u | 1080u << 16);
+#endif
     }
     if (v == (1440u | 1080u << 16)) { w = 5352u; h = 4016u; }
     else if (v == (1920u | 824u << 16)) { w = 6016u; h = 2576u; }
+#ifdef B2_LVSZ
+    else if (v == (1350u | 1080u << 16)) { w = 5016u; h = 4016u; }
+#endif
     else return 0u;
     *(volatile u16 *)(rec + 0x398u) = (u16)w; *(volatile u16 *)(rec + 0x39Au) = (u16)h;
     meta = lr == 0x1034E9CBu || lr == 0x1034E94Du ? r[AF_STACK] : r[AF_STACK + 3u];
@@ -222,6 +245,12 @@ IMG_FN static u32 af_pvw(u32 kind, u32 *r, u32 *how, u32 *q)
         *(volatile u32 *)r[AF_R0] = small ? (640u | 272u << 16) : (1920u | 824u << 16);
         *how = fixed | 1u; return 0u;
     }
+#ifdef B2_LVSZ
+    if (cls == 3u) {
+        *(volatile u32 *)r[AF_R0] = small ? (600u | 480u << 16) : (1350u | 1080u << 16);
+        *how = fixed | 1u; return 0u;
+    }
+#endif
     type = *(volatile const u8 *)(ctx + 4u);
     if (type != 1u && type != 2u) return 1u;
     v = af_query(ctx, small ? 4u : 5u);
@@ -498,6 +527,8 @@ IMG_FN static u32 af_lvsz(u32 *r)
             return 1u;
         if (q == 2u) {                               /* B15: 2.33:1: 1508 x 650 from row 178, 1502 x 644 in, 1792 x 768 */
             w = 1508u; h = 650u; x0 = 0u; y0 = 178u; iw = 1502u; ih = 644u; ow = 1792u; oh = 768u; st = 1536u;
+        } else if (q == 3u) {                        /* B18: 5:4: 1256 x 1006 from col 126, 1250 x 1000 in, 1280 x 1024 */
+            w = 1256u; h = 1006u; x0 = 126u; y0 = 0u; iw = 1250u; ih = 1000u; ow = 1280u; oh = 1024u; st = 1280u;
         } else {
             w = 1340u; h = 1006u; x0 = 84u; y0 = 0u; iw = 1334u; ih = 1000u; ow = 1536u; oh = 1152u; st = 1344u;
         }
@@ -525,6 +556,10 @@ IMG_FN static u32 af_lvsz(u32 *r)
             *(volatile u16 *)(out_sz + 0u) = 1508u;  *(volatile u16 *)(out_sz + 2u) = 650u;
             *(volatile u16 *)(out_rect + 0u) = 3u;   *(volatile u16 *)(out_rect + 2u) = 181u;
             *(volatile u16 *)(out_rect + 4u) = 1505u; *(volatile u16 *)(out_rect + 6u) = 825u;
+        } else if (q == 3u) {                        /* B18: 5:4 */
+            *(volatile u16 *)(out_sz + 0u) = 1256u;  *(volatile u16 *)(out_sz + 2u) = 1006u;
+            *(volatile u16 *)(out_rect + 0u) = 129u; *(volatile u16 *)(out_rect + 2u) = 3u;
+            *(volatile u16 *)(out_rect + 4u) = 1379u; *(volatile u16 *)(out_rect + 6u) = 1003u;
         } else {
             *(volatile u16 *)(out_sz + 0u) = 1340u;  *(volatile u16 *)(out_sz + 2u) = 1006u;
             *(volatile u16 *)(out_rect + 0u) = 87u;  *(volatile u16 *)(out_rect + 2u) = 3u;
@@ -532,9 +567,9 @@ IMG_FN static u32 af_lvsz(u32 *r)
         }
         return 1u;
     }
-    if (lr == AF_LV_ELBR) {                          /* B9: ELBR 0x1020949A(0, 2) -> 896 x 672 (4:3); B15 896 x 384 */
+    if (lr == AF_LV_ELBR) {                          /* B9: ELBR 0x1020949A(0, 2) -> 896x672 (4:3); B15 896x384; B18 640x512 */
         if (r[AF_R0] != 0u || r[AF_R1] != 2u || AF_AREA_NOW != 0u || !(q = AF_LV_RATIO())) return 0u;
-        r[AF_STACK + 4u] = 896u | ((q == 2u ? 384u : 672u) << 16);   /* caller's [sp + 0x10], read after the bl */
+        r[AF_STACK + 4u] = q == 3u ? (640u | (512u << 16)) : (896u | ((q == 2u ? 384u : 672u) << 16));
         r[AF_R0] = (u32)&r[AF_STACK + 4u];
         return 1u;
     }
@@ -544,6 +579,38 @@ IMG_FN static u32 af_lvsz(u32 *r)
     if (!p) return 0u;
     r[AF_R0] = p;
     return 1u;
+}
+/* B18: kind-2 preview table restoration while 5:4 is active (1 = handled, 2 = stock fallback, 0 = other lr). */
+IMG_FN static u32 af_pvw54(u32 *r)
+{
+    u32 lr = r[AF_LR], idx, p, k, on54;
+    volatile u8 *b;
+    if (lr == AF_PVW_S0 || lr == AF_PVW_S1 || lr == AF_PVW_S2 || lr == AF_PVW_S3) {
+        if (r[AF_R0] != 2u) return 2u;
+        on54 = (af_on() && (b = af_block()) && b[21] == 3u) || (AF_LV_RATIO() == 3u && AF_AREA_NOW == 0u);
+        if (!on54) return 2u;
+        idx = (lr - AF_PVW_S0) / 10u;
+        p = AF_PVW54(idx);
+        if (!p) return 2u;
+        r[AF_R0] = p;
+        return 1u;
+    }
+    if (lr == AF_PVW_B1 || lr == AF_PVW_B2 || lr == AF_PVW_B3) {
+        if (!af_on() || !(b = af_block()) || b[21] != 3u || !(p = AF_PVW54(4u))) return 2u;
+        if (lr == AF_PVW_B3) {
+            if (r[AF_R1] != 2u) return 2u;
+            r[AF_R0] = p + 0x14u;
+            r[AF_R1] = p + 0x14u + 8u;
+            return 1u;
+        }
+        if (r[6] < RAM_LO || r[6] >= RAM_HI - 0x300u) return 2u;
+        k = *(volatile const u8 *)(r[6] + 0x21Eu);
+        if (k != 2u) return 2u;
+        r[lr == AF_PVW_B1 ? AF_R0 : AF_R1] = 2u;
+        r[3] = p;
+        return 1u;
+    }
+    return 0u;
 }
 #endif
 
@@ -581,10 +648,13 @@ IMG_FN static u32 af_hook(u32 kind, u32 *r)
         if (!res) return 0u;
 #ifdef B2_LVSZ
     } else if (kind == AF_K_LVSZ) {
+        u32 p54;
         if (r[AF_LR] == AF_LV_MSG) {           /* B12: never handled: the stub always runs the stock manager */
             af_lvmsg(r);
             return kind;
         }
+        p54 = af_pvw54(r);
+        if (p54) return p54 == 1u ? 0u : kind;
         u32 set = af_lvsz(r);
         (void)set;
 #ifdef B6_LVSNAP

@@ -12,7 +12,12 @@
 #define A43_ID_ENTRY   0x2FC7u
 #define A43_ID_ROW     0x2FC8u         /* 0x2FC8, 0x2FC9 is A44's: second row 0x2FCD */
 #define A43_ID_ROW1    0x2FCDu
-#define A43_ID_ROW2    0x2FCEu         /* A81: third row "2.33:1" */
+#define A43_ID_ROW2    0x2FCEu         /* A81: third row; B18 (-DB2_LVSZ): "5:4", fourth row "2.33:1" */
+#ifdef B2_LVSZ
+#define A43_ID_ROW3    0x2FCFu
+#define A43_HAS_54     (*(volatile const u16 *)0x102092FAu == 0xB500u && *(volatile const u16 *)0x10143572u != 0xF896u)
+#define A43_S54(copy)  (*(const volatile u32 *)((copy) + 0x1FCu))
+#endif
 /* A81: 2.33:1 needs the A81 firmware (parameter block; preview kind 2 changed to 2.33 sizes: 640 x 272 at the
  * kind-2 entry of the selector table 0x1167B7A4). On A78 or older a 2.33 choice stays off. */
 #define A43_HAS_233    (*(volatile const u32 *)0x1167B7ACu == ((272u << 16) | 640u))
@@ -22,7 +27,11 @@ IMG_FN static u32 a43_want(cm_t *c)
 {
     bt_t *t = BTP(c);
     return t && t->a43_status == 1u && t->a43_copy && t->a43_sel && A43_AREA_NOW == 0u &&
-           (t->a43_sel != 2u || A43_HAS_233);
+           (t->a43_sel != 2u || A43_HAS_233)
+#ifdef B2_LVSZ
+           && (t->a43_sel != 3u || (A43_HAS_54 && A43_S54(t->a43_copy)))
+#endif
+           ;
 }
 
 IMG_FN static u32 a43_is_on(void)
@@ -47,16 +56,29 @@ IMG_FN static u32 a43_lv_pair(u32 size)
     } else if (t->a43_sel == 2u && A43_HAS_233) {
         s = (const volatile u16 *)(t->a43_copy + A43_STASH233 + A43_GROUP_BYTES);
         if (s[0] != 6016u || s[1] != 2576u) return 0u;
+    } else if (t->a43_sel == 3u && A43_HAS_54 && A43_S54(t->a43_copy)) {
+        s = (const volatile u16 *)(A43_S54(t->a43_copy) + A43_GROUP_BYTES);
+        if (s[0] != 5016u || s[1] != 4016u) return 0u;
     } else {
         return 0u;
     }
     return (u32)(s + 2u * size);
 }
 
-IMG_FN static u32 a43_lv_ratio(void)     /* B15: 1 = 4:3, 2 = 2.33:1 chosen and prepared, 0 = none */
+IMG_FN static u32 a43_lv_ratio(void)     /* B15/B18: 1 = 4:3, 2 = 2.33:1, 3 = 5:4 chosen and prepared, 0 = none */
 {
     cm_t *c = cm_get();
     return a43_lv_pair(0u) && c && BTP(c) ? BTP(c)->a43_sel : 0u;
+}
+
+/* B18: stock Nikon 5:4 preview entries (idx 0..3: selector pairs at +0x2C0; idx 4: 0x116489E0 buffer base at +0x2E4). */
+IMG_FN static u32 a43_pvw54(u32 idx)
+{
+    cm_t *c = cm_get();
+    bt_t *t = c ? BTP(c) : 0;
+    u32 s54 = t && t->a43_status == 1u && t->a43_copy ? A43_S54(t->a43_copy) : 0u;
+    if (!s54 || !A43_HAS_54) return 0u;
+    return idx < 4u ? s54 + 0x2C0u + 4u * idx : s54 + 0x2E4u;
 }
 
 /* B11: post a settings-bus notification for {0x169E: 0, 0x1624: 0} (FX) without altering any stored setting.
@@ -81,6 +103,8 @@ IMG_FN static u32 a43_lv_matches(u32 sel)  /* B15: sel 0 off (3:2, window at 0, 
     if (sel == 1u) return a43_fit_is43() && A43_LV_SRC_X0 == 332u;
     if (sel == 2u) return w * 2576u + ((w * 2576u) >> 6) >= h * 6016u && w * 2576u <= h * 6016u + ((h * 6016u) >> 6) &&
                           A43_LV_SRC_X0 == 0u && A43_LV_SRC_Y0 != 0u;
+    if (sel == 3u) return 4u * w + 16u >= 5u * h && 4u * w <= 5u * h + 16u &&
+                          A43_LV_SRC_X0 == 500u && A43_LV_SRC_Y0 == 0u;
     return 2u * w + 8u >= 3u * h && 2u * w <= 3u * h + 8u && A43_LV_SRC_X0 == 0u && A43_LV_SRC_Y0 == 0u;
 }
 IMG_FN static u32 a43_fit_is43(void)
@@ -119,13 +143,25 @@ IMG_FN static void a43_apply(cm_t *c)
                 p[1u * 9u + 8u] = 0x1167B8F0u;
                 __asm__ volatile ("dsb sy" ::: "memory");
             }
-            const volatile u32 *src = (const volatile u32 *)(b + (r == 2u ? A43_STASH233 : A43_STASH43));
-            for (i = 0; i < A43_GROUPS * A43_GROUP_BYTES / 4u; i++) ((volatile u32 *)b)[i] = src[i];
-            /* A82: the whole block from the stash (offset 0, the crop in the trim row, kind | ratio, the Adobe
-             * crop text, the descriptor override); the text pointer is this copy's own */
-            const volatile u32 *ps = (const volatile u32 *)(b + (r == 2u ? A43_PRM233 : A43_PRM43));
-            for (i = 1u; i < A82_PRM_BYTES / 4u; i++) pb[i] = ps[i];
-            pb[6] = b + (r == 2u ? A43_XMP233 : A43_XMP43);
+#ifdef B2_LVSZ
+            if (r == 3u) {
+                u32 s54 = A43_S54(b);
+                const volatile u32 *src54 = (const volatile u32 *)s54;
+                const volatile u32 *ps54 = (const volatile u32 *)(s54 + 0x0E0u);
+                for (i = 0; i < A43_GROUPS * A43_GROUP_BYTES / 4u; i++) ((volatile u32 *)b)[i] = src54[i];
+                for (i = 1u; i < A82_PRM_BYTES / 4u; i++) pb[i] = ps54[i];
+                pb[6] = s54 + 0x140u;
+            } else
+#endif
+            {
+                const volatile u32 *src = (const volatile u32 *)(b + (r == 2u ? A43_STASH233 : A43_STASH43));
+                for (i = 0; i < A43_GROUPS * A43_GROUP_BYTES / 4u; i++) ((volatile u32 *)b)[i] = src[i];
+                /* A82: the whole block from the stash (offset 0, the crop in the trim row, kind | ratio, the Adobe
+                 * crop text, the descriptor override); the text pointer is this copy's own */
+                const volatile u32 *ps = (const volatile u32 *)(b + (r == 2u ? A43_PRM233 : A43_PRM43));
+                for (i = 1u; i < A82_PRM_BYTES / 4u; i++) pb[i] = ps[i];
+                pb[6] = b + (r == 2u ? A43_XMP233 : A43_XMP43);
+            }
             __asm__ volatile ("dsb sy" ::: "memory");
             pb[0] = 0x50544152u;                       /* 'RATP' */
             t->a43_loaded = r;
@@ -202,6 +238,9 @@ IMG_FN static void a43_hz_ratio(u16 *b, u32 *n, u32 r)
     if (r == 1u) { hz_put(b, n, '4'); hz_put(b, n, ':'); hz_put(b, n, '3'); }
     else if (r == 2u) { hz_put(b, n, '2'); hz_put(b, n, '.'); hz_put(b, n, '3'); hz_put(b, n, '3');
                         hz_put(b, n, ':'); hz_put(b, n, '1'); }
+#ifdef B2_LVSZ
+    else if (r == 3u) { hz_put(b, n, '5'); hz_put(b, n, ':'); hz_put(b, n, '4'); }
+#endif
     else hz_put(b, n, 0x5173u);                        /* 关 */
 }
 
@@ -209,6 +248,9 @@ IMG_FN static void a43_en_ratio(char *b, u32 *n, u32 r)
 {
     if (r == 1u) en_w(b, n, 0x00333A34u);                         /* "4:3" */
     else if (r == 2u) { en_w(b, n, 0x33332E32u); en_w(b, n, 0x0000313Au); }   /* "2.33:1" */
+#ifdef B2_LVSZ
+    else if (r == 3u) en_w(b, n, 0x00343A35u);                    /* "5:4" */
+#endif
     else en_w(b, n, 0x0066664Fu);                                 /* "Off" */
 }
 
@@ -228,22 +270,40 @@ IMG_FN static void a43_labels(cm_t *c)
         u16 b[16];
         n = 0; a43_hz_name(b, &n); hz_put(b, &n, 0xFF1Au); a43_hz_ratio(b, &n, sel);
         b[n] = 0; FW(set_fn, UTF16_SET)(b, A43_SLOT_ENTRY, HANS_STYLE);
+#ifdef B2_LVSZ
+        for (r = 0; r < 4u; r++) {
+            u32 rv = r == 2u ? 3u : r == 3u ? 2u : r;
+            n = 0; if (sel == rv) { hz_put(b, &n, '*'); hz_put(b, &n, ' '); }
+            a43_hz_ratio(b, &n, rv);
+            b[n] = 0; FW(set_fn, UTF16_SET)(b, A43_SLOT_ROW + r, HANS_STYLE);
+        }
+#else
         for (r = 0; r < 3u; r++) {
             n = 0; if (sel == r) { hz_put(b, &n, '*'); hz_put(b, &n, ' '); }
             a43_hz_ratio(b, &n, r);
             b[n] = 0; FW(set_fn, UTF16_SET)(b, A43_SLOT_ROW + r, HANS_STYLE);
         }
+#endif
         *(volatile u8 *)RUNTIME_STYLE = HANS_FONT;
     } else {
         char b[28];
         n = 0; en_w(b, &n, 0x746F6850u); en_w(b, &n, 0x7361206Fu); en_w(b, &n, 0x74636570u); en_w(b, &n, 0x0000203Au);
-        a43_en_ratio(b, &n, sel);                                  /* "Photo aspect: Off / 4:3 / 2.33:1" */
+        a43_en_ratio(b, &n, sel);                                  /* "Photo aspect: Off / 4:3 / 5:4 / 2.33:1" */
         b[n] = 0; FW(set_fn, ASCII_SET)(b, A43_SLOT_ENTRY, 0u);
+#ifdef B2_LVSZ
+        for (r = 0; r < 4u; r++) {
+            u32 rv = r == 2u ? 3u : r == 3u ? 2u : r;
+            n = 0; if (sel == rv) en_w(b, &n, 0x0000202Au);
+            a43_en_ratio(b, &n, rv);
+            b[n] = 0; FW(set_fn, ASCII_SET)(b, A43_SLOT_ROW + r, 0u);
+        }
+#else
         for (r = 0; r < 3u; r++) {
             n = 0; if (sel == r) en_w(b, &n, 0x0000202Au);
             a43_en_ratio(b, &n, r);
             b[n] = 0; FW(set_fn, ASCII_SET)(b, A43_SLOT_ROW + r, 0u);
         }
+#endif
     }
 }
 
@@ -301,3 +361,6 @@ IMG_FN static u32 a43_pick(u32 sel)
 IMG_FN static u32 a43_off_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return a43_pick(0u); }
 IMG_FN static u32 a43_43_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return a43_pick(1u); }
 IMG_FN static u32 a43_233_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return a43_pick(2u); }
+#ifdef B2_LVSZ
+IMG_FN static u32 a43_54_ok(u32 a0, u32 a1, u32 a2, u32 a3) { (void)a0; (void)a1; (void)a2; (void)a3; return a43_pick(3u); }
+#endif

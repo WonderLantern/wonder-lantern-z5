@@ -249,7 +249,11 @@ typedef struct {
 #define BURST_CFG_SIL_OFF  0x20u        /* MENU.DAT word 2: electronic (silent) burst speed-up off */
 #define CFG_MAGIC     0x4D53355Au      /* 'Z5SM' */
 #ifdef ASPECT43_FX
+#ifdef B2_LVSZ
+#define A43_PROFILES  3u               /* B18: 1 = 4:3, 2 = 2.33:1, 3 = 5:4 */
+#else
 #define A43_PROFILES  2u               /* A69: photo aspects after "off" (1 = 4:3); A81: 2 = 2.33:1 */
+#endif
 #else
 #define A43_PROFILES  0u               /* no photo-aspect option: word 4 bits 12-15 must stay 0 */
 #endif
@@ -2417,6 +2421,29 @@ static u32 install_fx43(cm_t *c)
         for (g = 0; g < A82_PRM_BYTES; g++) { copy[A43_PRM43 + g] = a82_params43[g]; copy[A43_PRM233 + g] = a82_params233[g]; }
         for (g = 0; g < sizeof(a82_xmp43) && g < 0x1A0u; g++) copy[A43_XMP43 + g] = (u8)a82_xmp43[g];
         for (g = 0; g < sizeof(a82_xmp233) && g < 0x1A0u; g++) copy[A43_XMP233 + g] = (u8)a82_xmp233[g];
+#ifdef B2_LVSZ
+        {
+            u8 *s54 = (u8 *)z5_alloc(0x360u, 0);
+            if (s54) {
+                volatile u32 *pv = (volatile u32 *)(s54 + 0x2C0u);
+                volatile u32 *bf = (volatile u32 *)(s54 + 0x2D0u);
+                for (g = 0; g < 0x360u; g++) s54[g] = 0u;
+                for (g = 0; g < A43_GROUPS * A43_GROUP_BYTES; g++) s54[g] = a82_tables54[g];
+                for (g = 0; g < A82_PRM_BYTES; g++) s54[0x0E0u + g] = a82_params54[g];
+                for (g = 0; g < sizeof(a82_xmp54) && g < 0x180u; g++) s54[0x140u + g] = a82_xmp54[g];
+                pv[0] = 600u | (480u << 16);   /* stock Nikon kind-2 5:4 preview selector entries */
+                pv[1] = 1350u | (1080u << 16);
+                pv[2] = 150u | (120u << 16);
+                pv[3] = 468u | (375u << 16);
+                for (g = 0; g < 20u; g++) bf[g] = ((volatile const u32 *)0x116489CCu)[g];
+                bf[2]  = 600u | (480u << 16);  /* 0x116489CC + 8: small preview (600, 480) */
+                bf[7]  = 1200u;                /* 0x116489E0 + 8: small width x 2 */
+                bf[12] = 1350u | (1080u << 16);/* 0x116489F4 + 8: large preview (1350, 1080) */
+                bf[17] = 2700u;                /* 0x11648A08 + 8: large width x 2 */
+                *(volatile u32 *)(copy + 0x1FCu) = (u32)s54;
+            }
+        }
+#endif
         BTP(c)->a43_copy = (u32)copy;
         BTP(c)->a43_loaded = 1u;                               /* the active groups hold 4:3 */
     }
