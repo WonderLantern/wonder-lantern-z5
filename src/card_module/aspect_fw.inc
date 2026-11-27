@@ -461,8 +461,10 @@ IMG_FN static void af_fit233(u32 a)
     if (d > 48 || d < -48) return;                   /* not the 16:9 class shape (already done, or another class) */
     nh = (int)(((u32)w * 28062u) >> 16) & ~1;
     cy = (q[1] + q[3]) >> 1;
-    q[1] = (s16)(cy - (nh >> 1));
-    q[3] = (s16)(cy - (nh >> 1) + nh);
+    cy = (cy - (nh >> 1)) & ~3;                      /* B16 (B15 camera): odd y0 (LCD 85) garbled the LCD, the EVF
+                                                      * (206) was fine; start on a multiple of 4 like the stock frames */
+    q[1] = (s16)cy;
+    q[3] = (s16)(cy + nh);
 }
 
 IMG_FN static u32 af_lvsz(u32 *r)
