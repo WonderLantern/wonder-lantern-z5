@@ -3,9 +3,8 @@ Z5 Extensions instructions
 Camera: Nikon Z 5, firmware C 1.50.
 This project is not affiliated with Nikon. Flashing modified firmware can damage the camera. Read these instructions completely and decide for yourself whether to go ahead.
 
-A91: photo-aspect NEF files keep the stock RAW size (Lightroom opens them and shows the chosen crop), and NEF-only shots display correctly in the camera's instant review, playback and zoom. Since A81: photo aspect (4:3 / 2.33:1), Bulb series with shot count and interval, separate electronic / mechanical shutter-sound switches, and menus that follow the camera language (English or Simplified Chinese). Tested on the author's camera (the effect of the faster photo listing over USB is not verified). This program is a standalone Windows program; Python does not need to be installed.
-Photo aspect: Photo shooting menu -> Photo aspect, choose Off / 4:3 / 2.33:1; the image area must be FX. The live-view mask needs the Custom DISP master switch on.
-[Known issue] After a shot, when the camera returns from the instant review to live view, the mask shows empty boxes where the camera's icons are. The recorded photo is not affected.
+B18: photo aspect now uses native live view (4:3, 2.33:1 and the new 5:4): the monitor and the viewfinder show the stock black frame, the picture is not distorted, the old software mask's empty boxes and flicker are gone, and Custom DISP is not needed. Since A91 NEF files keep the stock RAW size (Lightroom opens them); since A81: Bulb series with shot count and interval, separate electronic / mechanical shutter-sound switches, and menus that follow the camera language (English or Simplified Chinese). Tested on the author's camera (the effect of the faster photo listing over USB is not verified; live view over HDMI not tested). This program is a standalone Windows program; Python does not need to be installed.
+Photo aspect: Photo shooting menu -> Photo aspect, choose Off / 4:3 / 5:4 / 2.33:1; the image area must be FX. After leaving the menu the stock black frame appears in about 1-2 seconds; it is also restored at power-on.
 [Known issue] With NEF only, the first zoom in the instant review is sometimes black or garbled; pressing zoom again works.
 [Known issue] When a 2.33:1 photo is zoomed in playback, the small navigator window at the bottom right is slightly distorted.
 [Known issue] Playback zoom works only for photos in the currently selected aspect; with 2.33:1 selected, zooming a 4:3 photo may say it cannot be enlarged.
@@ -24,8 +23,8 @@ card\Z5LOG\DIAG01-20.BIN     20 empty test-record files, keep them
 
 2. Update the firmware (once, done by you on the camera)
 
-A91 needs new firmware (SHA-256 starting with 1f838b83). Coming from any older version you must update once, including from the A81 firmware (starting with 13525d9b).
-If the camera already has the 1f838b83 firmware, skip this section.
+B18 needs new firmware (SHA-256 starting with b1f8cdc9). Coming from any older version you must update once, including from the A91 firmware (starting with 1f838b83).
+If the camera already has the b1f8cdc9 firmware, skip this section.
 First back up Z5APP.BIN and SHUTTER/MENU.DAT from the card. When upgrading, replace Z5APP.BIN in the card root and keep your settings and sounds.
 
 1. Make sure the battery is well charged; put EG165050.BIN in the root of the card, and only this update file in the root.

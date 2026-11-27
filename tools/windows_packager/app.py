@@ -32,7 +32,7 @@ from pathlib import Path
 ROOT = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent))
 ASSETS = ROOT / 'assets'
 USER = Path(os.environ.get('LOCALAPPDATA', Path.home())) / 'Z5Extensions'
-VERSION = 'A91'
+VERSION = 'B18'
 # patch.py and the z5mod decoder (z5mod_fw.container, z5mod_fw.platform.z5_150) are loaded from source at run time,
 # so PyInstaller cannot see their imports; build.py passes these as hidden imports and --selftest checks them.
 REQUIRED = ('__future__', 'argparse', 'binascii', 'dataclasses', 'gzip', 'hashlib', 'importlib', 'importlib.util',

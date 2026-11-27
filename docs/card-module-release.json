@@ -3,11 +3,13 @@
   "dynamic_tests_run": false,
   "firmware_modified": false,
   "upstream_commit": "b8ffd1c",
-  "release_firmware_sha256": "13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5",
-  "variant": "A81-photo-aspect",
+  "release_firmware_sha256": "b1f8cdc9ae599c63f4da9cf0e32cec1ab5790ed129f518774d235a25c730384c",
+  "variant": "B18-native-liveview-aspect",
   "compiler_definitions": [
     "-DVUI_DIAG_FOCUS",
     "-DBULB_MENU",
+    "-DB6_LVSNAP",
+    "-DB2_LVSZ",
     "-DJPEG_LOG",
     "-DBURST_EXTRA_BITS=0x60u",
     "-DJPEG_A42",
@@ -21,7 +23,11 @@
     "-DBURST_BOOT_OFF",
     "-DA51_KERNEL2",
     "-DFONT_EXT",
-    "-DASPECT43_FX"
+    "-DASPECT43_FX",
+    "-DA83_TRACE",
+    "-DA84_FW",
+    "-DA43_MASK_COLOR=0xB3000000u",
+    "-DB1_LVWIN"
   ],
   "compatibility": {
     "firmware_group": 108,
@@ -41,7 +47,9 @@
     "release_firmware_sha256": {
       "bf821031e6d0b7d5f8762eba7178db94adda90f91c8d078985039f4f1cad558e": "group 108 + burst speed-up entries 0x10192F96, 0x10206E6C, 0x1020857A (+ veneers, append); none overlaps the module probe/function windows (audited 2026-11-15); the module is still built from the group-108 MAIN",
       "a3704c6f7f7891b5d691985b6148af43d7bf4d58a35d862659661b1bd9a6c754": "bf821031 + MTP property-list wrapper 0x105A40B4, JPEG encode gate 0x1009F33A, NEF crd gate 0x101BCFA6 (+ three veneers after the burst ones, larger vertical_ui append; loader/dual_gates/grid_zebra appends unchanged); no module word addresses any patched window (audited 2026-11-23 by scanning every 32-bit value in the A52 module); the module is still built from the group-108 MAIN",
-      "13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5": "a3704c6f + A81 photo aspect hooks 0x1020933E, 0x10143032, 0x10142A7C, 0x1034E5E4, 0x10209328, 0x1034F6D4 (+ veneers 0x105BA37C..0x105BA3AB, one 784-byte append) and eight kind-2 preview table entries; no 32-bit value in the A81 module addresses a patched window (scanned 2026-11-25); the module reads kind-2 entry 0x1167B7AC on purpose to detect this firmware; the module is still built from the group-108 MAIN"
+      "13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5": "a3704c6f + A81 photo aspect hooks 0x1020933E, 0x10143032, 0x10142A7C, 0x1034E5E4, 0x10209328, 0x1034F6D4 (+ veneers 0x105BA37C..0x105BA3AB, one 784-byte append) and eight kind-2 preview table entries; no 32-bit value in the A81 module addresses a patched window (scanned 2026-11-25); the module reads kind-2 entry 0x1167B7AC on purpose to detect this firmware; the module is still built from the group-108 MAIN",
+      "1f838b83f624397182813ee68c4e9fb0b697b40c5a48843f5bb6081a5dcb5cca": "a3704c6f + A90m photo aspect stubs 0x1020933E, 0x10143032, 0x10142A7C, 0x1034E5E4, 0x1034F6D4, 0x10142F6C, 0x1034E692, 0x1034F65A, 0x10355DCC (+ veneers 0x105BA37C..0x105BA3C3, one 344-byte append at 0x12120CC0) and eight kind-2 preview table entries; no 32-bit value at any byte offset of the A91 module (1176e275) addresses a patched window (scanned 2026-11-26); the module is still built from the group-108 MAIN",
+      "b1f8cdc9ae599c63f4da9cf0e32cec1ab5790ed129f518774d235a25c730384c": "a3704c6f + B18m photo aspect and native live-view stubs: the nine A90m sites, hszw 0x10197FFC and hszf 0x1018B388, plus live-view message 0x101904A8, live-view fit call 0x1018D268, preview selectors 0x102092FA/0x10209304/0x1020930E/0x10209318 and preview buffers 0x10143572/0x101435D4/0x10143F2E routed through the hszw veneer 0x105BA3C4 (veneers 0x105BA37C..0x105BA3D3, one 696-byte append at 0x12120CC0) and eight kind-2 preview table entries; no 32-bit value at any byte offset of the B18 module (eb0d323d) addresses a patched code window, only the return addresses 0x10143577/0x10143F33/0x1020931F it compares lr against (scanned 2026-11-27); the module is still built from the group-108 MAIN"
     }
   },
   "firmware_sha256": "6389847f5ae1e65fb8b06569bde48252486ec1818041b076b03263c562b604bf",
@@ -72,8 +80,8 @@
   "lcd_walk_identity": "callback-entry SP +28 wrapper LR, +44 controller LR; exact native code checks",
   "lcd_final_submission_hook": false,
   "lcd_diagnostics": "L39: same R/U/C/F W/D/K/N metrics on last photo output (L39L/L39E); Q also reports page/activation refusal; H maximum independent-worker statistics-read elapsed ms since boot (hex, saturated FFF); S worker result (4 acquiring,5 failure,6 published)",
-  "output_sha256": "274c864d156920d93ef8d85567ab1c55db888c6d6a0dc998dc158bb60e014a89",
-  "output_size": 96168,
+  "output_sha256": "eb0d323d66fd812af1c7762703da5066c9d677762ca025699d914401c10cda75",
+  "output_size": 105680,
   "custom_disp_settings": {
     "menu": "Extensions > Custom DISP > DISP0..DISP3",
     "menu_text_slots": [
@@ -1921,13 +1929,13 @@
     },
     {
       "name": "disp_metadata",
-      "size": 11904,
-      "direct_branches": 945
+      "size": 11740,
+      "direct_branches": 938
     },
     {
       "name": "release_cb",
-      "size": 44970,
-      "direct_branches": 2851
+      "size": 52602,
+      "direct_branches": 3355
     }
   ],
   "sdk_hashes": {
@@ -1963,10 +1971,10 @@
   },
   "source_hashes": {
     "src/card_module/build.py": "88729a63f1ffcf1488ca77aa012f8b50dece9ecf4bfcb87dcae573bb6dddc019",
-    "src/card_module/burst_speed.inc": "c42e09b662e13ab52344839ca37ed83c14258d54dc567a0f90e343b0678b2112",
-    "src/card_module/burst_speed_install.inc": "ef01d5f8ad8cf1e18bd816d4f1f5497f8ab01d3c537168adeeaea990ca21f48b",
-    "src/card_module/custom_disp/aspect_mask.h": "21d0b2dc5f3997444c5e7f9c56660d53ff5f6fe687b732ed5914470585ff48ba",
-    "src/card_module/custom_disp/compatibility.json": "f6570ce1860ff89b3a1a455e1e573a98ed886e1890ad0beb06dca87ad6d7ef75",
+    "src/card_module/burst_speed.inc": "d5359f52d0842d874dde765dc86d638aade79cc259aab9c0576d1a9a10f1622b",
+    "src/card_module/burst_speed_install.inc": "d3772ef0f1943f35df6ba95ab8b6a1d417527431bcd01cfcf56e703c09e20aaf",
+    "src/card_module/custom_disp/aspect_mask.h": "441cde13e33dfa6210c08514e31cc9197d6f6a4e41b12598cbdaa1bde2600c1a",
+    "src/card_module/custom_disp/compatibility.json": "340d19a39f981fae7ca51f128577726345203a3e1d0e082fd3488089588b8380",
     "src/card_module/custom_disp/compose.h": "0c16b43d0150cc01eb99d5c415200aa97632761f4d5eb138f2d32ff5dd1523fa",
     "src/card_module/custom_disp/diagnostics.h": "759628e254de2c4d958437b99d86c5c2fde12a752c5ac904854ec30be54be1c6",
     "src/card_module/custom_disp/display.c": "9a1c56ddab95932ec38c778b1894ffc32bde4887aee2a491d1170855e57add29",
@@ -1975,8 +1983,8 @@
     "src/card_module/custom_disp/level.h": "6aabafcc316ca178947294742e756c7e1ef29b38632dfec274985de880d1a66c",
     "src/card_module/custom_disp/native_level.h": "484c22bbfc4dea2ea91f1c508017b6005b274f492b601e517d3b6405f486eba5",
     "src/card_module/custom_disp/output.h": "1c60ce68f4c180f5618f242767da8682e6d33ef386901c83e88312034fd3609c",
-    "src/card_module/custom_disp/overlay_render.h": "37946fefbdcf193a5ecf135ff0e74f9e8ffc95b9d68ad5941d0946de572a26c1",
-    "src/card_module/custom_disp/overlay_state.h": "4ca84ca9e97da5693d05e859cbce174aaa7f4c20f86123d06cdb79ecec8c0394",
+    "src/card_module/custom_disp/overlay_render.h": "5c07c2a5979e48c2f555aae605ad5ebd0a16c36d836e1e50789de72c68d11685",
+    "src/card_module/custom_disp/overlay_state.h": "60f7feb19d77fec8c3650a17aa969c8cb274adc2fed4ee591da9e6eebaf826b4",
     "src/card_module/custom_disp/platform.json": "141f50be5ae0d8074a45a0e5fe965ea452f652a48e242b4ed5862c3434be3e46",
     "src/card_module/custom_disp/refresh.h": "f27d1a8444294a84db912d2efb562d455d8e5a5977ab7bd38507b49e555e31ad",
     "src/card_module/custom_disp/refresh_override.h": "8b2aace43d61f33c37416745b0d415658e484c4b29eae0a3ee6763e918777ee9",
@@ -1991,19 +1999,19 @@
     "src/card_module/custom_disp.h": "253cbf3a386f191ad2c7ff64f93dbd5e09a1e692b3bc4e1fb1d3f57f00129a4e",
     "src/card_module/custom_disp_install.inc": "b739ab91e64a6dc13eb7014029ea7b312c4b238727cec08ed0da31eac12c7288",
     "src/card_module/custom_disp_runtime.inc": "bf1045e5b1acee1b1319b75f31439bf46caa4e2945a4b80aa0500d14d549b3ca",
-    "src/card_module/main.c": "78c0260edc791c2c2384cc2483e9c7049430abb889cf46be14bbce39c1ef8ee0",
-    "src/card_module/vui_card.inc": "c923f4e53d1fe261e617a2f2b10a6c9a6b28aa495560df113b5c55d644513d0b",
+    "src/card_module/main.c": "0bfbf14da4fbc17562badfd3a23da82bda457b52f658674abb94a0140644ffb8",
+    "src/card_module/vui_card.inc": "7fc0e7bea13ce5b702150024a565f86170a11de365acae3dc588c28170f93c0c",
     "src/card_module/z5mod-sdk.patch": "3ff80018dde9c025e07f1c6b03e5bf915f87b342388d31395c7d046ca1b65e4c"
   },
   "compiler_version": "14.2.1",
-  "limitations": "Host tests and static checks; camera results are limited to camera_verification_scope. Known issue: the aspect mask can show minor glitches in some situations.",
+  "limitations": "Host tests and static checks; camera results are limited to camera_verification_scope. Photo aspect live view is native (stock crop and black frame, no software mask). The build keeps the B1/B6/B12 live-view readouts, which only write into the record on \"Save log\". HDMI live view in 4:3 / 5:4 / 2.33:1 not tested.",
   "fork_revision": "a74f6f7df4ec33b9e85465992d37d4b2d60a868f",
   "camera_verification_scope": {
-    "matching_module_sha256": "274c864d156920d93ef8d85567ab1c55db888c6d6a0dc998dc158bb60e014a89",
-    "matching_firmware_sha256": "13525d9ba3d461833e816ba838cf86369181445f0598378352069546118de6c5",
-    "coverage": "Author reported the A81 camera test passed on 2026-11-25 (photo aspect off / 4:3 / 2.33:1; no per-item record). Known issue: minor aspect-mask glitches in some situations. Video not adapted; MTP listing speed-up effect not verified.",
+    "matching_module_sha256": "eb0d323d66fd812af1c7762703da5066c9d677762ca025699d914401c10cda75",
+    "matching_firmware_sha256": "b1f8cdc9ae599c63f4da9cf0e32cec1ab5790ed129f518774d235a25c730384c",
+    "coverage": "Author reported on 2026-11-27: B17 (fw 6bc5e79f + module 025bf7a7) native 4:3 and 2.33:1 live view switch on, off and at power-on automatically; B18 (this firmware + module) passed, adding 5:4. No per-item record for B18. Video not adapted; MTP listing speed-up effect not verified; HDMI not tested.",
     "windows_installer_camera_verified": false,
-    "source": "Author reported A81 passed on 2026-11-25"
+    "source": "Author reported B18 passed on 2026-11-27"
   },
   "a39_reproduction": {
     "definitions": [

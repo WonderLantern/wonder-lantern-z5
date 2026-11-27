@@ -111,7 +111,7 @@ A52 的 `Z5_EXTRA` 再加 `-DFONT_EXT -DASPECT43_FX`，GCC 13.3.1 结果 `274c86
 
 本地实验目录、构建结果、固件和转储都忽略；不要把这些文件强制加入 Git。正式源码、宿主测试、说明、插件和发布摘要才是维护入口。额外个人音效（例如 `6.WAV`）不在默认五个音效发布范围。用 `git diff --stat` 和 `git status --short` 核对本次变动后自行提交/推送 fork。
 
-## A91：只拍 NEF 的回放（发布版）
+## A91：只拍 NEF 的回放
 
 A81 的 `Z5_EXTRA` 再加 `-DA83_TRACE -DA84_FW -DA43_MASK_COLOR=0xB3000000u`，即：
 
@@ -122,3 +122,18 @@ Z5_EXTRA='-DJPEG_LOG -DBURST_EXTRA_BITS=0x60u -DJPEG_A42 -DJPEG_A43=1 -DJPEG_A44
 GCC 13.3.1 结果 `1176e275fa2b3b928208ad51368e29f731e137bbfb40f8cdfeda2ac9da4e28cb`（作者实机测试的那一版）。`A84_FW`：照片画幅的判断逻辑在模块（`aspect_fw.inc`），固件只留跳转；
 `A83_TRACE`：照片画幅的诊断记录写入“保存测试记录”；遮罩为 70% 黑。配套固件 `1f838b83f624397182813ee68c4e9fb0b697b40c5a48843f5bb6081a5dcb5cca`，构建与检查见
 `src/firmware_hooks/z5_aspect43_a90m_fw.py`。实现见 [PHOTO_ASPECT.md](PHOTO_ASPECT.md)。
+
+## B18：原生取景和 5:4（发布版）
+
+A91 的 `Z5_EXTRA` 再加 `-DB6_LVSNAP -DB2_LVSZ -DB1_LVWIN`，即：
+
+```sh
+Z5_EXTRA='-DB6_LVSNAP -DB2_LVSZ -DJPEG_LOG -DBURST_EXTRA_BITS=0x60u -DJPEG_A42 -DJPEG_A43=1 -DJPEG_A44 -DJPEG_A45 -DSETUP_SAVE_REOPEN -DLIGHTROOM_GRAIN -DA48_CRD -DJPEG_A50 -DBURST_BOOT_OFF -DA51_KERNEL2 -DFONT_EXT -DASPECT43_FX -DA83_TRACE -DA84_FW -DA43_MASK_COLOR=0xB3000000u -DB1_LVWIN' python src/card_module/build.py --sdk third_party/z5mod-sdk/sdk --firmware /path/to/current-main.BIN --legacy-firmware /path/to/legacy-main.BIN -o build/b18/Z5APP.BIN
+```
+
+GCC 13.3.1 结果 `eb0d323d66fd812af1c7762703da5066c9d677762ca025699d914401c10cda75`（作者实机测试的那一版，105,680 字节）。
+
+- `B2_LVSZ`：原生取景（种类、ELBY、LV_crop、ELBR、画面框、0x1624 注入、5:4 预览），并关闭软件遮罩。
+- `B1_LVWIN`、`B6_LVSNAP` 和 `B2_LVSZ` 里的消息读数：只在“保存测试记录”时把取景状态写进记录，平时不写卡。发布的就是实机测试的这一版，所以保留了这些读数。
+- 配套固件 `b1f8cdc9ae599c63f4da9cf0e32cec1ab5790ed129f518774d235a25c730384c`，构建与检查见 `src/firmware_hooks/z5_aspect43_b18m_fw.py`。
+- 不加这三个开关构建，结果仍与 A91 `1176e275` 逐字节相同。
