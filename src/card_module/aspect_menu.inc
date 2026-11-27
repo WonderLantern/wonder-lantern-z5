@@ -167,8 +167,8 @@ IMG_FN static void a43_watch(cm_t *c)      /* module task, every 50 ms: follow t
             t->a43_lv_poke = 0u;
             t->a43_lv_inject = 0u;
         } else if (A43_LV_GUI_ON != 1u) {
-            t->a43_lv_poke = 1u | asked << 16;          /* menu / playback: wait until live view returns */
-            t->a43_lv_inject = 0u;
+            t->a43_lv_poke = 1u | asked << 16;          /* menu / playback: wait until live view returns; B17: a
+                                                         * pending injection stays, for the menu-exit messages */
         } else if (a43_lv_matches(t->a43_sel)) {
             t->a43_lv_poke = 0u;                         /* the fit (black frame) and the window match the choice */
             t->a43_lv_inject = 0u;
@@ -285,7 +285,12 @@ IMG_FN static u32 a43_pick(u32 sel)
         a43_apply(c);
 #ifdef B2_LVSZ
         if (A43_AREA_NOW == 0u && (old_sel != sel || !a43_lv_matches(sel)))
-            BTP(c)->a43_lv_poke = 1u;                    /* B11: rebuild LV window/fit/pipeline on menu exit */
+        {
+            BTP(c)->a43_lv_poke = 1u | 1u << 16;         /* B11: rebuild LV window/fit/pipeline on menu exit */
+            BTP(c)->a43_lv_inject = 1u;                  /* B17 (B16 camera DIAG12): 2.33 -> off keeps the 720-wide
+                                                          * frame, so no message follows the menu exit; inject into
+                                                          * the menu-exit messages (manager already active then) */
+        }
 #endif
         save_cfg(c);
         a43_entry_ok(0u, 0u, 0u, 0u);          /* show the page again with the new mark */
